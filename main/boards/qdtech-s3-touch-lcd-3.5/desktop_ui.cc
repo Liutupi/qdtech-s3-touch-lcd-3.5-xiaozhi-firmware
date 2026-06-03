@@ -265,13 +265,17 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     add_gesture_bubble(main_page_);
 
     // Brand
-    lv_obj_t* brand_a = label_en(main_page_, "XiaoZhi", &style_en);
+    lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
     lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
     lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
 
-    lv_obj_t* brand_b = label_en(main_page_, "AI", &style_gold);
+    lv_obj_t* brand_b = label_en(main_page_, "impossible", &style_gold);
     lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, 106, 10);
+    lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, 20, 32);
+    
+    lv_obj_t* brand_c = label_en(main_page_, "Tupi", &style_muted);
+    lv_obj_set_style_text_font(brand_c, &lv_font_montserrat_14, 0);
+    lv_obj_align(brand_c, LV_ALIGN_TOP_LEFT, 20, 54);
 
     CreateBigTime(main_page_);
 
@@ -396,7 +400,7 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     lv_obj_set_style_text_font(quote_label_, &lv_font_montserrat_16, 0);
     lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 16, 32);
 
-    network_status_label_ = label_en(panel, "WiFi: Connecting...", &style_muted);
+    network_status_label_ = label_en(panel, "XiaoZhi AI", &style_muted);
     lv_obj_set_width(network_status_label_, 405);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
