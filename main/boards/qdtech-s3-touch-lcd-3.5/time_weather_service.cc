@@ -1,7 +1,9 @@
 #include "time_weather_service.h"
 
 #include <cmath>
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 
@@ -15,10 +17,52 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
+#include "settings.h"
 #include "wifi_station.h"
 
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 1536;
+
+struct WeatherLocation {
+    char city[32];
+    double latitude;
+    double longitude;
+};
+
+static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
+    char* end = nullptr;
+    double parsed = strtod(text.c_str(), &end);
+    while (end && *end && isspace(static_cast<unsigned char>(*end))) {
+        ++end;
+    }
+    if (!end || *end != 0 || parsed < min_value || parsed > max_value) {
+        return false;
+    }
+    *value = parsed;
+    return true;
+}
+
+static void LoadWeatherLocation(WeatherLocation* location) {
+    snprintf(location->city, sizeof(location->city), "%s", "Zhongshan");
+    location->latitude = 22.5176;
+    location->longitude = 113.3928;
+
+    Settings settings("weather_cfg", false);
+    std::string city = settings.GetString("city", "Zhongshan");
+    std::string lat_text = settings.GetString("lat", "22.5176");
+    std::string lon_text = settings.GetString("lon", "113.3928");
+
+    double latitude = 0.0;
+    double longitude = 0.0;
+    if (ParseCoordinate(lat_text, -90.0, 90.0, &latitude) &&
+        ParseCoordinate(lon_text, -180.0, 180.0, &longitude)) {
+        if (!city.empty()) {
+            snprintf(location->city, sizeof(location->city), "%s", city.c_str());
+        }
+        location->latitude = latitude;
+        location->longitude = longitude;
+    }
+}
 
 static const char* DAILY_QUOTES[] = {
     "Stay patient and trust your next small step.",
@@ -56,7 +100,32 @@ static const char* DAILY_QUOTES[] = {
 
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
-    xTaskCreate(TaskWrapper, "time_weather", 6144, this, 2, NULL);
+    if (!task_handle_) {
+        xTaskCreate(TaskWrapper, "time_weather", 6144, this, 2, &task_handle_);
+    }
+}
+
+bool TimeWeatherService::SetLocation(const std::string& city, const std::string& latitude, const std::string& longitude) {
+    double lat = 0.0;
+    double lon = 0.0;
+    if (city.empty() ||
+        !ParseCoordinate(latitude, -90.0, 90.0, &lat) ||
+        !ParseCoordinate(longitude, -180.0, 180.0, &lon)) {
+        return false;
+    }
+
+    Settings settings("weather_cfg", true);
+    settings.SetString("city", city);
+    settings.SetString("lat", latitude);
+    settings.SetString("lon", longitude);
+
+    location_update_requested_.store(true);
+    if (task_handle_) {
+        xTaskNotifyGive(task_handle_);
+    }
+    SetWeatherSafe("-- C", "Weather location updated", -1);
+    ESP_LOGI(TAG, "weather location updated: %s %.4f %.4f", city.c_str(), lat, lon);
+    return true;
 }
 
 void TimeWeatherService::TaskWrapper(void* arg) {
@@ -104,6 +173,12 @@ void TimeWeatherService::Task() {
         
         // 等待60秒
         for (int i = 0; i < 60; ++i) {
+            if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) > 0 ||
+                location_update_requested_.exchange(false)) {
+                weather_ticks = 3600;
+                retry_ticks = 3600;
+                break;
+            }
             if (!WifiStation::GetInstance().IsConnected()) {
                 ESP_LOGW(TAG, "WiFi disconnected, waiting...");
                 while (!WifiStation::GetInstance().IsConnected()) {
@@ -112,7 +187,6 @@ void TimeWeatherService::Task() {
                 ESP_LOGI(TAG, "WiFi reconnected");
                 break;
             }
-            vTaskDelay(pdMS_TO_TICKS(1000));
             ++weather_ticks;
             ++retry_ticks;
         }
@@ -207,15 +281,13 @@ static esp_err_t HttpEventHandler(esp_http_client_event_t* evt) {
 }
 
 bool TimeWeatherService::FetchWeather() {
-    // 默认位置：上海
-    double latitude = 31.2304;
-    double longitude = 121.4737;
-    const char* city = "Shanghai";
+    WeatherLocation location = {};
+    LoadWeatherLocation(&location);
     
     char url[256];
     snprintf(url, sizeof(url),
              "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
-             latitude, longitude);
+             location.latitude, location.longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
@@ -261,7 +333,7 @@ bool TimeWeatherService::FetchWeather() {
     char temp_text[16];
     char summary[48];
     snprintf(temp_text, sizeof(temp_text), "%d C", (int)lround(temp->valuedouble));
-    snprintf(summary, sizeof(summary), "%s %s", city, WeatherDesc(code->valueint));
+    snprintf(summary, sizeof(summary), "%s %s", location.city, WeatherDesc(code->valueint));
     
     SetWeatherSafe(temp_text, summary, code->valueint);
     

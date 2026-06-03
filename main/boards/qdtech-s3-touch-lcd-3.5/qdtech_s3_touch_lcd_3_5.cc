@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <string>
 
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
@@ -441,6 +442,8 @@ private:
             touch_start_ms_ = now_ms;
             touch_start_x_ = x;
             touch_start_y_ = y;
+            touch_last_x_ = x;
+            touch_last_y_ = y;
         } else if (touched && touch_down_) {
             touch_last_x_ = x;
             touch_last_y_ = y;
@@ -459,14 +462,16 @@ private:
     }
 
     void HandleTap(uint16_t x, uint16_t y) {
-        if (display_) {
+        if (display_ && lvgl_port_lock(0)) {
             static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleTap(x, y);
+            lvgl_port_unlock();
         }
     }
 
     void HandleSwipe(int16_t dx, int16_t dy) {
-        if (display_) {
+        if (display_ && lvgl_port_lock(0)) {
             static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleSwipe(dx, dy);
+            lvgl_port_unlock();
         }
     }
 
@@ -488,6 +493,22 @@ private:
             PropertyList(), [this](const PropertyList& properties) {
                 ResetWifiConfiguration();
                 return true;
+            });
+        mcp_server.AddTool("self.weather.set_location",
+            "Set the weather location and immediately refresh weather. "
+            "Use decimal degrees for latitude and longitude, for example Zhongshan: 22.5176, 113.3928.",
+            PropertyList({
+                Property("city", kPropertyTypeString),
+                Property("latitude", kPropertyTypeString),
+                Property("longitude", kPropertyTypeString),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto city = properties["city"].value<std::string>();
+                const auto latitude = properties["latitude"].value<std::string>();
+                const auto longitude = properties["longitude"].value<std::string>();
+                if (!time_weather_service_.SetLocation(city, latitude, longitude)) {
+                    return std::string("Invalid weather location. Latitude must be -90..90 and longitude must be -180..180.");
+                }
+                return std::string("Weather location updated to ") + city + " (" + latitude + ", " + longitude + ").";
             });
     }
 
