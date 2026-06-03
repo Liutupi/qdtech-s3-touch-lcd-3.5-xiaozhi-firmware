@@ -133,49 +133,16 @@ public:
         lv_display_set_flush_cb(display_, FlushCallback);
         lv_display_set_user_data(display_, this);
 
-        SetupUI();
-        
-        // 设置黑色背景
-        auto screen = lv_screen_active();
-        lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
-        lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
-        
-        if (container_) {
-            lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
-            lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
+        // 在锁内创建桌面UI
+        {
+            DisplayLockGuard lock(this);
+            desktop_ui_.Create();
+            lv_obj_invalidate(lv_screen_active());
         }
-        
-        if (content_) {
-            lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0);
-            lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
-        }
-        
-        // 隐藏基类UI元素
-        if (status_bar_) lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
-        if (emotion_label_) lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
-        if (chat_message_label_) lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
-        if (notification_label_) lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-        if (status_label_) lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
-        if (mute_label_) lv_obj_add_flag(mute_label_, LV_OBJ_FLAG_HIDDEN);
-        if (network_label_) lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
-        if (battery_label_) lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
-        if (preview_image_) lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
-        if (low_battery_popup_) lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
-        
-        // 创建桌面UI
-        desktop_ui_.Create();
     }
 
     ~QdtechLandscapeDisplay() {
-        if (frame_buffer_) {
-            heap_caps_free(frame_buffer_);
-        }
-        if (transfer_buffer_) {
-            heap_caps_free(transfer_buffer_);
-        }
-        if (transfer_done_) {
-            vSemaphoreDelete(transfer_done_);
-        }
+        // 清理 lvgl_port_add_disp 资源
     }
 
     void SetEmotion(const char* emotion) override {
