@@ -175,39 +175,64 @@ static void open_xiaozhi_with_message(const char* state, const char* message, bo
     }
 }
 
+static void open_app_card(uint8_t index) {
+    switch (index) {
+        case 0:
+            open_xiaozhi_with_message("Radio", "Tell XiaoZhi which station or music you want.", true);
+            break;
+        case 1:
+            open_xiaozhi_with_message("Weather", "Ask XiaoZhi for weather, or set a new weather city.", true);
+            break;
+        case 2:
+            open_xiaozhi_with_message("XiaoZhi AI", "Starting conversation...", true);
+            break;
+        case 3:
+            open_xiaozhi_with_message("Calendar", "Ask XiaoZhi about dates, plans, or reminders.", true);
+            break;
+        case 4:
+            open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
+            break;
+        case 5:
+            open_xiaozhi_with_message("Settings", "Ask XiaoZhi to adjust screen, volume, WiFi, or weather location.", true);
+            break;
+        default:
+            break;
+    }
+}
+
 static void xiaozhi_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("XiaoZhi AI", "Starting conversation...", true);
+        open_app_card(2);
     }
 }
 
 static void radio_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Radio", "Tell XiaoZhi which station or music you want.", true);
+        open_app_card(0);
     }
 }
 
 static void weather_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Weather", "Ask XiaoZhi for weather, or set a new weather city.", true);
+        open_app_card(1);
     }
 }
 
 static void calendar_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Calendar", "Ask XiaoZhi about dates, plans, or reminders.", true);
+        open_app_card(3);
     }
 }
 
 static void quote_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
+        open_app_card(4);
     }
 }
 
 static void settings_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Settings", "Ask XiaoZhi to adjust screen, volume, WiFi, or weather location.", true);
+        open_app_card(5);
     }
 }
 
@@ -264,6 +289,7 @@ void DesktopUI::Create() {
 }
 
 void DesktopUI::ShowPage(DesktopPage page) {
+    current_page_ = page;
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -296,9 +322,27 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
 }
 
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
-    // Tap handling is done via LVGL event callbacks
-    (void)x;
-    (void)y;
+    ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
+
+    if (current_page_ != DesktopPage::APPS) {
+        return;
+    }
+
+    constexpr int16_t tile_w = 204;
+    constexpr int16_t tile_h = 62;
+    constexpr int16_t tile_x0 = 24;
+    constexpr int16_t tile_y0 = 86;
+    constexpr int16_t tile_x_gap = 218;
+    constexpr int16_t tile_y_gap = 72;
+
+    for (uint8_t i = 0; i < 6; ++i) {
+        const int16_t tile_x = tile_x0 + (i % 2) * tile_x_gap;
+        const int16_t tile_y = tile_y0 + (i / 2) * tile_y_gap;
+        if (x >= tile_x && x < tile_x + tile_w && y >= tile_y && y < tile_y + tile_h) {
+            open_app_card(i);
+            return;
+        }
+    }
 }
 
 // ===== Main page =====

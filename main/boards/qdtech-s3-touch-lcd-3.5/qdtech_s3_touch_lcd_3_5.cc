@@ -472,7 +472,7 @@ private:
             int64_t duration = now_ms - touch_start_ms_;
 
             if (duration < TOUCH_TAP_THRESHOLD_MS && abs(dx) < 30 && abs(dy) < 30) {
-                HandleTap(x, y);
+                HandleTap(touch_last_x_, touch_last_y_);
             } else if (duration < 500) {
                 HandleSwipe(dx, dy);
             }

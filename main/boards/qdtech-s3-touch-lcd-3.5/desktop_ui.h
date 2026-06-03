@@ -32,6 +32,7 @@ private:
     lv_obj_t* main_page_ = nullptr;
     lv_obj_t* apps_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
+    DesktopPage current_page_ = DesktopPage::MAIN;
 
     // Main page elements
     lv_obj_t* clock_labels_[4] = {};
