@@ -7,6 +7,7 @@
 #include "mcp_server.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include <driver/gpio.h>
@@ -133,6 +134,9 @@ public:
 
         SetupUI();
         SetupFaceUI();
+        
+        // 创建表情动画定时器
+        face_timer_ = lv_timer_create(FaceTimerCallback, 100, this);
     }
 
     ~QdtechLandscapeDisplay() {
@@ -150,104 +154,69 @@ public:
         }
     }
 
-    void SetStatus(const char* status) override {
-        DisplayLockGuard lock(this);
-        if (status_label_) {
-            lv_label_set_text(status_label_, "");
-            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-        if (notification_label_) {
-            lv_label_set_text(notification_label_, "");
-            lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
-        }
-        UpdateFace(Application::GetInstance().GetDeviceState(), true);
-    }
-
     void SetEmotion(const char* emotion) override {
         DisplayLockGuard lock(this);
         emotion_ = emotion ? emotion : "neutral";
-        UpdateFace(Application::GetInstance().GetDeviceState(), true);
-    }
-
-    void SetIcon(const char* icon) override {
-        DisplayLockGuard lock(this);
-        emotion_ = "neutral";
-        UpdateFace(Application::GetInstance().GetDeviceState(), true);
-    }
-
-#if CONFIG_USE_WECHAT_MESSAGE_STYLE
-    void SetChatMessage(const char* role, const char* content) override {
-#else
-    void SetChatMessage(const char* role, const char* content) override {
-#endif
-        DisplayLockGuard lock(this);
-        if (!face_message_label_) {
-            return;
+        anim_tick_ = 0;  // 重置动画计数器
+        
+        // 先调用基类函数设置 emoji
+        LcdDisplay::SetEmotion(emotion);
+        
+        // 隐藏 emoji，显示萌系脸
+        if (emotion_label_) {
+            lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
         }
-        if (content == nullptr || content[0] == '\0') {
-            lv_label_set_text(face_message_label_, "");
-            lv_obj_add_flag(face_message_label_, LV_OBJ_FLAG_HIDDEN);
-            return;
+        if (face_container_) {
+            lv_obj_clear_flag(face_container_, LV_OBJ_FLAG_HIDDEN);
         }
-        lv_label_set_text(face_message_label_, content);
-        lv_obj_clear_flag(face_message_label_, LV_OBJ_FLAG_HIDDEN);
-        UpdateFace(Application::GetInstance().GetDeviceState(), true);
+        
+        // 然后更新动画
+        UpdateFaceAnimation();
     }
 
 private:
     void SetupFaceUI() {
         if (!content_) {
+            ESP_LOGE("Face", "Content is null");
             return;
         }
 
+        // 设置整个屏幕为黑色背景
         auto screen = lv_screen_active();
         lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
         lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
-        lv_obj_t* black_backdrop = lv_obj_create(screen);
-        lv_obj_remove_style_all(black_backdrop);
-        lv_obj_set_size(black_backdrop, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-        lv_obj_set_style_bg_color(black_backdrop, lv_color_hex(0x000000), 0);
-        lv_obj_set_style_bg_opa(black_backdrop, LV_OPA_COVER, 0);
-        lv_obj_clear_flag(black_backdrop, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_move_background(black_backdrop);
-
-        lv_obj_clean(content_);
-        lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
-        lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0);
-        lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(content_, 0, 0);
-        lv_obj_set_style_border_opa(content_, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_pad_all(content_, 0, 0);
-        lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
+        // 设置 container 为黑色
         if (container_) {
             lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
             lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(container_, 0, 0);
-            lv_obj_set_style_border_opa(container_, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_pad_all(container_, 0, 0);
-            lv_obj_set_style_pad_row(container_, 0, 0);
         }
+
+        // 隐藏状态栏
         if (status_bar_) {
-            lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x000000), 0);
-            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_COVER, 0);
-            lv_obj_set_style_border_opa(status_bar_, LV_OPA_TRANSP, 0);
             lv_obj_set_size(status_bar_, 0, 0);
             lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
         }
+
+        // 设置 content 为黑色
+        lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(content_, 0, 0);
+        lv_obj_set_style_pad_all(content_, 0, 0);
+
+        // 隐藏其他标签
         if (emotion_label_) {
             lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
         }
-        if (status_label_) {
-            lv_label_set_text(status_label_, "");
-            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        if (chat_message_label_) {
+            lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
         }
         if (notification_label_) {
-            lv_label_set_text(notification_label_, "");
             lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (status_label_) {
+            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         }
         if (mute_label_) {
             lv_obj_add_flag(mute_label_, LV_OBJ_FLAG_HIDDEN);
@@ -258,7 +227,14 @@ private:
         if (battery_label_) {
             lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         }
+        if (preview_image_) {
+            lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (low_battery_popup_) {
+            lv_obj_add_flag(low_battery_popup_, LV_OBJ_FLAG_HIDDEN);
+        }
 
+        // 创建面部容器（居中显示）
         face_container_ = lv_obj_create(content_);
         lv_obj_remove_style_all(face_container_);
         lv_obj_set_size(face_container_, 340, 215);
@@ -266,13 +242,34 @@ private:
         lv_obj_set_style_border_width(face_container_, 0, 0);
         lv_obj_set_scrollbar_mode(face_container_, LV_SCROLLBAR_MODE_OFF);
         lv_obj_clear_flag(face_container_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_align(face_container_, LV_ALIGN_CENTER, 0, -20);  // 稍微上移
 
+        // 创建眼睛（眼白）
         eye_left_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
         eye_right_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        
+        // 创建瞳孔（深色，在白色眼白上更明显）
+        pupil_left_ = CreateFacePart(face_container_, lv_color_hex(0x000000));
+        pupil_right_ = CreateFacePart(face_container_, lv_color_hex(0x000000));
+        
+        // 创建高光
+        highlight_left_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        highlight_right_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        
+        // 创建眉毛
+        eyebrow_left_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        eyebrow_right_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        
+        // 创建嘴巴
         mouth_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        
+        // 创建腮红
+        blush_left_ = CreateFacePart(face_container_, lv_color_hex(0xFF6B9D));
+        lv_obj_set_style_bg_opa(blush_left_, LV_OPA_TRANSP, 0);
+        blush_right_ = CreateFacePart(face_container_, lv_color_hex(0xFF6B9D));
+        lv_obj_set_style_bg_opa(blush_right_, LV_OPA_TRANSP, 0);
 
-        face_timer_ = lv_timer_create(FaceTimerCallback, 100, this);
-        UpdateFace(kDeviceStateIdle, true);
+        ESP_LOGI("Face", "Face UI setup complete");
     }
 
     lv_obj_t* CreateFacePart(lv_obj_t* parent, lv_color_t color) {
@@ -293,108 +290,207 @@ private:
 
     void AnimateFace() {
         anim_tick_++;
-        UpdateFace(Application::GetInstance().GetDeviceState(), false);
+        UpdateFaceAnimation();
     }
 
-    void UpdateFace(DeviceState state, bool force) {
-        if (!eye_left_ || !eye_right_ || !mouth_) {
+    void UpdateFaceAnimation() {
+        if (!face_container_ || !eye_left_ || !eye_right_ || !mouth_) {
             return;
         }
 
+        const DeviceState state = Application::GetInstance().GetDeviceState();
         const bool speaking = state == kDeviceStateSpeaking;
         const bool listening = state == kDeviceStateListening || state == kDeviceStateConnecting;
-        const bool blink = !speaking && (anim_tick_ % 52 >= 49);
+        
+        // 眨眼动画：更自然的眨眼（渐变）
+        const int blink_phase = anim_tick_ % 32;
+        const bool is_blinking = !speaking && blink_phase >= 28 && blink_phase <= 31;
+        const int blink_progress = is_blinking ? (blink_phase - 28) : 0;  // 0-3
+        int blink_eye_h = 60;  // 默认眼睛高度
+        
+        if (is_blinking) {
+            // 自然眨眼：60 -> 8 -> 60
+            if (blink_progress <= 1) {
+                blink_eye_h = 60 - blink_progress * 26;  // 60 -> 34
+            } else {
+                blink_eye_h = 8 + (blink_progress - 2) * 26;  // 8 -> 34 -> 60
+            }
+        }
 
-        int eye_w = 70;
-        int eye_h = 54;
-        int eye_y = 36;
-        int eye_gap = 62;
-        int mouth_w = 68;
+        // 萌系默认参数（更大更饱满）
+        int eye_w = 100;
+        int eye_h = 75;
+        int eye_y = 40;
+        int eye_gap = 70;
+        int pupil_size = 40;
+        int highlight_size = 16;
+        int eyebrow_w = 55;
+        int eyebrow_h = 8;
+        int eyebrow_y = 25;
+        int eyebrow_angle = 0;
+        int eyebrow_offset_y = 0;
+        int mouth_w = 65;
         int mouth_h = 20;
-        int mouth_y = 132;
+        int mouth_y = 185;
         int mouth_radius = 12;
-        auto is_emotion = [this](const char* value) {
-            return strcmp(emotion_, value) == 0;
-        };
+        int blush_w = 45;
+        int blush_h = 25;
+        int blush_y = 130;
+        bool show_blush = false;
 
-        if (is_emotion("happy") || is_emotion("laughing") || is_emotion("funny")) {
-            eye_w = 78;
-            eye_h = 46;
-            mouth_w = 112;
-            mouth_h = 24;
-            mouth_radius = 14;
-        } else if (is_emotion("sad") || is_emotion("crying")) {
-            eye_w = 66;
-            eye_h = 44;
-            eye_y = 46;
-            mouth_w = 56;
-            mouth_h = 10;
-            mouth_radius = 6;
-        } else if (is_emotion("angry") || is_emotion("confident")) {
-            eye_w = 76;
-            eye_h = 42;
-            eye_y = 38;
-            mouth_w = 78;
+        // 瞳孔随机移动（每1-3秒移动一次）
+        if (!speaking && !listening && anim_tick_ % 20 == 0) {
+            pupil_target_x_ = (rand() % 31) - 15;  // -15 to 15
+            pupil_target_y_ = (rand() % 21) - 10;  // -10 to 10
+        }
+        // 瞳孔平滑移动（更快的响应）
+        pupil_offset_x_ += (pupil_target_x_ - pupil_offset_x_) * 0.15;
+        pupil_offset_y_ += (pupil_target_y_ - pupil_offset_y_) * 0.15;
+
+        // 根据表情调整参数
+        if (strcmp(emotion_, "happy") == 0 || strcmp(emotion_, "laughing") == 0 || strcmp(emotion_, "funny") == 0) {
+            // 开心：弯弯笑眼，眉毛上扬
+            eye_h = 45;
+            mouth_w = 110;
+            mouth_h = 35;
+            mouth_radius = 20;
+            eyebrow_angle = 15;
+            eyebrow_offset_y = -8;
+            show_blush = true;
+        } else if (strcmp(emotion_, "sad") == 0 || strcmp(emotion_, "crying") == 0) {
+            // 伤心：眼睛下垂，眉毛八字
+            eye_h = 65;
+            eye_y = 50;
+            mouth_w = 50;
             mouth_h = 12;
-            mouth_radius = 7;
-        } else if (is_emotion("surprised") || is_emotion("shocked")) {
-            eye_w = 58;
-            eye_h = 58;
-            eye_gap = 72;
-            mouth_w = 48;
-            mouth_h = 46;
-            mouth_radius = 24;
-        } else if (is_emotion("sleepy") || state == kDeviceStateIdle) {
-            eye_w = 74;
-            eye_h = 50;
-            mouth_w = 64;
+            mouth_radius = 8;
+            eyebrow_angle = -20;
+            eyebrow_offset_y = 8;
+            pupil_target_y_ = 8;
+        } else if (strcmp(emotion_, "angry") == 0 || strcmp(emotion_, "confident") == 0) {
+            // 生气：眼睛瞪大，眉毛皱起
+            eye_h = 70;
+            eye_y = 42;
+            mouth_w = 75;
+            mouth_h = 15;
+            mouth_radius = 9;
+            eyebrow_angle = -25;
+            eyebrow_offset_y = 5;
+        } else if (strcmp(emotion_, "surprised") == 0 || strcmp(emotion_, "shocked") == 0) {
+            // 惊讶：瞪大眼，眉毛高挑
+            eye_h = 85;
+            eye_gap = 80;
+            mouth_w = 45;
+            mouth_h = 45;
+            mouth_radius = 22;
+            eyebrow_angle = 20;
+            eyebrow_offset_y = -15;
+        } else if (strcmp(emotion_, "sleepy") == 0 || state == kDeviceStateIdle) {
+            // 困倦/待机：半闭眼，缓慢呼吸
+            eye_h = 40 + (int)(8 * sin(anim_tick_ * 0.1));
+            mouth_w = 55;
             mouth_h = 18;
             mouth_radius = 10;
-        } else if (is_emotion("thinking") || is_emotion("confused")) {
-            eye_w = 66;
-            eye_h = 52;
-            mouth_w = 46;
-            mouth_h = 14;
-            mouth_radius = 8;
-        } else if (is_emotion("loving")) {
-            eye_w = 72;
-            eye_h = 58;
-            mouth_w = 104;
-            mouth_h = 24;
-            mouth_radius = 16;
+            eyebrow_angle = 5;
+            eyebrow_offset_y = 3;
+        } else if (strcmp(emotion_, "thinking") == 0 || strcmp(emotion_, "confused") == 0) {
+            // 思考：眼睛向右上看，单边眉毛上扬
+            eye_h = 70;
+            eye_gap = 65;
+            mouth_w = 45;
+            mouth_h = 18;
+            mouth_radius = 10;
+            pupil_target_x_ = 12;
+            pupil_target_y_ = -10;
+            eyebrow_angle = 12;
+        } else if (strcmp(emotion_, "loving") == 0) {
+            // 爱心：弯弯笑眼，心跳
+            eye_h = 50 + (int)(8 * sin(anim_tick_ * 0.3));
+            mouth_w = 100;
+            mouth_h = 28;
+            mouth_radius = 18;
+            eyebrow_angle = 12;
+            eyebrow_offset_y = -5;
+            show_blush = true;
         }
 
         if (listening) {
-            eye_w = 76;
-            eye_h = 58;
-            mouth_w = 54;
-            mouth_h = 18;
-            mouth_radius = 10;
+            // 聆听：专注眼神，轻微脉动
+            eye_h = 75 + (int)(8 * sin(anim_tick_ * 0.2));
+            mouth_w = 60;
+            mouth_h = 22;
+            mouth_radius = 12;
+            eyebrow_angle = 8;
+            eyebrow_offset_y = -3;
         }
 
         if (speaking) {
-            static constexpr int mouth_widths[] = {58, 86, 68, 96, 76};
-            static constexpr int mouth_heights[] = {18, 38, 30, 24, 34};
+            // 说话：嘴巴动态，眼睛专注
+            static constexpr int mouth_widths[] = {65, 95, 70, 100, 80};
+            static constexpr int mouth_heights[] = {20, 40, 32, 28, 35};
             const int phase = anim_tick_ % 5;
-            eye_w = 76;
-            eye_h = 56;
+            eye_h = 70;
             mouth_w = mouth_widths[phase];
             mouth_h = mouth_heights[phase];
             mouth_radius = mouth_h / 2;
-        } else if (blink) {
-            eye_h = 10;
+            eyebrow_angle = 5;
         }
 
-        const int face_center_x = 170;
+        // 头部微动（更自然的摇摆）
+        const float head_sway = 3 * sin(anim_tick_ * 0.08);
+        const int face_center_x = 170 + (int)head_sway;
+
+        // 腮红呼吸
+        if (show_blush) {
+            if (blush_increasing_) {
+                blush_alpha_ += 2;
+                if (blush_alpha_ >= 40) blush_increasing_ = false;
+            } else {
+                blush_alpha_ -= 2;
+                if (blush_alpha_ <= 20) blush_increasing_ = true;
+            }
+        } else {
+            blush_alpha_ = 0;
+        }
+
+        // 更新眼睛
         const int left_x = face_center_x - eye_gap - eye_w;
         const int right_x = face_center_x + eye_gap;
         SetPart(eye_left_, left_x, eye_y, eye_w, eye_h, eye_h / 2);
         SetPart(eye_right_, right_x, eye_y, eye_w, eye_h, eye_h / 2);
-        SetPart(mouth_, (340 - mouth_w) / 2, mouth_y, mouth_w, mouth_h, mouth_radius);
 
-        if (force) {
-            lv_obj_invalidate(face_container_);
-        }
+        // 更新瞳孔
+        const int pupil_left_x = left_x + (eye_w - pupil_size) / 2 + (int)pupil_offset_x_;
+        const int pupil_right_x = right_x + (eye_w - pupil_size) / 2 + (int)pupil_offset_x_;
+        const int pupil_y = eye_y + (eye_h - pupil_size) / 2 + (int)pupil_offset_y_;
+        SetPart(pupil_left_, pupil_left_x, pupil_y, pupil_size, pupil_size, pupil_size / 2);
+        SetPart(pupil_right_, pupil_right_x, pupil_y, pupil_size, pupil_size, pupil_size / 2);
+
+        // 更新高光（跟随眼睛大小变化）
+        const int highlight_left_x = left_x + eye_w * 0.6;
+        const int highlight_right_x = right_x + eye_w * 0.6;
+        const int highlight_y = eye_y + eye_h * 0.15;
+        SetPart(highlight_left_, highlight_left_x, highlight_y, highlight_size, highlight_size, highlight_size / 2);
+        SetPart(highlight_right_, highlight_right_x, highlight_y, highlight_size, highlight_size, highlight_size / 2);
+
+        // 更新眉毛（添加上下偏移）
+        const int eyebrow_left_x = left_x + (eye_w - eyebrow_w) / 2;
+        const int eyebrow_right_x = right_x + (eye_w - eyebrow_w) / 2;
+        SetPart(eyebrow_left_, eyebrow_left_x, eyebrow_y + eyebrow_offset_y, eyebrow_w, eyebrow_h, eyebrow_h / 2);
+        SetPart(eyebrow_right_, eyebrow_right_x, eyebrow_y + eyebrow_offset_y, eyebrow_w, eyebrow_h, eyebrow_h / 2);
+        lv_obj_set_style_transform_rotation(eyebrow_left_, eyebrow_angle * 10, 0);
+        lv_obj_set_style_transform_rotation(eyebrow_right_, -eyebrow_angle * 10, 0);
+
+        // 更新嘴巴
+        SetPart(mouth_, (340 - mouth_w) / 2 + (int)head_sway, mouth_y, mouth_w, mouth_h, mouth_radius);
+
+        // 更新腮红
+        const int blush_left_x = left_x - blush_w / 2;
+        const int blush_right_x = right_x + eye_w - blush_w / 2;
+        SetPart(blush_left_, blush_left_x, blush_y, blush_w, blush_h, blush_h / 2);
+        SetPart(blush_right_, blush_right_x, blush_y, blush_w, blush_h, blush_h / 2);
+        lv_obj_set_style_bg_opa(blush_left_, blush_alpha_, 0);
+        lv_obj_set_style_bg_opa(blush_right_, blush_alpha_, 0);
     }
 
     void SetPart(lv_obj_t* obj, int x, int y, int w, int h, int radius) {
@@ -403,6 +499,28 @@ private:
         lv_obj_set_pos(obj, x, y);
     }
 
+    lv_obj_t* face_container_ = nullptr;
+    lv_obj_t* eye_left_ = nullptr;
+    lv_obj_t* eye_right_ = nullptr;
+    lv_obj_t* pupil_left_ = nullptr;
+    lv_obj_t* pupil_right_ = nullptr;
+    lv_obj_t* highlight_left_ = nullptr;
+    lv_obj_t* highlight_right_ = nullptr;
+    lv_obj_t* eyebrow_left_ = nullptr;
+    lv_obj_t* eyebrow_right_ = nullptr;
+    lv_obj_t* mouth_ = nullptr;
+    lv_obj_t* blush_left_ = nullptr;
+    lv_obj_t* blush_right_ = nullptr;
+    const char* emotion_ = "neutral";
+    uint32_t anim_tick_ = 0;
+    float pupil_offset_x_ = 0;
+    float pupil_offset_y_ = 0;
+    float pupil_target_x_ = 0;
+    float pupil_target_y_ = 0;
+    int16_t head_offset_x_ = 0;
+    uint8_t blush_alpha_ = 0;
+    bool blush_increasing_ = true;
+    lv_timer_t* face_timer_ = nullptr;
     static bool OnColorDone(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_io_event_data_t* edata, void* user_ctx) {
         auto* self = static_cast<QdtechLandscapeDisplay*>(user_ctx);
         BaseType_t need_yield = pdFALSE;
@@ -459,14 +577,6 @@ private:
     uint16_t* frame_buffer_ = nullptr;
     uint16_t* transfer_buffer_ = nullptr;
     SemaphoreHandle_t transfer_done_ = nullptr;
-    lv_obj_t* face_container_ = nullptr;
-    lv_obj_t* eye_left_ = nullptr;
-    lv_obj_t* eye_right_ = nullptr;
-    lv_obj_t* mouth_ = nullptr;
-    lv_obj_t* face_message_label_ = nullptr;
-    lv_timer_t* face_timer_ = nullptr;
-    const char* emotion_ = "neutral";
-    uint32_t anim_tick_ = 0;
 };
 
 class QdtechTouch {
