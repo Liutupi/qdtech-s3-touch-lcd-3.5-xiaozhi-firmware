@@ -202,18 +202,18 @@ private:
         lv_obj_clean(content_);
         lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
         lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_set_style_bg_color(content_, lv_color_hex(0x05070A), 0);
+        lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0);
         lv_obj_set_style_border_width(content_, 0, 0);
         lv_obj_set_style_pad_all(content_, 0, 0);
         lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
         if (container_) {
-            lv_obj_set_style_bg_color(container_, lv_color_hex(0x05070A), 0);
+            lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
             lv_obj_set_style_border_width(container_, 0, 0);
         }
         if (status_bar_) {
-            lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x05070A), 0);
+            lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x000000), 0);
         }
         if (emotion_label_) {
             lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
@@ -221,33 +221,24 @@ private:
 
         face_container_ = lv_obj_create(content_);
         lv_obj_remove_style_all(face_container_);
-        lv_obj_set_size(face_container_, 300, 190);
+        lv_obj_set_size(face_container_, 340, 215);
         lv_obj_set_style_bg_opa(face_container_, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(face_container_, 0, 0);
         lv_obj_set_scrollbar_mode(face_container_, LV_SCROLLBAR_MODE_OFF);
         lv_obj_clear_flag(face_container_, LV_OBJ_FLAG_SCROLLABLE);
 
-        eye_left_ = CreateFacePart(face_container_);
-        eye_right_ = CreateFacePart(face_container_);
-        mouth_ = CreateFacePart(face_container_);
-
-        face_message_label_ = lv_label_create(content_);
-        lv_obj_set_width(face_message_label_, LV_HOR_RES * 9 / 10);
-        lv_obj_set_style_text_font(face_message_label_, fonts_.text_font, 0);
-        lv_obj_set_style_text_color(face_message_label_, lv_color_hex(0xB8EEF8), 0);
-        lv_obj_set_style_text_align(face_message_label_, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_long_mode(face_message_label_, LV_LABEL_LONG_DOT);
-        lv_label_set_text(face_message_label_, "");
-        lv_obj_add_flag(face_message_label_, LV_OBJ_FLAG_HIDDEN);
+        eye_left_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        eye_right_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
+        mouth_ = CreateFacePart(face_container_, lv_color_hex(0xFFFFFF));
 
         face_timer_ = lv_timer_create(FaceTimerCallback, 100, this);
         UpdateFace(kDeviceStateIdle, true);
     }
 
-    lv_obj_t* CreateFacePart(lv_obj_t* parent) {
+    lv_obj_t* CreateFacePart(lv_obj_t* parent, lv_color_t color) {
         lv_obj_t* obj = lv_obj_create(parent);
         lv_obj_remove_style_all(obj);
-        lv_obj_set_style_bg_color(obj, face_color_, 0);
+        lv_obj_set_style_bg_color(obj, color, 0);
         lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(obj, 0, 0);
         lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
@@ -275,83 +266,91 @@ private:
         const bool blink = !speaking && (anim_tick_ % 52 >= 49);
 
         int eye_w = 70;
-        int eye_h = 34;
-        int eye_y = 38;
-        int eye_gap = 58;
-        int mouth_w = 86;
-        int mouth_h = 10;
-        int mouth_y = 128;
-        int mouth_radius = 8;
+        int eye_h = 54;
+        int eye_y = 36;
+        int eye_gap = 62;
+        int mouth_w = 68;
+        int mouth_h = 20;
+        int mouth_y = 132;
+        int mouth_radius = 12;
         auto is_emotion = [this](const char* value) {
             return strcmp(emotion_, value) == 0;
         };
 
         if (is_emotion("happy") || is_emotion("laughing") || is_emotion("funny")) {
-            eye_h = 22;
-            mouth_w = 128;
-            mouth_h = 30;
-            mouth_radius = 18;
-        } else if (is_emotion("sad") || is_emotion("crying")) {
-            eye_h = 18;
-            eye_y = 50;
-            mouth_w = 76;
-            mouth_h = 8;
-        } else if (is_emotion("angry") || is_emotion("confident")) {
             eye_w = 78;
-            eye_h = 18;
-            eye_y = 42;
-            mouth_w = 96;
+            eye_h = 46;
+            mouth_w = 112;
+            mouth_h = 24;
+            mouth_radius = 14;
+        } else if (is_emotion("sad") || is_emotion("crying")) {
+            eye_w = 66;
+            eye_h = 44;
+            eye_y = 46;
+            mouth_w = 56;
             mouth_h = 10;
+            mouth_radius = 6;
+        } else if (is_emotion("angry") || is_emotion("confident")) {
+            eye_w = 76;
+            eye_h = 42;
+            eye_y = 38;
+            mouth_w = 78;
+            mouth_h = 12;
+            mouth_radius = 7;
         } else if (is_emotion("surprised") || is_emotion("shocked")) {
-            eye_w = 50;
-            eye_h = 50;
-            eye_gap = 70;
+            eye_w = 58;
+            eye_h = 58;
+            eye_gap = 72;
             mouth_w = 48;
-            mouth_h = 48;
+            mouth_h = 46;
             mouth_radius = 24;
         } else if (is_emotion("sleepy") || state == kDeviceStateIdle) {
-            eye_h = 18;
-            mouth_w = 76;
-            mouth_h = 8;
+            eye_w = 74;
+            eye_h = 50;
+            mouth_w = 64;
+            mouth_h = 18;
+            mouth_radius = 10;
         } else if (is_emotion("thinking") || is_emotion("confused")) {
-            eye_w = 62;
-            eye_h = 30;
-            mouth_w = 54;
-            mouth_h = 10;
+            eye_w = 66;
+            eye_h = 52;
+            mouth_w = 46;
+            mouth_h = 14;
+            mouth_radius = 8;
         } else if (is_emotion("loving")) {
-            eye_w = 60;
-            eye_h = 42;
-            mouth_w = 112;
+            eye_w = 72;
+            eye_h = 58;
+            mouth_w = 104;
             mouth_h = 24;
             mouth_radius = 16;
         }
 
         if (listening) {
             eye_w = 76;
-            eye_h = 38;
+            eye_h = 58;
             mouth_w = 54;
-            mouth_h = 14;
+            mouth_h = 18;
             mouth_radius = 10;
         }
 
         if (speaking) {
-            static constexpr int mouth_widths[] = {72, 104, 64, 122, 88};
-            static constexpr int mouth_heights[] = {18, 38, 48, 26, 34};
+            static constexpr int mouth_widths[] = {58, 86, 68, 96, 76};
+            static constexpr int mouth_heights[] = {18, 38, 30, 24, 34};
             const int phase = anim_tick_ % 5;
-            eye_w = 72;
-            eye_h = 34;
+            eye_w = 76;
+            eye_h = 56;
             mouth_w = mouth_widths[phase];
             mouth_h = mouth_heights[phase];
             mouth_radius = mouth_h / 2;
         } else if (blink) {
-            eye_h = 6;
+            eye_h = 10;
         }
 
-        const int left_x = 150 - eye_gap - eye_w;
-        const int right_x = 150 + eye_gap;
+        const int face_center_x = 170;
+        const int left_x = face_center_x - eye_gap - eye_w;
+        const int right_x = face_center_x + eye_gap;
         SetPart(eye_left_, left_x, eye_y, eye_w, eye_h, eye_h / 2);
         SetPart(eye_right_, right_x, eye_y, eye_w, eye_h, eye_h / 2);
-        SetPart(mouth_, (300 - mouth_w) / 2, mouth_y, mouth_w, mouth_h, mouth_radius);
+        SetPart(mouth_, (340 - mouth_w) / 2, mouth_y, mouth_w, mouth_h, mouth_radius);
 
         if (force) {
             lv_obj_invalidate(face_container_);
@@ -426,7 +425,6 @@ private:
     lv_obj_t* mouth_ = nullptr;
     lv_obj_t* face_message_label_ = nullptr;
     lv_timer_t* face_timer_ = nullptr;
-    lv_color_t face_color_ = lv_color_hex(0x63F5FF);
     const char* emotion_ = "neutral";
     uint32_t anim_tick_ = 0;
 };
