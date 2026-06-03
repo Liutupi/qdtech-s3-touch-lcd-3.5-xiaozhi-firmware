@@ -6,6 +6,7 @@
 #include "config.h"
 #include "mcp_server.h"
 #include "desktop_ui.h"
+#include "time_weather_service.h"
 
 #include <algorithm>
 #include <cmath>
@@ -316,6 +317,11 @@ public:
         InitializeButtons();
         InitializeTools();
         GetBacklight()->RestoreBrightness();
+        
+        // 启动时间天气服务
+        if (display_) {
+            time_weather_service_.Start(static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI());
+        }
     }
 
     AudioCodec* GetAudioCodec() override {
@@ -426,25 +432,44 @@ private:
         if (touched && !touch_down_) {
             touch_down_ = true;
             touch_start_ms_ = now_ms;
+            touch_start_x_ = x;
+            touch_start_y_ = y;
+        } else if (touched && touch_down_) {
+            touch_last_x_ = x;
+            touch_last_y_ = y;
         } else if (!touched && touch_down_) {
             touch_down_ = false;
-            if (now_ms - touch_start_ms_ < TOUCH_TAP_THRESHOLD_MS) {
-                HandleTap();
+            int16_t dx = (int16_t)touch_last_x_ - (int16_t)touch_start_x_;
+            int16_t dy = (int16_t)touch_last_y_ - (int16_t)touch_start_y_;
+            int64_t duration = now_ms - touch_start_ms_;
+
+            if (duration < TOUCH_TAP_THRESHOLD_MS && abs(dx) < 30 && abs(dy) < 30) {
+                HandleTap(x, y);
+            } else if (duration < 500) {
+                HandleSwipe(dx, dy);
             }
         }
     }
 
-    void HandleTap() {
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-            ResetWifiConfiguration();
+    void HandleTap(uint16_t x, uint16_t y) {
+        if (display_) {
+            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleTap(x, y);
         }
-        app.ToggleChatState();
+    }
+
+    void HandleSwipe(int16_t dx, int16_t dy) {
+        if (display_) {
+            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleSwipe(dx, dy);
+        }
     }
 
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
-            HandleTap();
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
+                ResetWifiConfiguration();
+            }
+            app.ToggleChatState();
         });
     }
 
@@ -466,6 +491,11 @@ private:
     esp_timer_handle_t touch_timer_ = nullptr;
     bool touch_down_ = false;
     int64_t touch_start_ms_ = 0;
+    uint16_t touch_start_x_ = 0;
+    uint16_t touch_start_y_ = 0;
+    uint16_t touch_last_x_ = 0;
+    uint16_t touch_last_y_ = 0;
+    TimeWeatherService time_weather_service_;
 };
 
 DECLARE_BOARD(QdtechS3TouchLcd35Board);
