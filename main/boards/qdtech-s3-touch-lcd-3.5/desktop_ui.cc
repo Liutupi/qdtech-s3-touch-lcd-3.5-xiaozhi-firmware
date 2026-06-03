@@ -324,7 +324,31 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
 
+    if (current_page_ == DesktopPage::MAIN) {
+        if (x >= 386 && x < 462 && y >= 10 && y < 42) {
+            ShowPage(DesktopPage::APPS);
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::XIAOZHI) {
+        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+            ShowPage(DesktopPage::APPS);
+            return;
+        }
+        if (x >= 177 && x < 303 && y >= 264 && y < 302) {
+            Application::GetInstance().ToggleChatState();
+            return;
+        }
+        return;
+    }
+
     if (current_page_ != DesktopPage::APPS) {
+        return;
+    }
+
+    if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+        ShowPage(DesktopPage::MAIN);
         return;
     }
 
