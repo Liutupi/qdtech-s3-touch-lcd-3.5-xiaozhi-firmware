@@ -47,6 +47,7 @@ struct AppRow {
 
 static void add_gesture_bubble(lv_obj_t* obj) {
     lv_obj_add_flag(obj, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_flag(obj, LV_OBJ_FLAG_EVENT_BUBBLE);
 }
 
 static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style) {
@@ -159,9 +160,54 @@ static void show_apps_cb(lv_event_t* event) {
     }
 }
 
-static void show_xiaozhi_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        g_desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+static void open_xiaozhi_with_message(const char* state, const char* message, bool start_chat) {
+    if (!g_desktop_ui) {
+        return;
+    }
+    ESP_LOGI(TAG, "App card clicked: %s", state ? state : "XiaoZhi");
+    g_desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+    g_desktop_ui->SetXiaozhiState(state, message, "thinking");
+    if (start_chat) {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateIdle) {
+            app.ToggleChatState();
+        }
+    }
+}
+
+static void xiaozhi_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("XiaoZhi AI", "Starting conversation...", true);
+    }
+}
+
+static void radio_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Radio", "Tell XiaoZhi which station or music you want.", true);
+    }
+}
+
+static void weather_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Weather", "Ask XiaoZhi for weather, or set a new weather city.", true);
+    }
+}
+
+static void calendar_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Calendar", "Ask XiaoZhi about dates, plans, or reminders.", true);
+    }
+}
+
+static void quote_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
+    }
+}
+
+static void settings_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Settings", "Ask XiaoZhi to adjust screen, volume, WiFi, or weather location.", true);
     }
 }
 
@@ -444,22 +490,18 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     };
 
     AppInfo apps[] = {
-        {"RAD", "Radio", "Music FM", COLOR_GOLD, nullptr},
-        {"WTR", "Weather", "Forecast", COLOR_GREEN, nullptr},
-        {"AI", "XiaoZhi", "Online", COLOR_PURPLE, show_xiaozhi_cb},
-        {"CAL", "Calendar", "2026/01/01", COLOR_PURPLE, nullptr},
-        {"QTE", "Quote", "Daily", COLOR_GOLD, nullptr},
-        {"SET", "Settings", "System", COLOR_BLUE, nullptr},
+        {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
+        {"WTR", "Weather", "Forecast", COLOR_GREEN, weather_card_cb},
+        {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
+        {"CAL", "Calendar", "2026/01/01", COLOR_PURPLE, calendar_card_cb},
+        {"QTE", "Quote", "Daily", COLOR_GOLD, quote_card_cb},
+        {"SET", "Settings", "System", COLOR_BLUE, settings_card_cb},
     };
 
     for (uint8_t i = 0; i < 6; ++i) {
-        CreateAppTile(apps_page_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
+        lv_obj_t* tile = CreateAppTile(apps_page_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
         if (apps[i].cb) {
-            // Find the tile and add click callback
-            lv_obj_t* tile = lv_obj_get_child(apps_page_, 4 + i); // Skip brand, status bar, title, sub, back
-            if (tile) {
-                lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
-            }
+            lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
         }
     }
 
@@ -467,7 +509,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
-void DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color) {
+lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color) {
     lv_obj_t* box = lv_obj_create(parent);
     lv_obj_add_style(box, &style_panel, 0);
     lv_obj_set_size(box, 204, 62);
@@ -476,6 +518,7 @@ void DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, c
     lv_obj_align(box, LV_ALIGN_TOP_LEFT, x, y);
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
     add_gesture_bubble(box);
 
     lv_obj_t* cn_label = label_en(box, cn, &style_en);
@@ -493,6 +536,7 @@ void DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, c
 
     lv_obj_t* arrow = label_en(box, ">", &style_muted);
     lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -14, 0);
+    return box;
 }
 
 // ===== XiaoZhi page =====

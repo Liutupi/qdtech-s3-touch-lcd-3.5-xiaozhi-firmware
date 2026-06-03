@@ -153,6 +153,24 @@ public:
         desktop_ui_.SetXiaozhiEmotion(emotion);
     }
 
+    void SetChatMessage(const char* role, const char* content) override {
+        LcdDisplay::SetChatMessage(role, content);
+
+        DisplayLockGuard lock(this);
+        const char* state = "System";
+        if (role && strcmp(role, "user") == 0) {
+            state = "You";
+        } else if (role && strcmp(role, "assistant") == 0) {
+            state = "XiaoZhi";
+        }
+
+        if (content && strlen(content) > 0) {
+            desktop_ui_.SetXiaozhiState(state, content, nullptr);
+        } else {
+            desktop_ui_.SetXiaozhiState("Standby", "", nullptr);
+        }
+    }
+
     DesktopUI* GetDesktopUI() {
         return &desktop_ui_;
     }
