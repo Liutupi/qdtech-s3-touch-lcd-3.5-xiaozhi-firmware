@@ -153,10 +153,11 @@ public:
     void SetStatus(const char* status) override {
         DisplayLockGuard lock(this);
         if (status_label_) {
-            lv_label_set_text(status_label_, status);
-            lv_obj_clear_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_label_set_text(status_label_, "");
+            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
         }
         if (notification_label_) {
+            lv_label_set_text(notification_label_, "");
             lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
         }
         UpdateFace(Application::GetInstance().GetDeviceState(), true);
@@ -211,12 +212,33 @@ private:
         if (container_) {
             lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
             lv_obj_set_style_border_width(container_, 0, 0);
+            lv_obj_set_style_pad_all(container_, 0, 0);
+            lv_obj_set_style_pad_row(container_, 0, 0);
         }
         if (status_bar_) {
             lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x000000), 0);
+            lv_obj_set_size(status_bar_, 0, 0);
+            lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
         }
         if (emotion_label_) {
             lv_obj_add_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (status_label_) {
+            lv_label_set_text(status_label_, "");
+            lv_obj_add_flag(status_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (notification_label_) {
+            lv_label_set_text(notification_label_, "");
+            lv_obj_add_flag(notification_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (mute_label_) {
+            lv_obj_add_flag(mute_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (network_label_) {
+            lv_obj_add_flag(network_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (battery_label_) {
+            lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
         }
 
         face_container_ = lv_obj_create(content_);
