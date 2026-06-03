@@ -200,23 +200,41 @@ private:
             return;
         }
 
+        auto screen = lv_screen_active();
+        lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+
+        lv_obj_t* black_backdrop = lv_obj_create(screen);
+        lv_obj_remove_style_all(black_backdrop);
+        lv_obj_set_size(black_backdrop, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        lv_obj_set_style_bg_color(black_backdrop, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(black_backdrop, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(black_backdrop, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_move_background(black_backdrop);
+
         lv_obj_clean(content_);
         lv_obj_set_scrollbar_mode(content_, LV_SCROLLBAR_MODE_OFF);
         lv_obj_clear_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_style_bg_color(content_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(content_, 0, 0);
+        lv_obj_set_style_border_opa(content_, LV_OPA_TRANSP, 0);
         lv_obj_set_style_pad_all(content_, 0, 0);
         lv_obj_set_flex_flow(content_, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(content_, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
         if (container_) {
             lv_obj_set_style_bg_color(container_, lv_color_hex(0x000000), 0);
+            lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(container_, 0, 0);
+            lv_obj_set_style_border_opa(container_, LV_OPA_TRANSP, 0);
             lv_obj_set_style_pad_all(container_, 0, 0);
             lv_obj_set_style_pad_row(container_, 0, 0);
         }
         if (status_bar_) {
             lv_obj_set_style_bg_color(status_bar_, lv_color_hex(0x000000), 0);
+            lv_obj_set_style_bg_opa(status_bar_, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_opa(status_bar_, LV_OPA_TRANSP, 0);
             lv_obj_set_size(status_bar_, 0, 0);
             lv_obj_add_flag(status_bar_, LV_OBJ_FLAG_HIDDEN);
         }
