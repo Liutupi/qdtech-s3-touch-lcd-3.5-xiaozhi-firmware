@@ -317,11 +317,6 @@ public:
         InitializeButtons();
         InitializeTools();
         GetBacklight()->RestoreBrightness();
-        
-        // 启动时间天气服务
-        if (display_) {
-            time_weather_service_.Start(static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI());
-        }
     }
 
     AudioCodec* GetAudioCodec() override {
@@ -338,6 +333,18 @@ public:
     Backlight* GetBacklight() override {
         static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
         return &backlight;
+    }
+
+    void StartNetwork() override {
+        WifiBoard::StartNetwork();
+        
+        // WiFi 连接后启动时间天气服务
+        if (!time_weather_started_ && display_) {
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            time_weather_service_.Start(qd_display->GetDesktopUI());
+            time_weather_started_ = true;
+            ESP_LOGI(TAG, "Time weather service started");
+        }
     }
 
 private:
@@ -496,6 +503,7 @@ private:
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
     TimeWeatherService time_weather_service_;
+    bool time_weather_started_ = false;
 };
 
 DECLARE_BOARD(QdtechS3TouchLcd35Board);

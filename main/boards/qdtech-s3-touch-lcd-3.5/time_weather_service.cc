@@ -5,7 +5,6 @@
 #include <cstring>
 #include <ctime>
 
-#include "application.h"
 #include "cJSON.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
@@ -65,16 +64,13 @@ void TimeWeatherService::Task() {
     int retry_ticks = 3600;
     bool weather_ok = false;
     
+    // 等待 WiFi 连接
+    while (!WifiStation::GetInstance().IsConnected()) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    ESP_LOGI(TAG, "WiFi connected, starting time weather service");
+    
     while (true) {
-        // 利用小智的WiFi连接，等待网络就绪
-        // 小智系统会自动连接WiFi，我们只需要检查是否已连接
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() == kDeviceStateStarting) {
-            // 系统还在启动，等待
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            continue;
-        }
-        
         // 启动SNTP
         StartSntp();
         
@@ -103,6 +99,14 @@ void TimeWeatherService::Task() {
         
         // 等待60秒
         for (int i = 0; i < 60; ++i) {
+            if (!WifiStation::GetInstance().IsConnected()) {
+                ESP_LOGW(TAG, "WiFi disconnected, waiting...");
+                while (!WifiStation::GetInstance().IsConnected()) {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                }
+                ESP_LOGI(TAG, "WiFi reconnected");
+                break;
+            }
             vTaskDelay(pdMS_TO_TICKS(1000));
             ++weather_ticks;
             ++retry_ticks;
