@@ -13,10 +13,14 @@ private:
     
     static void TaskWrapper(void* arg);
     void Task();
+    void WaitApplicationReady();
     void StartSntp();
     bool WaitTimeReady();
     void UpdateTime();
     bool FetchWeather();
+    void SetWeatherSafe(const char* temperature, const char* summary, int weather_code);
+    void SetNetworkStatusSafe(const char* status);
+    void SetDailyQuoteSafe(const char* quote);
     
     static const char* WeekdayName(int wday);
     static const char* WeatherDesc(int code);
