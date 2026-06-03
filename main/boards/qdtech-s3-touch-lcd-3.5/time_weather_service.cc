@@ -52,7 +52,7 @@ static const char* DAILY_QUOTES[] = {
 
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
-    xTaskCreate(TaskWrapper, "time_weather", 6144, this, 4, NULL);
+    xTaskCreate(TaskWrapper, "time_weather", 6144, this, 2, NULL);
 }
 
 void TimeWeatherService::TaskWrapper(void* arg) {
