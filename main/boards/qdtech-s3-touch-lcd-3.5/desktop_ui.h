@@ -2,10 +2,12 @@
 
 #include "lvgl.h"
 #include <cstdint>
+#include <functional>
 
 enum class DesktopPage {
     MAIN,
     APPS,
+    RADIO,
     XIAOZHI,
 };
 
@@ -21,6 +23,9 @@ public:
     void SetWeather(const char* temperature, const char* summary, int weather_code);
     void SetDailyQuote(const char* quote);
     void SetNetworkStatus(const char* status);
+    void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
+                         std::function<void()> next, std::function<void()> prev);
+    void SetRadioState(const char* station, const char* state, const char* meta);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetXiaozhiEmotion(const char* emotion);
 
@@ -31,6 +36,7 @@ private:
     // Pages
     lv_obj_t* main_page_ = nullptr;
     lv_obj_t* apps_page_ = nullptr;
+    lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
     DesktopPage current_page_ = DesktopPage::MAIN;
 
@@ -44,6 +50,15 @@ private:
     lv_obj_t* quote_label_ = nullptr;
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[2] = {};
+
+    // Radio page elements
+    lv_obj_t* radio_station_label_ = nullptr;
+    lv_obj_t* radio_state_label_ = nullptr;
+    lv_obj_t* radio_meta_label_ = nullptr;
+    std::function<void()> radio_play_pause_;
+    std::function<void()> radio_stop_;
+    std::function<void()> radio_next_;
+    std::function<void()> radio_prev_;
 
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
@@ -76,6 +91,7 @@ private:
     // Internal methods
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
+    void CreateRadioPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateStatusBar(lv_obj_t* parent);
     void CreateBigTime(lv_obj_t* parent);

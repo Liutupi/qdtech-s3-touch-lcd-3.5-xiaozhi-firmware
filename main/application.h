@@ -12,6 +12,7 @@
 #include <vector>
 #include <condition_variable>
 #include <memory>
+#include <atomic>
 
 #include <opus_encoder.h>
 #include <opus_decoder.h>
@@ -82,6 +83,8 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
+    void SetExternalAudioActive(bool active);
+    bool IsExternalAudioActive() const { return external_audio_active_.load(std::memory_order_relaxed); }
 
 private:
     Application();
@@ -103,6 +106,7 @@ private:
     bool aborted_ = false;
     bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
+    std::atomic<bool> external_audio_active_{false};
     int clock_ticks_ = 0;
     TaskHandle_t check_new_version_task_handle_ = nullptr;
 

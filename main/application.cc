@@ -808,7 +808,7 @@ void Application::OnAudioOutput() {
     std::unique_lock<std::mutex> lock(mutex_);
     if (audio_decode_queue_.empty()) {
         // Disable the output if there is no audio data for a long time
-        if (device_state_ == kDeviceStateIdle) {
+        if (device_state_ == kDeviceStateIdle && !external_audio_active_.load(std::memory_order_relaxed)) {
             auto duration = std::chrono::duration_cast<std::chrono::seconds>(now - last_output_time_).count();
             if (duration > max_silence_seconds) {
                 codec->EnableOutput(false);
@@ -850,6 +850,14 @@ void Application::OnAudioOutput() {
 #endif
         last_output_time_ = std::chrono::steady_clock::now();
     });
+}
+
+void Application::SetExternalAudioActive(bool active) {
+    external_audio_active_.store(active, std::memory_order_relaxed);
+    if (active) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        last_output_time_ = std::chrono::steady_clock::now();
+    }
 }
 
 void Application::OnAudioInput() {

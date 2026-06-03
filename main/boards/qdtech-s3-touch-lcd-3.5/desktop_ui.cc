@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <utility>
 
 #include <esp_log.h>
 
@@ -178,7 +179,9 @@ static void open_xiaozhi_with_message(const char* state, const char* message, bo
 static void open_app_card(uint8_t index) {
     switch (index) {
         case 0:
-            open_xiaozhi_with_message("Radio", "Tell XiaoZhi which station or music you want.", true);
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::RADIO);
+            }
             break;
         case 1:
             open_xiaozhi_with_message("Weather", "Ask XiaoZhi for weather, or set a new weather city.", true);
@@ -252,6 +255,14 @@ static void xiaozhi_gesture_cb(lv_event_t* event) {
     }
 }
 
+static void radio_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
 static void main_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -277,6 +288,7 @@ void DesktopUI::Create() {
 
     CreateMainPage(root);
     CreateAppsPage(root);
+    CreateRadioPage(root);
     CreateXiaozhiPage(root);
 
     // Start with main page
@@ -292,6 +304,7 @@ void DesktopUI::ShowPage(DesktopPage page) {
     current_page_ = page;
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
 
     switch (page) {
@@ -302,6 +315,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::APPS:
             lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show apps page");
+            break;
+        case DesktopPage::RADIO:
+            lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
+            ESP_LOGI(TAG, "Show radio page");
             break;
         case DesktopPage::XIAOZHI:
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -338,6 +355,41 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         }
         if (x >= 177 && x < 303 && y >= 264 && y < 302) {
             Application::GetInstance().ToggleChatState();
+            return;
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::RADIO) {
+        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+            if (radio_stop_) {
+                radio_stop_();
+            }
+            ShowPage(DesktopPage::APPS);
+            return;
+        }
+        if (x >= 40 && x < 126 && y >= 230 && y < 280) {
+            if (radio_prev_) {
+                radio_prev_();
+            }
+            return;
+        }
+        if (x >= 140 && x < 226 && y >= 230 && y < 280) {
+            if (radio_play_pause_) {
+                radio_play_pause_();
+            }
+            return;
+        }
+        if (x >= 240 && x < 326 && y >= 230 && y < 280) {
+            if (radio_stop_) {
+                radio_stop_();
+            }
+            return;
+        }
+        if (x >= 340 && x < 426 && y >= 230 && y < 280) {
+            if (radio_next_) {
+                radio_next_();
+            }
             return;
         }
         return;
@@ -607,6 +659,63 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     return box;
 }
 
+// ===== Radio page =====
+void DesktopUI::CreateRadioPage(lv_obj_t* root) {
+    radio_page_ = lv_obj_create(root);
+    lv_obj_add_style(radio_page_, &style_screen, 0);
+    lv_obj_set_size(radio_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(radio_page_, radio_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(radio_page_);
+
+    lv_obj_t* brand = label_en(radio_page_, "XiaoZhi AI", &style_en);
+    lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
+    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    CreateStatusBar(radio_page_);
+
+    lv_obj_t* title = label_en(radio_page_, "Radio", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(radio_page_, "Network FM", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 88, 53);
+
+    lv_obj_t* back = CreateButton(radio_page_, "Back", show_apps_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* panel = CreatePanel(radio_page_, 432, 134, 24, 88);
+    radio_station_label_ = label_en(panel, "CNR China Voice", &style_gold);
+    lv_obj_set_style_text_font(radio_station_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(radio_station_label_, LV_ALIGN_TOP_LEFT, 16, 14);
+
+    radio_state_label_ = label_en(panel, "Ready", &style_green);
+    lv_obj_set_style_text_font(radio_state_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(radio_state_label_, LV_ALIGN_TOP_LEFT, 16, 52);
+
+    radio_meta_label_ = label_en(panel, "Tap Play to start MP3 stream", &style_muted);
+    lv_obj_set_width(radio_meta_label_, 390);
+    lv_label_set_long_mode(radio_meta_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(radio_meta_label_, &lv_font_montserrat_14, 0);
+    lv_obj_align(radio_meta_label_, LV_ALIGN_BOTTOM_LEFT, 16, -14);
+
+    lv_obj_t* prev = CreateButton(radio_page_, "Prev", nullptr);
+    lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 52, 238);
+
+    lv_obj_t* play = CreateButton(radio_page_, "Play", nullptr);
+    lv_obj_align(play, LV_ALIGN_TOP_LEFT, 152, 238);
+
+    lv_obj_t* stop = CreateButton(radio_page_, "Stop", nullptr);
+    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 252, 238);
+
+    lv_obj_t* next = CreateButton(radio_page_, "Next", nullptr);
+    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 352, 238);
+
+    lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
 // ===== XiaoZhi page =====
 void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
     xiaozhi_page_ = lv_obj_create(root);
@@ -711,7 +820,9 @@ lv_obj_t* DesktopUI::CreateButton(lv_obj_t* parent, const char* text, lv_event_c
     lv_obj_set_style_bg_color(btn, COLOR_SURFACE_2, 0);
     lv_obj_set_style_border_color(btn, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(btn, 1, 0);
-    lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+    if (cb) {
+        lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+    }
     add_gesture_bubble(btn);
 
     lv_obj_t* txt = label_en(btn, text, &style_en);
@@ -883,6 +994,26 @@ void DesktopUI::SetDailyQuote(const char* quote) {
 void DesktopUI::SetNetworkStatus(const char* status) {
     if (!network_status_label_ || !status) return;
     lv_label_set_text(network_status_label_, status);
+}
+
+void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
+                                std::function<void()> next, std::function<void()> prev) {
+    radio_play_pause_ = std::move(play_pause);
+    radio_stop_ = std::move(stop);
+    radio_next_ = std::move(next);
+    radio_prev_ = std::move(prev);
+}
+
+void DesktopUI::SetRadioState(const char* station, const char* state, const char* meta) {
+    if (radio_station_label_ && station) {
+        lv_label_set_text(radio_station_label_, station);
+    }
+    if (radio_state_label_ && state) {
+        lv_label_set_text(radio_state_label_, state);
+    }
+    if (radio_meta_label_ && meta) {
+        lv_label_set_text(radio_meta_label_, meta);
+    }
 }
 
 void DesktopUI::SetXiaozhiState(const char* state, const char* message, const char* emotion) {

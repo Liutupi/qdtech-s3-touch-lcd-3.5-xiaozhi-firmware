@@ -6,6 +6,7 @@
 #include "config.h"
 #include "mcp_server.h"
 #include "desktop_ui.h"
+#include "radio_service.h"
 #include "time_weather_service.h"
 
 #include <algorithm>
@@ -335,6 +336,7 @@ public:
         InitializeTouch();
         InitializeButtons();
         InitializeTools();
+        InitializeRadio();
         GetBacklight()->RestoreBrightness();
     }
 
@@ -528,6 +530,54 @@ private:
                 }
                 return std::string("Weather location updated to ") + city + " (" + latitude + ", " + longitude + ").";
             });
+        mcp_server.AddTool("self.radio.get_status",
+            "Get the current network radio status, including station name and playback state.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                return radio_service_.GetStatusJson();
+            });
+        mcp_server.AddTool("self.radio.play",
+            "Start or resume the network radio. Optionally select a station by name first.",
+            PropertyList({
+                Property("station", kPropertyTypeString, std::string("")),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto station = properties["station"].value<std::string>();
+                if (!station.empty()) {
+                    radio_service_.SelectStation(station);
+                }
+                radio_service_.Play();
+                return true;
+            });
+        mcp_server.AddTool("self.radio.stop",
+            "Stop network radio playback.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                radio_service_.Stop();
+                return true;
+            });
+        mcp_server.AddTool("self.radio.next",
+            "Switch to the next network radio station and start playback.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                radio_service_.Next();
+                return true;
+            });
+        mcp_server.AddTool("self.radio.previous",
+            "Switch to the previous network radio station and start playback.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                radio_service_.Prev();
+                return true;
+            });
+    }
+
+    void InitializeRadio() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        desktop_ui->SetRadioActions(
+            [this]() { radio_service_.PlayPause(); },
+            [this]() { radio_service_.Stop(); },
+            [this]() { radio_service_.Next(); },
+            [this]() { radio_service_.Prev(); });
+        radio_service_.Start(desktop_ui);
     }
 
     Button boot_button_;
@@ -542,6 +592,7 @@ private:
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
     TimeWeatherService time_weather_service_;
+    RadioService radio_service_;
     bool time_weather_started_ = false;
 };
 
