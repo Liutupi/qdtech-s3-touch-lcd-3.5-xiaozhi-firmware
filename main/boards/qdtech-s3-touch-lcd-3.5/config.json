@@ -1,0 +1,12 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "qdtech-s3-touch-lcd-3.5",
+            "sdkconfig_append": [
+                "CONFIG_BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5=y",
+                "CONFIG_USE_WECHAT_MESSAGE_STYLE=y"
+            ]
+        }
+    ]
+}
