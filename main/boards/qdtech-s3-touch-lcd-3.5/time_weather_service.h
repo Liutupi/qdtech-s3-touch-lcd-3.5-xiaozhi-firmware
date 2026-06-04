@@ -18,6 +18,11 @@ private:
     TaskHandle_t task_handle_ = nullptr;
     std::atomic<bool> location_update_requested_{false};
     bool sntp_started_ = false;
+    bool last_weather_valid_ = false;
+    char last_temperature_[16] = "-- C";
+    char last_summary_[96] = "Weather pending";
+    char last_update_[24] = "never";
+    int last_weather_code_ = -1;
     int last_quote_yday_ = -1;
     
     static void TaskWrapper(void* arg);
@@ -27,6 +32,7 @@ private:
     bool WaitTimeReady();
     void UpdateTime();
     bool FetchWeather();
+    void ShowCachedWeather(const char* status);
     void SetWeatherSafe(const char* temperature, const char* summary, int weather_code);
     void SetNetworkStatusSafe(const char* status);
     void SetDailyQuoteSafe(const char* quote);

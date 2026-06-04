@@ -192,6 +192,7 @@ private:
     }
 
     void Flush(const lv_area_t* area, const uint16_t* color_map) {
+        const int64_t flush_start_us = esp_timer_get_time();
         const int x_start = area->x1;
         const int x_end = area->x2;
         const int y_start = area->y1;
@@ -230,6 +231,12 @@ private:
         }
 
         lv_display_flush_ready(display_);
+        const int64_t elapsed_us = esp_timer_get_time() - flush_start_us;
+        static int64_t last_perf_log_us = 0;
+        if (elapsed_us > 30000 && flush_start_us - last_perf_log_us > 5000000) {
+            last_perf_log_us = flush_start_us;
+            ESP_LOGI(TAG, "flush area=%dx%d at %d,%d took %d us", width, height, x_start, y_start, static_cast<int>(elapsed_us));
+        }
     }
 
     uint16_t* frame_buffer_ = nullptr;
@@ -299,8 +306,10 @@ public:
             const uint16_t raw_x = ((point_data[base] & 0x3F) << 8) | point_data[base + 1];
             const uint16_t raw_y = ((point_data[base + 2] & 0x3F) << 8) | point_data[base + 3];
 
+            // Current UI uses a lightweight manual touch dispatcher. A future
+            // lv_indev_t port can reuse this raw-read and landscape transform.
             x = raw_y;
-            y = DISPLAY_HEIGHT - raw_x;
+            y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
             if (x >= DISPLAY_WIDTH) {
                 x = DISPLAY_WIDTH - 1;
             }
@@ -464,6 +473,7 @@ private:
             touch_start_y_ = y;
             touch_last_x_ = x;
             touch_last_y_ = y;
+            ESP_LOGI(TAG, "touch down x=%u y=%u", x, y);
         } else if (touched && touch_down_) {
             touch_last_x_ = x;
             touch_last_y_ = y;
@@ -474,9 +484,13 @@ private:
             int64_t duration = now_ms - touch_start_ms_;
 
             if (duration < TOUCH_TAP_THRESHOLD_MS && abs(dx) < 30 && abs(dy) < 30) {
+                ESP_LOGI(TAG, "touch tap x=%u y=%u duration=%dms", touch_last_x_, touch_last_y_, static_cast<int>(duration));
                 HandleTap(touch_last_x_, touch_last_y_);
             } else if (duration < 500) {
+                ESP_LOGI(TAG, "touch swipe dx=%d dy=%d duration=%dms", dx, dy, static_cast<int>(duration));
                 HandleSwipe(dx, dy);
+            } else {
+                ESP_LOGI(TAG, "touch release ignored dx=%d dy=%d duration=%dms", dx, dy, static_cast<int>(duration));
             }
         }
     }

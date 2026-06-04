@@ -13,6 +13,7 @@
 #include <condition_variable>
 #include <memory>
 #include <atomic>
+#include <functional>
 
 #include <opus_encoder.h>
 #include <opus_decoder.h>
@@ -85,6 +86,7 @@ public:
     BackgroundTask* GetBackgroundTask() const { return background_task_; }
     void SetExternalAudioActive(bool active);
     bool IsExternalAudioActive() const { return external_audio_active_.load(std::memory_order_relaxed); }
+    void RegisterDeviceStateCallback(std::function<void(DeviceState previous, DeviceState current)> callback);
 
 private:
     Application();
@@ -95,6 +97,7 @@ private:
     std::unique_ptr<AudioDebugger> audio_debugger_;
     std::mutex mutex_;
     std::list<std::function<void()>> main_tasks_;
+    std::vector<std::function<void(DeviceState previous, DeviceState current)>> device_state_callbacks_;
     std::unique_ptr<Protocol> protocol_;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;

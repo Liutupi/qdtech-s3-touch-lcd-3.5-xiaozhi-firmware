@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <atomic>
 
 class DesktopUI;
 
@@ -22,6 +23,7 @@ private:
         STOP,
         NEXT,
         PREV,
+        FOCUS_CHANGED,
     };
 
     void PostCommand(Command command);
@@ -29,6 +31,9 @@ private:
     void HandleCommand(Command command);
     void PlayCurrentStation();
     bool PlayUrl(const char* url, int url_index);
+    bool IsXiaozhiAudioState() const;
+    bool ShouldYieldAudio() const;
+    void OnDeviceStateChanged(int previous_state, int current_state);
     void NextStation(int delta);
     void SetUi(const char* state, const char* detail);
     void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
@@ -38,5 +43,9 @@ private:
     bool started_ = false;
     bool play_requested_ = false;
     bool stop_requested_ = false;
+    std::atomic<bool> audio_focus_blocked_{false};
+    bool focus_pause_logged_ = false;
+    int reconnect_attempt_ = 0;
+    int last_success_url_[16] = {};
     int station_index_ = 0;
 };

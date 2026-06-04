@@ -860,6 +860,14 @@ void Application::SetExternalAudioActive(bool active) {
     }
 }
 
+void Application::RegisterDeviceStateCallback(std::function<void(DeviceState previous, DeviceState current)> callback) {
+    if (!callback) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    device_state_callbacks_.push_back(std::move(callback));
+}
+
 void Application::OnAudioInput() {
     if (device_state_ == kDeviceStateAudioTesting) {
         if (audio_testing_queue_.size() >= AUDIO_TESTING_MAX_DURATION_MS / OPUS_FRAME_DURATION_MS) {
@@ -975,6 +983,14 @@ void Application::SetDeviceState(DeviceState state) {
     auto previous_state = device_state_;
     device_state_ = state;
     ESP_LOGI(TAG, "STATE: %s", STATE_STRINGS[device_state_]);
+    std::vector<std::function<void(DeviceState previous, DeviceState current)>> callbacks;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        callbacks = device_state_callbacks_;
+    }
+    for (auto& callback : callbacks) {
+        callback(previous_state, state);
+    }
     // The state is changed, wait for all background tasks to finish
     background_task_->WaitForCompletion();
 

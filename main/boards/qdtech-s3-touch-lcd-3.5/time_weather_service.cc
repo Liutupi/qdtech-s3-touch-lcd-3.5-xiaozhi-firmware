@@ -123,7 +123,7 @@ bool TimeWeatherService::SetLocation(const std::string& city, const std::string&
     if (task_handle_) {
         xTaskNotifyGive(task_handle_);
     }
-    SetWeatherSafe("-- C", "Weather location updated", -1);
+    ShowCachedWeather("Location updated");
     ESP_LOGI(TAG, "weather location updated: %s %.4f %.4f", city.c_str(), lat, lon);
     return true;
 }
@@ -158,12 +158,12 @@ void TimeWeatherService::Task() {
         
         // 获取天气
         if (weather_ticks >= 3600) {
-            SetWeatherSafe("-- C", "Weather sync", -1);
+            ShowCachedWeather("Weather sync");
             weather_ok = FetchWeather();
             weather_ticks = 0;
             retry_ticks = 0;
         } else if (!weather_ok && retry_ticks >= 10) {
-            SetWeatherSafe("-- C", "Weather retry", -1);
+            ShowCachedWeather("Weather retry");
             weather_ok = FetchWeather();
             retry_ticks = 0;
         }
@@ -298,23 +298,35 @@ bool TimeWeatherService::FetchWeather() {
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.buffer_size = 1024;
     
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        return false;
+    esp_err_t err = ESP_FAIL;
+    int status = 0;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        response[0] = 0;
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (!client) {
+            ESP_LOGW(TAG, "weather http init failed attempt=%d", attempt);
+            err = ESP_ERR_NO_MEM;
+        } else {
+            esp_http_client_set_header(client, "Accept", "application/json");
+            err = esp_http_client_perform(client);
+            status = esp_http_client_get_status_code(client);
+            esp_http_client_cleanup(client);
+        }
+
+        if (err == ESP_OK && status >= 200 && status < 300 && response[0] != 0) {
+            break;
+        }
+
+        ESP_LOGW(TAG, "weather fetch failed attempt=%d err=%s status=%d", attempt, esp_err_to_name(err), status);
+        if (attempt < 3) {
+            vTaskDelay(pdMS_TO_TICKS(1500 * attempt));
+        }
     }
-    
-    // 设置响应缓冲区
-    esp_http_client_set_header(client, "Accept", "application/json");
-    
-    esp_err_t err = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-    
+
     if (err != ESP_OK || status < 200 || status >= 300 || response[0] == 0) {
-        ESP_LOGW(TAG, "weather fetch failed err=%s status=%d", esp_err_to_name(err), status);
-        char fail_text[32];
-        snprintf(fail_text, sizeof(fail_text), "Weather %d", status);
-        SetWeatherSafe("-- C", fail_text, -1);
+        char fail_text[40];
+        snprintf(fail_text, sizeof(fail_text), "Weather fail %d", status);
+        ShowCachedWeather(fail_text);
         return false;
     }
     
@@ -326,20 +338,42 @@ bool TimeWeatherService::FetchWeather() {
     if (!cJSON_IsNumber(temp) || !cJSON_IsNumber(code)) {
         ESP_LOGW(TAG, "weather parse failed: %.96s", response);
         cJSON_Delete(root);
-        SetWeatherSafe("-- C", "Weather parse", -1);
+        ShowCachedWeather("Weather parse");
         return false;
     }
     
     char temp_text[16];
-    char summary[48];
+    char summary[96];
     snprintf(temp_text, sizeof(temp_text), "%d C", (int)lround(temp->valuedouble));
-    snprintf(summary, sizeof(summary), "%s %s", location.city, WeatherDesc(code->valueint));
+    time_t now = 0;
+    tm info = {};
+    time(&now);
+    localtime_r(&now, &info);
+    if (info.tm_year >= (2024 - 1900)) {
+        snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+    }
+    snprintf(summary, sizeof(summary), "%s %s %s", location.city, WeatherDesc(code->valueint), last_update_);
     
+    snprintf(last_temperature_, sizeof(last_temperature_), "%s", temp_text);
+    snprintf(last_summary_, sizeof(last_summary_), "%s", summary);
+    last_weather_code_ = code->valueint;
+    last_weather_valid_ = true;
     SetWeatherSafe(temp_text, summary, code->valueint);
     
     cJSON_Delete(root);
-    ESP_LOGI(TAG, "weather ok %s %s code=%d", temp_text, summary, code->valueint);
+    ESP_LOGI(TAG, "weather ok %s %s code=%d updated=%s", temp_text, summary, code->valueint, last_update_);
     return true;
+}
+
+void TimeWeatherService::ShowCachedWeather(const char* status) {
+    char summary[128];
+    if (last_weather_valid_) {
+        snprintf(summary, sizeof(summary), "%s; %s", status ? status : "Cached", last_summary_);
+        SetWeatherSafe(last_temperature_, summary, last_weather_code_);
+        ESP_LOGW(TAG, "weather using cached data temp=%s summary=%s", last_temperature_, last_summary_);
+    } else {
+        SetWeatherSafe("-- C", status ? status : "Weather pending", -1);
+    }
 }
 
 void TimeWeatherService::SetWeatherSafe(const char* temperature, const char* summary, int weather_code) {
