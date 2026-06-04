@@ -74,49 +74,6 @@ Verification:
 - Rebuilt successfully with `cmake --build build-qdtech`.
 - Flashed successfully to COM13 at 921600 baud.
 
-## 2026-06-04: Reduce Radio Retry Noise and Audio Pops
-
-Scope:
-
-- Delayed `SetExternalAudioActive(true)` until the first MP3 frame is decoded and PCM is about to be written.
-- Changed failed radio reconnect timing from a fixed 5 second loop to exponential backoff up to 60 seconds.
-- Changed default radio station to `Music FM`, matching the desktop tile and verified as playable on hardware.
-
-Runtime observation:
-
-- WiFi did not repeatedly reconnect during the test; it stayed connected to `liutupi` and kept IP `192.168.4.92`.
-- The default `CNR China Voice` HTTPS sources opened with HTTP 200 but failed during TLS stream reads on the ESP32-S3.
-- `Guangdong Music`, `Music FM`, and `Traffic 959` HTTP MP3 sources decoded and played on the board.
-- The audio active log now appears only after first decoded frame: `radio audio active after first decoded frame`.
-
-Verification:
-
-- Built successfully with `cmake --build build-qdtech`.
-- Flashed successfully to COM13 at 921600 baud.
-- Serial monitor confirmed stable WiFi and working playback on `Music FM` / `Traffic 959`.
-
-## 2026-06-04: Smooth Radio Playback Buffering
-
-Scope:
-
-- Disabled WiFi power save while radio playback is requested.
-- Increased MP3 stream read buffer from 16 KB to 64 KB.
-- Increased initial/low-water refill target to reduce frequent small blocking reads.
-- Added transient stream read failure tolerance before reconnecting.
-
-Reason:
-
-- Radio playback was implemented as one task that reads HTTP, decodes MP3, and writes I2S in sequence.
-- When a network read blocked or returned late, I2S output could underrun and sound like repeated stutter.
-- WiFi modem sleep was enabled during streaming (`wifi:pm start, type: 1`), which can make live radio jitter worse.
-
-Verification:
-
-- Built successfully with `cmake --build build-qdtech`.
-- Flashed successfully to COM13 at 921600 baud.
-- Serial monitor showed `radio network mode active, wifi power save disabled`.
-- `Music FM` played with continuous `playing station=Music FM frames=...` logs and no radio `stream read failed` during the observed window.
-
 ## 2026-06-04: Add Local Calendar Month View
 
 Scope:

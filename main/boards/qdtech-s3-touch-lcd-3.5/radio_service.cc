@@ -24,16 +24,10 @@
 
 static const char* TAG = "RadioService";
 
-static constexpr int kReadBufferSize = 64 * 1024;
-static constexpr int kReadTargetBytes = 32 * 1024;
-static constexpr int kReadLowWatermarkBytes = 10 * 1024;
-static constexpr int kReadChunkBytes = 2048;
+static constexpr int kReadBufferSize = 16 * 1024;
+static constexpr int kReadTargetBytes = 8 * 1024;
+static constexpr int kReadChunkBytes = 1024;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
-static constexpr int kStreamReadTimeoutMs = 1200;
-static constexpr int kMaxTransientReadFailures = 5;
-static constexpr int kReconnectBaseDelayMs = 2000;
-static constexpr int kReconnectMaxDelayMs = 60000;
-static constexpr int kReconnectLongCooldownThreshold = 6;
 
 struct RadioStation {
     const char* name;
@@ -172,10 +166,8 @@ void RadioService::Task() {
 
         if (!play_requested_) {
             reconnect_attempt_ = 0;
-            SetRadioNetworkMode(false);
             continue;
         }
-        SetRadioNetworkMode(true);
         if (audio_focus_blocked_.load(std::memory_order_relaxed)) {
             if (!focus_pause_logged_) {
                 ESP_LOGI(TAG, "radio paused by audio focus");
@@ -196,18 +188,10 @@ void RadioService::Task() {
         PlayCurrentStation();
         if (play_requested_) {
             reconnect_attempt_++;
-            Application::GetInstance().SetExternalAudioActive(false);
-            int delay_ms = kReconnectBaseDelayMs;
-            for (int i = 1; i < reconnect_attempt_ && delay_ms < kReconnectMaxDelayMs; ++i) {
-                delay_ms = std::min(kReconnectMaxDelayMs, delay_ms * 2);
-            }
-            if (reconnect_attempt_ >= kReconnectLongCooldownThreshold) {
-                SetUi("Network retry", "Cooling down");
-            } else {
-                SetUi("Reconnecting", "Stream ended");
-            }
+            int delay_ms = std::min(5000, 500 + reconnect_attempt_ * 500);
             ESP_LOGW(TAG, "radio reconnect scheduled station=%s attempt=%d delay=%dms",
                      kStations[station_index_].name, reconnect_attempt_, delay_ms);
+            SetUi("Reconnecting", "Stream ended");
             vTaskDelay(pdMS_TO_TICKS(delay_ms));
         }
     }
@@ -221,7 +205,6 @@ void RadioService::HandleCommand(Command command) {
             reconnect_attempt_ = 0;
             if (!play_requested_) {
                 Application::GetInstance().SetExternalAudioActive(false);
-                SetRadioNetworkMode(false);
             }
             SetUi(play_requested_ ? "Connecting" : "Paused", play_requested_ ? "Opening stream" : "Stopped");
             ESP_LOGI(TAG, "radio %s station=%s", play_requested_ ? "play requested" : "paused", kStations[station_index_].name);
@@ -231,7 +214,6 @@ void RadioService::HandleCommand(Command command) {
             stop_requested_ = true;
             reconnect_attempt_ = 0;
             Application::GetInstance().SetExternalAudioActive(false);
-            SetRadioNetworkMode(false);
             SetUi("Stopped", "Ready");
             ESP_LOGI(TAG, "radio stopped");
             break;
@@ -337,7 +319,6 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
 
     ESP_LOGI(TAG, "stream open station=%s url_index=%d status=%d len=%d url=%s",
              station.name, url_index, status, content_length, url);
-    esp_http_client_set_timeout_ms(client, kStreamReadTimeoutMs);
     SetUi("Buffering", "Filling buffer");
 
     HMP3Decoder decoder = MP3InitDecoder();
@@ -360,10 +341,9 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
     int bytes_left = 0;
     int decoded_frames = 0;
     int decode_errors = 0;
-    int transient_read_failures = 0;
     size_t total_bytes = 0;
     bool stream_failed = false;
-    bool audio_active = false;
+    Application::GetInstance().SetExternalAudioActive(true);
 
     while (play_requested_ && !stop_requested_ && WifiStation::GetInstance().IsConnected()) {
         Command command;
@@ -384,28 +364,20 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
             memmove(read_buffer, read_ptr, bytes_left);
             read_ptr = read_buffer;
         }
-        const int fill_target = (decoded_frames == 0 || bytes_left < kReadLowWatermarkBytes)
-                                    ? kReadTargetBytes
-                                    : bytes_left;
-        while (bytes_left < fill_target && bytes_left < kReadBufferSize) {
+        while (bytes_left < kReadTargetBytes && bytes_left < kReadBufferSize) {
             int room = std::min(kReadChunkBytes, kReadBufferSize - bytes_left);
             int read = esp_http_client_read(client, reinterpret_cast<char*>(read_buffer + bytes_left), room);
             if (read > 0) {
                 bytes_left += read;
                 total_bytes += read;
-                transient_read_failures = 0;
                 continue;
             }
             if (read == 0) {
                 vTaskDelay(pdMS_TO_TICKS(20));
                 break;
             }
-            ++transient_read_failures;
-            ESP_LOGW(TAG, "stream read failed station=%s url_index=%d read=%d transient=%d buffered=%d",
-                     station.name, url_index, read, transient_read_failures, bytes_left);
-            if (transient_read_failures > kMaxTransientReadFailures || bytes_left <= 0) {
-                stream_failed = true;
-            }
+            ESP_LOGW(TAG, "stream read failed station=%s url_index=%d read=%d", station.name, url_index, read);
+            stream_failed = true;
             break;
         }
         if (stream_failed) {
@@ -451,12 +423,6 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
         decode_errors = 0;
         MP3FrameInfo frame_info = {};
         MP3GetLastFrameInfo(decoder, &frame_info);
-        if (!audio_active) {
-            Application::GetInstance().SetExternalAudioActive(true);
-            audio_active = true;
-            ESP_LOGI(TAG, "radio audio active after first decoded frame station=%s url_index=%d",
-                     station.name, url_index);
-        }
         WritePcm(pcm_buffer, frame_info.outputSamps, frame_info.nChans, frame_info.samprate);
         if (decoded_frames == 0) {
             last_success_url_[station_index_] = url_index;
@@ -475,9 +441,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
         }
     }
 
-    if (audio_active) {
-        Application::GetInstance().SetExternalAudioActive(false);
-    }
+    Application::GetInstance().SetExternalAudioActive(false);
     MP3FreeDecoder(decoder);
     heap_caps_free(read_buffer);
     heap_caps_free(pcm_buffer);
@@ -515,16 +479,6 @@ void RadioService::OnDeviceStateChanged(int previous_state, int current_state) {
 
 void RadioService::NextStation(int delta) {
     station_index_ = (station_index_ + delta + StationCount()) % StationCount();
-}
-
-void RadioService::SetRadioNetworkMode(bool active) {
-    if (radio_network_mode_ == active) {
-        return;
-    }
-    radio_network_mode_ = active;
-    Board::GetInstance().SetPowerSaveMode(!active);
-    ESP_LOGI(TAG, "radio network mode %s, wifi power save %s",
-             active ? "active" : "idle", active ? "disabled" : "enabled");
 }
 
 void RadioService::SetUi(const char* state, const char* detail) {

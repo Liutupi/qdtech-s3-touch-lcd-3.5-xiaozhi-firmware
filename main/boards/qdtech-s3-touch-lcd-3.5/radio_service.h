@@ -35,7 +35,6 @@ private:
     bool ShouldYieldAudio() const;
     void OnDeviceStateChanged(int previous_state, int current_state);
     void NextStation(int delta);
-    void SetRadioNetworkMode(bool active);
     void SetUi(const char* state, const char* detail);
     void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
 
@@ -44,10 +43,9 @@ private:
     bool started_ = false;
     bool play_requested_ = false;
     bool stop_requested_ = false;
-    bool radio_network_mode_ = false;
     std::atomic<bool> audio_focus_blocked_{false};
     bool focus_pause_logged_ = false;
     int reconnect_attempt_ = 0;
     int last_success_url_[16] = {};
-    int station_index_ = 9; // Music FM is the default tile and a verified HTTP MP3 source.
+    int station_index_ = 0;
 };
