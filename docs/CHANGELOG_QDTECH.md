@@ -46,8 +46,20 @@ Build result:
 
 Hardware verification:
 
-- Not flashed in this entry.
-- Next hardware check should tap Apps -> Calendar, verify Today/Prev/Next, then return to Apps with Back or right swipe.
+- Flashed successfully to `COM13`.
+- Boot log confirmed `SKU=qdtech-s3-touch-lcd-3.5`.
+- Desktop UI was created.
+- Touch reported `Touch max points: 5`.
+- WiFi connected with IP `192.168.4.92`.
+- MQTT connected.
+- AFE/wake word started.
+- Application reached `STATE: idle`.
+- SNTP time synchronized.
+- Touch path verified:
+  - left swipe from main page opened Apps.
+  - tapping Calendar tile opened the Calendar page.
+  - tapping Next changed the Calendar month to `2026/07`.
+- Weather API returned `502` during this run, but the firmware stayed running.
 
 ## 2026-06-04: Stabilize QDTech Desktop Base
 

@@ -58,9 +58,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Desktop UI pages:
   - main page
   - apps page
+  - calendar page
   - XiaoZhi page
   - radio page
   - settings page
+- Calendar month view with Today, Prev, Next, today highlight, weekend coloring, and previous/next month filler days.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Weather location MCP tool: `self.weather.set_location`.
@@ -84,6 +86,7 @@ After flashing, look for these logs:
 - MQTT connected.
 - AFE/wake word startup.
 - `Application: STATE: idle`
+- `TimeWeather: Time synchronized`
 
 For radio/audio focus:
 
@@ -96,6 +99,15 @@ For weather:
 
 - Network/API failure should not crash the app.
 - If previous weather exists, UI should keep cached data and log cached use.
+
+For calendar:
+
+- Swipe left from the main page to Apps.
+- Tap Calendar tile.
+- Calendar page should open without starting XiaoZhi chat.
+- Tap Next/Prev to change month.
+- Tap Today to return to the synced current month.
+- Back or right swipe should return to Apps.
 
 ## Known Limitations
 

@@ -38,7 +38,7 @@ Last verified on 2026-06-04 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last code stabilization commit before this handoff set: `f4451c1 stabilize QDTech desktop base`
+- Last verified feature commit: `f86ccdb add QDTech calendar month view`
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -52,6 +52,9 @@ Observed boot/runtime facts after flashing:
 - MQTT connected.
 - AFE/wake word started.
 - Application reached `STATE: idle`.
+- SNTP time synchronization completed.
+- Calendar tile opens the local Calendar page.
+- Calendar Next button changed the displayed month during hardware testing.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
 ## What Is Already Implemented
@@ -60,6 +63,7 @@ Observed boot/runtime facts after flashing:
 - QDTech 3.5 inch landscape display adaptation.
 - CST9217/TDDI touch polling with tap/swipe dispatch.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
+- Local Calendar page with month grid, Today, Prev, and Next controls.
 - Time and weather service.
 - MP3 network radio service.
 - MCP tools for weather location and radio controls.
