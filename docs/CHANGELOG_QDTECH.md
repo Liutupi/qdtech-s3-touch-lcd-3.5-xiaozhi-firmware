@@ -57,6 +57,23 @@ Hardware verification:
 - Photos page SD mount and JPEG playback still need an inserted MicroSD card and an on-device tap into the Photos page.
 - Prepare a FAT-formatted MicroSD card with JPG files in `/photos`.
 
+## 2026-06-04: Improve Photo SD Filename Diagnostics
+
+Scope:
+
+- Enabled FATFS long filename support in the QDTech board defaults for the MicroSD photo slideshow.
+- Added `errno` / `strerror` details to photo `stat()` and `fopen()` failure logs.
+
+Reason:
+
+- Hardware test reached SD card directory scanning, but photo files failed at open/stat with 8.3-style names such as `/sdcard/photos/WEIQU.JPG`.
+- The active build config had `CONFIG_FATFS_LFN_NONE=y`, which is risky for copied photo files and long filenames.
+
+Verification:
+
+- Rebuilt successfully with `cmake --build build-qdtech`.
+- Flashed successfully to COM13 at 921600 baud.
+
 ## 2026-06-04: Add Local Calendar Month View
 
 Scope:

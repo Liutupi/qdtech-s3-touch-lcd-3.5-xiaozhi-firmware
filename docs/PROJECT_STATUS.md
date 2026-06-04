@@ -141,5 +141,5 @@ For photos:
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
-- Long FAT filenames may depend on the active FATFS long filename Kconfig in the final build config.
+- FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - No release packaging or OTA artifact process is defined in this handoff set.

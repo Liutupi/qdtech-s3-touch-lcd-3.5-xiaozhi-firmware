@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <dirent.h>
@@ -217,7 +218,7 @@ bool PhotoService::ScanPhotos() {
 bool PhotoService::DecodePhoto(const std::string& path, Frame& frame, uint16_t& width, uint16_t& height) {
     struct stat st = {};
     if (stat(path.c_str(), &st) != 0 || st.st_size <= 0) {
-        ESP_LOGW(TAG, "photo stat failed: %s", path.c_str());
+        ESP_LOGW(TAG, "photo stat failed: %s errno=%d %s", path.c_str(), errno, strerror(errno));
         return false;
     }
     if (static_cast<size_t>(st.st_size) > kMaxInputBytes) {
@@ -227,7 +228,7 @@ bool PhotoService::DecodePhoto(const std::string& path, Frame& frame, uint16_t& 
 
     FILE* file = fopen(path.c_str(), "rb");
     if (!file) {
-        ESP_LOGW(TAG, "photo open failed: %s", path.c_str());
+        ESP_LOGW(TAG, "photo open failed: %s errno=%d %s", path.c_str(), errno, strerror(errno));
         return false;
     }
 

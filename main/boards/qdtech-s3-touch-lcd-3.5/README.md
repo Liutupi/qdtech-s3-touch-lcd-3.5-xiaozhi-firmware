@@ -128,7 +128,7 @@ idf.py -p /dev/cu.usbmodem212401 -b 921600 flash monitor
 - 触摸尚未迁移到 LVGL 标准 `lv_indev_t`。
 - LCD flush 仍存在旋转拷贝成本，已加性能日志但未重写显示驱动。
 - 电台目前只支持直接 MP3 流，不支持 HLS/AAC。
-- 照片播放目前只支持 JPEG，不支持 PNG/GIF；长文件名支持取决于 FATFS LFN 配置。
+- 照片播放目前只支持 JPEG，不支持 PNG/GIF；板级默认已启用 FATFS 长文件名支持，复用旧构建目录时需要重新 reconfigure 或 clean。
 - 天气城市设置已经可写入 NVS，但设置页还没有可视化编辑控件。
 - WiFi 设置页主要用于展示，实际切换/删除仍依赖 MCP 工具。
 

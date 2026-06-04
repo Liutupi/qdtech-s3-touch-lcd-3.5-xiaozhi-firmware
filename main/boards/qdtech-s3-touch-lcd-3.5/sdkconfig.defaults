@@ -1,2 +1,6 @@
 CONFIG_BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5=y
 CONFIG_USE_WECHAT_MESSAGE_STYLE=y
+# Photo slideshow reads user files from MicroSD; long filename support avoids
+# 8.3 alias/open failures with common camera or copied photo names.
+# CONFIG_FATFS_LFN_NONE is not set
+CONFIG_FATFS_LFN_HEAP=y
