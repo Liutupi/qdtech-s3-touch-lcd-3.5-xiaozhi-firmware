@@ -7,6 +7,7 @@
 enum class DesktopPage {
     MAIN,
     APPS,
+    PHOTO,
     CALENDAR,
     RADIO,
     XIAOZHI,
@@ -32,6 +33,11 @@ public:
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
+    void SetPhotoActiveCallback(std::function<void(bool)> callback);
+    void SetPhotoRefreshCallback(std::function<void()> callback);
+    void SetPhotoState(const char* title, const char* detail);
+    void SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail);
+    void RequestPhotoRefresh();
 
     // Face animation
     void UpdateFaceAnimation();
@@ -40,6 +46,7 @@ private:
     // Pages
     lv_obj_t* main_page_ = nullptr;
     lv_obj_t* apps_page_ = nullptr;
+    lv_obj_t* photo_page_ = nullptr;
     lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
@@ -57,6 +64,16 @@ private:
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
     lv_obj_t* calendar_app_status_label_ = nullptr;
+
+    // Photo page elements
+    lv_obj_t* photo_image_a_ = nullptr;
+    lv_obj_t* photo_image_b_ = nullptr;
+    lv_obj_t* photo_title_label_ = nullptr;
+    lv_obj_t* photo_detail_label_ = nullptr;
+    lv_obj_t* photo_refresh_label_ = nullptr;
+    bool photo_show_a_ = true;
+    std::function<void(bool)> photo_active_callback_;
+    std::function<void()> photo_refresh_callback_;
 
     // Calendar page elements
     lv_obj_t* calendar_title_label_ = nullptr;
@@ -110,6 +127,7 @@ private:
     // Internal methods
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
+    void CreatePhotoPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);

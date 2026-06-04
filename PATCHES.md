@@ -26,8 +26,16 @@
 ## 桌面 UI
 
 - 新增 `desktop_ui.cc` / `desktop_ui.h`。
-- 增加主屏、应用页、电台页、小智页、设置页。
+- 增加主屏、应用页、照片页、日历页、电台页、小智页、设置页。
 - 小智状态和表情页与 `Application` 当前状态联动。
+
+## 照片播放服务
+
+- 新增 `photo_service.cc` / `photo_service.h`。
+- 应用页中 Photos 入口替代原 Weather 应用卡片入口。
+- 按产品规格书接入 MicroSD SDMMC 4-bit 引脚：CLK GPIO5, CMD GPIO4, D0 GPIO6, D1 GPIO7, D2 GPIO2, D3 GPIO3。
+- 读取 `/sdcard/photos` 下的 JPEG 文件，解码为 RGB565 LVGL 图像并循环播放。
+- 照片之间使用淡入淡出过渡，离开 Photos 页面后暂停后台解码。
 
 ## 时间天气服务
 

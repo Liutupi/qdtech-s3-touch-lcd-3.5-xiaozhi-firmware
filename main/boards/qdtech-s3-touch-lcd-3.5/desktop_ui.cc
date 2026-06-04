@@ -213,7 +213,9 @@ static void open_app_card(uint8_t index) {
             }
             break;
         case 1:
-            open_xiaozhi_with_message("Weather", "Ask XiaoZhi for weather, or set a new weather city.", true);
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::PHOTO);
+            }
             break;
         case 2:
             open_xiaozhi_with_message("XiaoZhi AI", "Starting conversation...", true);
@@ -248,7 +250,7 @@ static void radio_card_cb(lv_event_t* event) {
     }
 }
 
-static void weather_card_cb(lv_event_t* event) {
+static void photo_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(1);
     }
@@ -293,6 +295,20 @@ static void radio_gesture_cb(lv_event_t* event) {
     lv_indev_t* indev = lv_indev_get_act();
     if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
         g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void photo_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void photo_refresh_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->RequestPhotoRefresh();
     }
 }
 
@@ -355,6 +371,7 @@ void DesktopUI::Create() {
 
     CreateMainPage(root);
     CreateAppsPage(root);
+    CreatePhotoPage(root);
     CreateCalendarPage(root);
     CreateRadioPage(root);
     CreateXiaozhiPage(root);
@@ -370,9 +387,13 @@ void DesktopUI::Create() {
 }
 
 void DesktopUI::ShowPage(DesktopPage page) {
+    const bool was_photo = current_page_ == DesktopPage::PHOTO;
     current_page_ = page;
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
+    if (photo_page_) {
+        lv_obj_add_flag(photo_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     if (calendar_page_) {
         lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -390,6 +411,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::APPS:
             lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show apps page");
+            break;
+        case DesktopPage::PHOTO:
+            if (photo_page_) {
+                lv_obj_clear_flag(photo_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show photo page");
             break;
         case DesktopPage::CALENDAR:
             if (calendar_page_) {
@@ -413,6 +440,11 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show settings page");
             break;
+    }
+
+    const bool is_photo = page == DesktopPage::PHOTO;
+    if (photo_active_callback_ && was_photo != is_photo) {
+        photo_active_callback_(is_photo);
     }
 }
 
@@ -478,6 +510,21 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         if (x >= 340 && x < 426 && y >= 230 && y < 280) {
             if (radio_next_) {
                 radio_next_();
+            }
+            return;
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::PHOTO) {
+        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+            ShowPage(DesktopPage::APPS);
+            return;
+        }
+        if (x >= 202 && x < 278 && y >= 268 && y < 308) {
+            if (photo_refresh_callback_) {
+                SetPhotoState("Refreshing", "Scanning SD card");
+                photo_refresh_callback_();
             }
             return;
         }
@@ -720,7 +767,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
     AppInfo apps[] = {
         {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
-        {"WTR", "Weather", "Forecast", COLOR_GREEN, weather_card_cb},
+        {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
         {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
         {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
         {"QTE", "Quote", "Daily", COLOR_GOLD, quote_card_cb},
@@ -769,6 +816,66 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_t* arrow = label_en(box, ">", &style_muted);
     lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -14, 0);
     return box;
+}
+
+// ===== Photo page =====
+void DesktopUI::CreatePhotoPage(lv_obj_t* root) {
+    photo_page_ = lv_obj_create(root);
+    lv_obj_add_style(photo_page_, &style_screen, 0);
+    lv_obj_set_size(photo_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(photo_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(photo_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(photo_page_, photo_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(photo_page_);
+
+    lv_obj_t* brand = label_en(photo_page_, "XiaoZhi AI", &style_en);
+    lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
+    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    CreateStatusBar(photo_page_);
+
+    lv_obj_t* title = label_en(photo_page_, "Photos", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(photo_page_, "SD Slideshow", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 96, 53);
+
+    lv_obj_t* back = CreateButton(photo_page_, "Back", show_apps_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* frame = CreatePanel(photo_page_, 432, 178, 24, 84);
+    lv_obj_set_style_bg_color(frame, LV_COLOR_MAKE(0x06, 0x06, 0x06), 0);
+
+    photo_image_a_ = lv_image_create(frame);
+    photo_image_b_ = lv_image_create(frame);
+    lv_obj_set_style_opa(photo_image_a_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_opa(photo_image_b_, LV_OPA_TRANSP, 0);
+    lv_obj_center(photo_image_a_);
+    lv_obj_center(photo_image_b_);
+    add_gesture_bubble(photo_image_a_);
+    add_gesture_bubble(photo_image_b_);
+
+    photo_title_label_ = label_en(frame, "Photos", &style_gold);
+    lv_obj_set_style_text_font(photo_title_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(photo_title_label_, LV_ALIGN_CENTER, 0, -18);
+
+    photo_detail_label_ = label_en(frame, "Insert SD card with /photos/*.jpg", &style_muted);
+    lv_obj_set_width(photo_detail_label_, 392);
+    lv_label_set_long_mode(photo_detail_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(photo_detail_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(photo_detail_label_, LV_ALIGN_CENTER, 0, 16);
+
+    lv_obj_t* refresh = CreateButton(photo_page_, "Refresh", photo_refresh_cb);
+    lv_obj_align(refresh, LV_ALIGN_TOP_LEFT, 202, 270);
+
+    photo_refresh_label_ = label_en(photo_page_, "/sdcard/photos", &style_muted);
+    lv_obj_set_width(photo_refresh_label_, 180);
+    lv_label_set_long_mode(photo_refresh_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(photo_refresh_label_, LV_ALIGN_TOP_LEFT, 24, 276);
+
+    lv_obj_t* hint = label_en(photo_page_, "Swipe right: Apps", &style_muted);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
 // ===== Calendar page =====
@@ -1469,6 +1576,74 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
     if (date_changed || current_page_ == DesktopPage::CALENDAR) {
         RenderCalendar();
     }
+}
+
+void DesktopUI::SetPhotoActiveCallback(std::function<void(bool)> callback) {
+    photo_active_callback_ = std::move(callback);
+}
+
+void DesktopUI::SetPhotoRefreshCallback(std::function<void()> callback) {
+    photo_refresh_callback_ = std::move(callback);
+}
+
+void DesktopUI::RequestPhotoRefresh() {
+    SetPhotoState("Refreshing", "Scanning SD card");
+    if (photo_refresh_callback_) {
+        photo_refresh_callback_();
+    }
+}
+
+void DesktopUI::SetPhotoState(const char* title, const char* detail) {
+    if (photo_title_label_) {
+        lv_label_set_text(photo_title_label_, title ? title : "Photos");
+    }
+    if (photo_detail_label_) {
+        lv_label_set_text(photo_detail_label_, detail ? detail : "/sdcard/photos");
+    }
+}
+
+void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail) {
+    SetPhotoState(title, detail);
+    if (!photo_image_a_ || !photo_image_b_ || !image) {
+        if (photo_image_a_) {
+            lv_obj_set_style_opa(photo_image_a_, LV_OPA_TRANSP, 0);
+        }
+        if (photo_image_b_) {
+            lv_obj_set_style_opa(photo_image_b_, LV_OPA_TRANSP, 0);
+        }
+        return;
+    }
+
+    lv_obj_t* next = photo_show_a_ ? photo_image_b_ : photo_image_a_;
+    lv_obj_t* prev = photo_show_a_ ? photo_image_a_ : photo_image_b_;
+    photo_show_a_ = !photo_show_a_;
+
+    lv_image_set_src(next, image);
+    int32_t scale_x = image->header.w > 0 ? (430 * 256) / image->header.w : 256;
+    int32_t scale_y = image->header.h > 0 ? (176 * 256) / image->header.h : 256;
+    int32_t scale = LV_MIN(scale_x, scale_y);
+    if (scale <= 0) {
+        scale = 256;
+    }
+    lv_image_set_scale(next, scale);
+    lv_obj_center(next);
+    lv_obj_set_style_opa(next, LV_OPA_TRANSP, 0);
+
+    lv_anim_t fade_in;
+    lv_anim_init(&fade_in);
+    lv_anim_set_var(&fade_in, next);
+    lv_anim_set_values(&fade_in, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_time(&fade_in, 650);
+    lv_anim_set_exec_cb(&fade_in, ObjOpaCb);
+    lv_anim_start(&fade_in);
+
+    lv_anim_t fade_out;
+    lv_anim_init(&fade_out);
+    lv_anim_set_var(&fade_out, prev);
+    lv_anim_set_values(&fade_out, lv_obj_get_style_opa(prev, 0), LV_OPA_TRANSP);
+    lv_anim_set_time(&fade_out, 650);
+    lv_anim_set_exec_cb(&fade_out, ObjOpaCb);
+    lv_anim_start(&fade_out);
 }
 
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {

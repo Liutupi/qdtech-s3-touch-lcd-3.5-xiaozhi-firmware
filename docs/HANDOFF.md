@@ -27,6 +27,7 @@ Important files:
 - `config.h`: board pins, display size, audio codec pins, touch pins.
 - `qdtech_s3_touch_lcd_3_5.cc`: board class, display init/flush, touch polling, MCP tools, service startup.
 - `desktop_ui.cc` / `desktop_ui.h`: LVGL desktop UI.
+- `photo_service.cc` / `photo_service.h`: MicroSD JPEG photo slideshow service.
 - `radio_service.cc` / `radio_service.h`: MP3 network radio and audio focus behavior.
 - `time_weather_service.cc` / `time_weather_service.h`: SNTP clock, weather fetch, cached weather display.
 - `sdkconfig.defaults`: board type defaults for this board.
@@ -64,6 +65,7 @@ Observed boot/runtime facts after flashing:
 - CST9217/TDDI touch polling with tap/swipe dispatch.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
 - Local Calendar page with month grid, Today, Prev, and Next controls.
+- Local Photos page replacing the previous Weather app tile, reading JPEG photos from `/sdcard/photos`.
 - Time and weather service.
 - MP3 network radio service.
 - MCP tools for weather location and radio controls.

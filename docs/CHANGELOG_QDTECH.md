@@ -19,6 +19,44 @@ Verification:
 
 - Documentation-only change. Firmware build/flash not required for this entry.
 
+## 2026-06-04: Add MicroSD Photo Slideshow Entry
+
+Scope:
+
+- Replaced the Apps page Weather tile with a Photos tile.
+- Added a dedicated Photos page with SD slideshow status, Refresh control, and fade transition image area.
+- Added `PhotoService` to mount the MicroSD card, scan `/sdcard/photos`, decode JPEG files, and loop playback.
+- Added QDTech MicroSD SDMMC pins from the product specification:
+  - CLK GPIO5
+  - CMD GPIO4
+  - D0 GPIO6
+  - D1 GPIO7
+  - D2 GPIO2
+  - D3 GPIO3
+- Photo decoding pauses when leaving the Photos page.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" reconfigure build
+cmake --build build-qdtech
+```
+
+Build result:
+
+- `cmake --build build-qdtech` completed successfully.
+- `xiaozhi.bin` size: `0x3ae7c0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x251840` bytes, about 39%.
+
+Hardware verification:
+
+- Flashed to COM13 at 921600 baud successfully.
+- Runtime boot verified after flashing: PSRAM, display, touch init, WiFi, MQTT, wake-word pipeline, `PhotoService: photo service started`, and `Application: STATE: idle`.
+- Photos page SD mount and JPEG playback still need an inserted MicroSD card and an on-device tap into the Photos page.
+- Prepare a FAT-formatted MicroSD card with JPG files in `/photos`.
+
 ## 2026-06-04: Add Local Calendar Month View
 
 Scope:

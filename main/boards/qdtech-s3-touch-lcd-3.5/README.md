@@ -8,6 +8,7 @@
 - LCD: 3.5 寸 320x480 物理竖屏面板，横屏逻辑分辨率 480x320。
 - LCD 控制器: ST77922，QSPI/SPI 接口。
 - Touch: CST9217/TDDI 触摸控制器，I2C 地址 `0x55`。
+- MicroSD: SDMMC 4-bit，总线引脚来自产品规格书。
 - Audio Codec: ES8311。
 - 功放/PA: GPIO1，当前配置为反相使能 `AUDIO_CODEC_PA_INVERTED=true`。
 
@@ -16,6 +17,7 @@
 - Audio I2S: MCLK GPIO17, BCLK GPIO18, WS GPIO21, DOUT GPIO15, DIN GPIO16。
 - Audio/Touch I2C: SDA GPIO38, SCL GPIO39。
 - LCD QSPI: CS GPIO10, CLK GPIO12, D0/MOSI GPIO11, D1/MISO GPIO13, D2 GPIO14, D3 GPIO9。
+- MicroSD SDMMC: CLK GPIO5, CMD GPIO4, D0 GPIO6, D1 GPIO7, D2 GPIO2, D3 GPIO3。
 - Backlight: GPIO41。
 - Touch: INT GPIO47, RST GPIO48。
 - Boot: GPIO0。
@@ -48,6 +50,7 @@
 - 480x320 横屏显示。
 - 触摸 tap/swipe 操作。
 - 桌面 UI、应用页、小智表情页、设置页。
+- 照片页：应用中心 Photos 入口读取 `/sdcard/photos` 下的 JPEG 照片并循环淡入淡出播放。
 - 时间同步和天气显示。
 - 网络电台 MP3 播放。
 - 电台与小智语音之间的基础音频避让和自动恢复。
@@ -111,11 +114,21 @@ idf.py -p /dev/cu.usbmodem212401 -b 921600 flash monitor
 
 后续建议迁移为 SPIFFS/SD 卡 `radio.json`，并保留内置列表作为 fallback。
 
+## 如何使用照片播放
+
+- 准备 FAT 格式 MicroSD 卡。
+- 在 SD 卡根目录创建 `photos` 目录。
+- 放入 `.jpg` 或 `.jpeg` 照片，建议先使用 480x320、800x480 或 960x640 以内的图片验证。
+- 烧录启动后，从主屏左滑进入 Apps，点击 Photos。
+- 页面会挂载 SD 卡、扫描 `/sdcard/photos`，并循环播放照片。
+- 照片之间使用淡入淡出过渡；离开 Photos 页面后暂停解码，避免影响小智语音和电台。
+
 ## 已知问题
 
 - 触摸尚未迁移到 LVGL 标准 `lv_indev_t`。
 - LCD flush 仍存在旋转拷贝成本，已加性能日志但未重写显示驱动。
 - 电台目前只支持直接 MP3 流，不支持 HLS/AAC。
+- 照片播放目前只支持 JPEG，不支持 PNG/GIF；长文件名支持取决于 FATFS LFN 配置。
 - 天气城市设置已经可写入 NVS，但设置页还没有可视化编辑控件。
 - WiFi 设置页主要用于展示，实际切换/删除仍依赖 MCP 工具。
 

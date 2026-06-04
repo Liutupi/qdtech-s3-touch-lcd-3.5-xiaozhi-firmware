@@ -6,6 +6,7 @@
 #include "config.h"
 #include "mcp_server.h"
 #include "desktop_ui.h"
+#include "photo_service.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
 
@@ -346,6 +347,7 @@ public:
         InitializeButtons();
         InitializeTools();
         InitializeRadio();
+        InitializePhotos();
         GetBacklight()->RestoreBrightness();
     }
 
@@ -654,6 +656,14 @@ private:
         radio_service_.Start(desktop_ui);
     }
 
+    void InitializePhotos() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        photo_service_.Start(desktop_ui);
+    }
+
     Button boot_button_;
     LcdDisplay* display_ = nullptr;
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
@@ -667,6 +677,7 @@ private:
     uint16_t touch_last_y_ = 0;
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
+    PhotoService photo_service_;
     bool time_weather_started_ = false;
 };
 

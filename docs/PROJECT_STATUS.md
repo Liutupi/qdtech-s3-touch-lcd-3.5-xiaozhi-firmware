@@ -19,6 +19,13 @@ From `main/boards/qdtech-s3-touch-lcd-3.5/config.h`:
 - LCD backlight: GPIO41.
 - Touch I2C address: `0x55`.
 - Touch pins: INT GPIO47, RST GPIO48.
+- MicroSD SDMMC pins from the product specification:
+  - CLK GPIO5
+  - CMD GPIO4
+  - D0 GPIO6
+  - D1 GPIO7
+  - D2 GPIO2
+  - D3 GPIO3
 - Audio codec: ES8311.
 - Audio I2S: MCLK GPIO17, BCLK GPIO18, WS GPIO21, DOUT GPIO15, DIN GPIO16.
 - Audio and touch I2C: SDA GPIO38, SCL GPIO39.
@@ -58,11 +65,18 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Desktop UI pages:
   - main page
   - apps page
+  - photo page
   - calendar page
   - XiaoZhi page
   - radio page
   - settings page
 - Calendar month view with Today, Prev, Next, today highlight, weekend coloring, and previous/next month filler days.
+- Photo slideshow page from MicroSD card:
+  - Apps tile `Photos` replaces the previous Weather app tile.
+  - Reads JPG/JPEG files from `/sdcard/photos`.
+  - Uses SDMMC 4-bit bus from the product specification.
+  - Cross-fades between decoded photos.
+  - Pauses decoding when leaving the Photos page.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Weather location MCP tool: `self.weather.set_location`.
@@ -109,6 +123,15 @@ For calendar:
 - Tap Today to return to the synced current month.
 - Back or right swipe should return to Apps.
 
+For photos:
+
+- Put JPG files under `/photos` on a FAT-formatted MicroSD card.
+- Swipe left from the main page to Apps.
+- Tap Photos tile.
+- Logs should show `PhotoService` SD mount and photo scan results.
+- Photos should loop with a soft fade between images.
+- Back or right swipe should pause the slideshow and return to Apps.
+
 ## Known Limitations
 
 - Touch is still manually polled and dispatched; it is not yet a standard LVGL input device.
@@ -117,4 +140,6 @@ For calendar:
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
+- Photo slideshow currently supports JPEG files only; PNG is not enabled.
+- Long FAT filenames may depend on the active FATFS long filename Kconfig in the final build config.
 - No release packaging or OTA artifact process is defined in this handoff set.
