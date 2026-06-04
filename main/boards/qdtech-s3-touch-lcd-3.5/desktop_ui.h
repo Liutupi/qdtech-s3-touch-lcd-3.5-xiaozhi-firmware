@@ -9,6 +9,7 @@ enum class DesktopPage {
     APPS,
     RADIO,
     XIAOZHI,
+    SETTINGS,
 };
 
 class DesktopUI {
@@ -38,6 +39,7 @@ private:
     lv_obj_t* apps_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
+    lv_obj_t* settings_page_ = nullptr;
     DesktopPage current_page_ = DesktopPage::MAIN;
 
     // Main page elements
@@ -93,6 +95,7 @@ private:
     void CreateAppsPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
+    void CreateSettingsPage(lv_obj_t* root);
     void CreateStatusBar(lv_obj_t* parent);
     void CreateBigTime(lv_obj_t* parent);
     void CreateWeatherPanel(lv_obj_t* parent);
@@ -101,6 +104,7 @@ private:
     void CreateFaceUI(lv_obj_t* parent);
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
+    void UpdateWifiList();
 
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);

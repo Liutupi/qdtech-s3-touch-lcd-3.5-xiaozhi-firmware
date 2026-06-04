@@ -37,12 +37,29 @@ struct RadioStation {
 };
 
 static const RadioStation kStations[] = {
+    // 全国性电台 (CNR)
     {"CNR China Voice", {"https://lhttp.qtfm.cn/live/15318317/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3", nullptr}, "MP3", 64},
+    {"CNR Economic", {"https://lhttp.qingting.fm/live/15318569/64k.mp3", "https://lhttp.qtfm.cn/live/15318569/64k.mp3", nullptr}, "MP3", 64},
+
+    // 广东电台
     {"Guangzhou News", {"http://lhttp.qingting.fm/live/4848/64k.mp3", "https://lhttp.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64},
     {"Guangzhou Traffic", {"http://lhttp.qingting.fm/live/4955/64k.mp3", "https://lhttp.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64},
     {"Pearl River FM", {"http://lhttp.qingting.fm/live/1259/64k.mp3", "https://lhttp.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64},
     {"Guangdong Music", {"http://lhttp.qingting.fm/live/1260/64k.mp3", "https://lhttp.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64},
+    {"Guangdong News", {"https://lhttp.qtfm.cn/live/471/64k.mp3", "https://lhttp-hw.qtfm.cn/live/471/64k.mp3", nullptr}, "MP3", 64},
     {"Shenzhen FM971", {"http://lhttp.qingting.fm/live/1271/64k.mp3", "https://lhttp.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64},
+
+    // 音乐电台
+    {"Music Radio", {"http://lhttp.qingting.fm/live/5022107/64k.mp3", "https://lhttp.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64},
+    {"Music FM", {"http://lhttp.qingting.fm/live/4938/64k.mp3", "https://lhttp.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64},
+    {"West Lake Voice", {"http://lhttp.qingting.fm/live/1223/64k.mp3", "https://lhttp.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64},
+
+    // 交通广播
+    {"Traffic 959", {"http://lhttp.qingting.fm/live/5021381/64k.mp3", "https://lhttp.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64},
+    {"Business Radio", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64},
+
+    // 其他电台
+    {"Night Radio", {"http://lhttp.qingting.fm/live/4915/64k.mp3", "https://lhttp.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64},
 };
 
 static int StationCount() {

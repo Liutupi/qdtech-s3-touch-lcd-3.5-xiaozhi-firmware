@@ -98,6 +98,7 @@ void WifiBoard::StartNetwork() {
         notification += ssid;
         display->ShowNotification(notification.c_str(), 30000);
     });
+    
     wifi_station.Start();
 
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
@@ -180,6 +181,71 @@ void WifiBoard::ResetWifiConfiguration() {
     vTaskDelay(pdMS_TO_TICKS(1000));
     // Reboot the device
     esp_restart();
+}
+
+bool WifiBoard::SwitchToWifi(const std::string& ssid, const std::string& password) {
+    auto& wifi_station = WifiStation::GetInstance();
+    
+    // 停止当前连接
+    wifi_station.Stop();
+    
+    // 添加新的WiFi配置
+    auto& ssid_manager = SsidManager::GetInstance();
+    ssid_manager.AddSsid(ssid, password);
+    
+    // 重新启动WiFi连接
+    wifi_station.OnScanBegin([this]() {
+        auto display = Board::GetInstance().GetDisplay();
+        display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);
+    });
+    wifi_station.OnConnect([this](const std::string& ssid) {
+        auto display = Board::GetInstance().GetDisplay();
+        std::string notification = Lang::Strings::CONNECT_TO;
+        notification += ssid;
+        notification += "...";
+        display->ShowNotification(notification.c_str(), 30000);
+    });
+    wifi_station.OnConnected([this](const std::string& ssid) {
+        auto display = Board::GetInstance().GetDisplay();
+        std::string notification = Lang::Strings::CONNECTED_TO;
+        notification += ssid;
+        display->ShowNotification(notification.c_str(), 30000);
+    });
+    
+    wifi_station.Start();
+    
+    // 等待连接成功，超时时间30秒
+    return wifi_station.WaitForConnected(30 * 1000);
+}
+
+std::vector<std::string> WifiBoard::GetSavedWifiList() {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    std::vector<std::string> result;
+    for (const auto& item : ssid_list) {
+        result.push_back(item.ssid);
+    }
+    return result;
+}
+
+bool WifiBoard::RemoveSavedWifi(int index) {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    if (index < 0 || index >= ssid_list.size()) {
+        return false;
+    }
+    ssid_manager.RemoveSsid(index);
+    return true;
+}
+
+bool WifiBoard::SetDefaultWifi(int index) {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    if (index < 0 || index >= ssid_list.size()) {
+        return false;
+    }
+    ssid_manager.SetDefaultSsid(index);
+    return true;
 }
 
 std::string WifiBoard::GetDeviceStatusJson() {

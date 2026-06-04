@@ -2,6 +2,8 @@
 #define WIFI_BOARD_H
 
 #include "board.h"
+#include <vector>
+#include <string>
 
 class WifiBoard : public Board {
 protected:
@@ -22,6 +24,12 @@ public:
     virtual void ResetWifiConfiguration();
     virtual AudioCodec* GetAudioCodec() override { return nullptr; }
     virtual std::string GetDeviceStatusJson() override;
+    
+    // WiFi管理功能
+    bool SwitchToWifi(const std::string& ssid, const std::string& password);
+    std::vector<std::string> GetSavedWifiList();
+    bool RemoveSavedWifi(int index);
+    bool SetDefaultWifi(int index);
 };
 
 #endif // WIFI_BOARD_H

@@ -565,6 +565,66 @@ private:
                 radio_service_.Prev();
                 return true;
             });
+        
+        // WiFi管理工具
+        mcp_server.AddTool("self.wifi.list_saved",
+            "List all saved WiFi networks. Returns a JSON array of SSID names.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                auto wifi_list = GetSavedWifiList();
+                std::string json = "[";
+                for (size_t i = 0; i < wifi_list.size(); i++) {
+                    json += "\"" + wifi_list[i] + "\"";
+                    if (i < wifi_list.size() - 1) {
+                        json += ",";
+                    }
+                }
+                json += "]";
+                return json;
+            });
+        mcp_server.AddTool("self.wifi.switch",
+            "Switch to a different WiFi network. The device will disconnect from current WiFi and connect to the new one.",
+            PropertyList({
+                Property("ssid", kPropertyTypeString),
+                Property("password", kPropertyTypeString, std::string("")),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto ssid = properties["ssid"].value<std::string>();
+                const auto password = properties["password"].value<std::string>();
+                if (ssid.empty()) {
+                    return std::string("SSID cannot be empty.");
+                }
+                bool success = SwitchToWifi(ssid, password);
+                if (success) {
+                    return std::string("Successfully connected to ") + ssid;
+                } else {
+                    return std::string("Failed to connect to ") + ssid;
+                }
+            });
+        mcp_server.AddTool("self.wifi.remove",
+            "Remove a saved WiFi network by index (0-based).",
+            PropertyList({
+                Property("index", kPropertyTypeInteger),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                int index = properties["index"].value<int>();
+                bool success = RemoveSavedWifi(index);
+                if (success) {
+                    return std::string("WiFi network removed successfully.");
+                } else {
+                    return std::string("Invalid index. Please provide a valid index.");
+                }
+            });
+        mcp_server.AddTool("self.wifi.set_default",
+            "Set a saved WiFi network as default by index (0-based). This network will be tried first when connecting.",
+            PropertyList({
+                Property("index", kPropertyTypeInteger),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                int index = properties["index"].value<int>();
+                bool success = SetDefaultWifi(index);
+                if (success) {
+                    return std::string("Default WiFi network set successfully.");
+                } else {
+                    return std::string("Invalid index. Please provide a valid index.");
+                }
+            });
     }
 
     void InitializeRadio() {

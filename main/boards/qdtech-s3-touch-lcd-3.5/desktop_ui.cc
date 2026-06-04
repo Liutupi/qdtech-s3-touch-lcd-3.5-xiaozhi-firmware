@@ -7,6 +7,7 @@
 #include <utility>
 
 #include <esp_log.h>
+#include <ssid_manager.h>
 
 #define TAG "DesktopUI"
 
@@ -196,7 +197,9 @@ static void open_app_card(uint8_t index) {
             open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
             break;
         case 5:
-            open_xiaozhi_with_message("Settings", "Ask XiaoZhi to adjust screen, volume, WiFi, or weather location.", true);
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::SETTINGS);
+            }
             break;
         default:
             break;
@@ -263,6 +266,14 @@ static void radio_gesture_cb(lv_event_t* event) {
     }
 }
 
+static void settings_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
 static void main_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -290,6 +301,7 @@ void DesktopUI::Create() {
     CreateAppsPage(root);
     CreateRadioPage(root);
     CreateXiaozhiPage(root);
+    CreateSettingsPage(root);
 
     // Start with main page
     ShowPage(DesktopPage::MAIN);
@@ -306,6 +318,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
+    if (settings_page_) {
+        lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
+    }
 
     switch (page) {
         case DesktopPage::MAIN:
@@ -323,6 +338,13 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::XIAOZHI:
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show xiaozhi page");
+            break;
+        case DesktopPage::SETTINGS:
+            if (settings_page_) {
+                lv_obj_clear_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
+                UpdateWifiList();
+            }
+            ESP_LOGI(TAG, "Show settings page");
             break;
     }
 }
@@ -724,90 +746,231 @@ void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
     lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(xiaozhi_page_, xiaozhi_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(xiaozhi_page_, xiaozhi_toggle_cb, LV_EVENT_CLICKED, NULL);
 
+    // 全屏黑色背景，只有面部
+    CreateFaceUI(xiaozhi_page_);
+}
+
+// ===== Settings page =====
+void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
+    settings_page_ = lv_obj_create(root);
+    lv_obj_add_style(settings_page_, &style_screen, 0);
+    lv_obj_set_size(settings_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(settings_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(settings_page_, settings_gesture_cb, LV_EVENT_GESTURE, NULL);
+    
     // Brand
-    lv_obj_t* brand = label_en(xiaozhi_page_, "XiaoZhi AI", &style_en);
+    lv_obj_t* brand = label_en(settings_page_, "XiaoZhi AI", &style_en);
     lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
     lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
 
     // Status bar
-    CreateStatusBar(xiaozhi_page_);
+    CreateStatusBar(settings_page_);
 
-    lv_obj_t* title = label_en(xiaozhi_page_, "XiaoZhi AI", &style_en);
+    lv_obj_t* title = label_en(settings_page_, "Settings", &style_en);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 48);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
-    lv_obj_t* back = CreateButton(xiaozhi_page_, "Back", show_apps_cb);
-    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 46);
+    lv_obj_t* sub = label_en(settings_page_, "System Configuration", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 100, 53);
 
-    // Divider line
-    lv_obj_t* top_line = lv_obj_create(xiaozhi_page_);
-    lv_obj_remove_style_all(top_line);
-    lv_obj_set_size(top_line, 438, 1);
-    lv_obj_set_style_bg_color(top_line, COLOR_LINE, 0);
-    lv_obj_set_style_bg_opa(top_line, LV_OPA_COVER, 0);
-    lv_obj_align(top_line, LV_ALIGN_TOP_MID, 0, 78);
-    add_gesture_bubble(top_line);
+    lv_obj_t* back = CreateButton(settings_page_, "Back", show_apps_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
-    // Face
-    CreateFaceUI(xiaozhi_page_);
+    // WiFi Section Title
+    lv_obj_t* wifi_title = label_en(settings_page_, "WiFi Networks", &style_gold);
+    lv_obj_set_style_text_font(wifi_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(wifi_title, LV_ALIGN_TOP_LEFT, 24, 82);
 
-    // State labels
-    xiaozhi_state_label_ = label_en(xiaozhi_page_, "Standby", &style_green);
-    lv_obj_set_style_text_font(xiaozhi_state_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(xiaozhi_state_label_, LV_ALIGN_TOP_MID, 0, 272);
+    // WiFi list panel
+    lv_obj_t* list_panel = lv_obj_create(settings_page_);
+    lv_obj_add_style(list_panel, &style_panel, 0);
+    lv_obj_set_size(list_panel, 438, 160);
+    lv_obj_align(list_panel, LV_ALIGN_TOP_LEFT, 14, 106);
+    lv_obj_set_scroll_dir(list_panel, LV_DIR_VER);
+    add_gesture_bubble(list_panel);
+    
+    // 创建WiFi列表容器
+    lv_obj_t* list_container = lv_obj_create(list_panel);
+    lv_obj_remove_style_all(list_container);
+    lv_obj_set_size(list_container, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(list_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(list_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    add_gesture_bubble(list_container);
+    
+    // 添加滚动条样式
+    lv_obj_set_scrollbar_mode(list_panel, LV_SCROLLBAR_MODE_AUTO);
+    
+    // Help text for WiFi management
+    lv_obj_t* wifi_help = label_en(settings_page_, "Say: 'Switch to WiFi name' or 'Remove WiFi index'", &style_muted);
+    lv_obj_set_style_text_font(wifi_help, &lv_font_montserrat_12, 0);
+    lv_obj_align(wifi_help, LV_ALIGN_TOP_LEFT, 24, 272);
+    
+    // Other Settings Section
+    lv_obj_t* other_title = label_en(settings_page_, "Other Settings", &style_gold);
+    lv_obj_set_style_text_font(other_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(other_title, LV_ALIGN_TOP_LEFT, 24, 296);
+    
+    // Settings options
+    lv_obj_t* opt1 = CreatePanel(settings_page_, 438, 36, 14, 320);
+    lv_obj_t* opt1_label = label_en(opt1, "Brightness", &style_en);
+    lv_obj_align(opt1_label, LV_ALIGN_LEFT_MID, 16, 0);
+    
+    lv_obj_t* opt2 = CreatePanel(settings_page_, 438, 36, 14, 362);
+    lv_obj_t* opt2_label = label_en(opt2, "Volume", &style_en);
+    lv_obj_align(opt2_label, LV_ALIGN_LEFT_MID, 16, 0);
+    
+    lv_obj_t* opt3 = CreatePanel(settings_page_, 438, 36, 14, 404);
+    lv_obj_t* opt3_label = label_en(opt3, "Weather Location", &style_en);
+    lv_obj_align(opt3_label, LV_ALIGN_LEFT_MID, 16, 0);
+    
+    // Hint text
+    lv_obj_t* hint = label_en(settings_page_, "Swipe right: Apps", &style_muted);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+    
+    // 保存列表容器的引用
+    lv_obj_set_user_data(settings_page_, list_container);
+}
 
-    xiaozhi_hint_label_ = label_en(xiaozhi_page_, "Ready / Listening / Speaking", &style_muted);
-    lv_obj_set_style_text_font(xiaozhi_hint_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(xiaozhi_hint_label_, LV_ALIGN_TOP_MID, 0, 300);
-
-    xiaozhi_message_label_ = label_en(xiaozhi_page_, "Tap to start conversation", &style_muted);
-    lv_obj_set_width(xiaozhi_message_label_, 420);
-    lv_label_set_long_mode(xiaozhi_message_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(xiaozhi_message_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(xiaozhi_message_label_, &lv_font_montserrat_16, 0);
-    lv_obj_align(xiaozhi_message_label_, LV_ALIGN_TOP_MID, 0, 320);
-
-    // Talk button
-    lv_obj_t* talk = CreateButton(xiaozhi_page_, "Talk", xiaozhi_toggle_cb);
-    lv_obj_set_size(talk, 126, 38);
-    lv_obj_align(talk, LV_ALIGN_BOTTOM_MID, 0, -18);
+void DesktopUI::UpdateWifiList() {
+    if (!settings_page_) return;
+    
+    lv_obj_t* list_container = static_cast<lv_obj_t*>(lv_obj_get_user_data(settings_page_));
+    if (!list_container) return;
+    
+    // 清空列表
+    lv_obj_clean(list_container);
+    
+    // 获取已保存的WiFi列表
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    
+    if (ssid_list.empty()) {
+        // 显示空列表提示
+        lv_obj_t* empty_label = label_en(list_container, "No saved WiFi networks", &style_muted);
+        lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(empty_label, LV_PCT(100));
+        return;
+    }
+    
+    // 添加WiFi条目
+    for (size_t i = 0; i < ssid_list.size(); i++) {
+        lv_obj_t* item = lv_obj_create(list_container);
+        lv_obj_remove_style_all(item);
+        lv_obj_set_size(item, LV_PCT(100), 40);
+        lv_obj_set_style_bg_color(item, COLOR_SURFACE_2, 0);
+        lv_obj_set_style_bg_opa(item, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(item, 8, 0);
+        lv_obj_set_style_pad_hor(item, 16, 0);
+        lv_obj_set_style_pad_ver(item, 8, 0);
+        lv_obj_set_flex_flow(item, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(item, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        
+        // WiFi名称
+        lv_obj_t* ssid_label = label_en(item, ssid_list[i].ssid.c_str(), &style_en);
+        lv_obj_set_flex_grow(ssid_label, 1);
+        
+        // 序号标签
+        char index_str[16];
+        snprintf(index_str, sizeof(index_str), "#%d", (int)i + 1);
+        label_en(item, index_str, &style_muted);
+        
+        // 如果是第一个，显示"Default"标签
+        if (i == 0) {
+            lv_obj_t* default_label = label_en(item, "Default", &style_green);
+            lv_obj_set_style_text_font(default_label, &lv_font_montserrat_12, 0);
+        }
+    }
 }
 
 void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
-    face_container_ = lv_obj_create(parent);
-    lv_obj_set_size(face_container_, 176, 176);
-    lv_obj_align(face_container_, LV_ALIGN_TOP_MID, 0, 88);
-    lv_obj_set_style_radius(face_container_, 88, 0);
-    lv_obj_set_style_bg_color(face_container_, LV_COLOR_MAKE(0x16, 0x19, 0x1c), 0);
-    lv_obj_set_style_border_color(face_container_, COLOR_GREEN, 0);
-    lv_obj_set_style_border_width(face_container_, 2, 0);
-    lv_obj_clear_flag(face_container_, LV_OBJ_FLAG_SCROLLABLE);
-    add_gesture_bubble(face_container_);
+    // 全屏黑色背景，直接在parent上创建元素
 
-    // Eyes
-    eye_left_ = lv_obj_create(face_container_);
-    lv_obj_set_size(eye_left_, 30, 40);
-    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -42, -18);
-    lv_obj_set_style_radius(eye_left_, 15, 0);
+    // 左眼白
+    eye_left_ = lv_obj_create(parent);
+    lv_obj_set_size(eye_left_, 60, 70);
+    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
+    lv_obj_set_style_radius(eye_left_, 30, 0);
     lv_obj_set_style_bg_color(eye_left_, COLOR_CREAM, 0);
+    lv_obj_set_style_bg_opa(eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_left_, 0, 0);
     add_gesture_bubble(eye_left_);
 
-    eye_right_ = lv_obj_create(face_container_);
-    lv_obj_set_size(eye_right_, 30, 40);
-    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 42, -18);
-    lv_obj_set_style_radius(eye_right_, 15, 0);
+    // 左瞳孔
+    pupil_left_ = lv_obj_create(eye_left_);
+    lv_obj_set_size(pupil_left_, 28, 35);
+    lv_obj_align(pupil_left_, LV_ALIGN_CENTER, 0, 4);
+    lv_obj_set_style_radius(pupil_left_, 14, 0);
+    lv_obj_set_style_bg_color(pupil_left_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(pupil_left_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(pupil_left_, 0, 0);
+
+    // 左眼高光
+    highlight_left_ = lv_obj_create(eye_left_);
+    lv_obj_set_size(highlight_left_, 10, 10);
+    lv_obj_align(highlight_left_, LV_ALIGN_CENTER, -8, -10);
+    lv_obj_set_style_radius(highlight_left_, 5, 0);
+    lv_obj_set_style_bg_color(highlight_left_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(highlight_left_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(highlight_left_, 0, 0);
+
+    // 右眼白
+    eye_right_ = lv_obj_create(parent);
+    lv_obj_set_size(eye_right_, 60, 70);
+    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
+    lv_obj_set_style_radius(eye_right_, 30, 0);
     lv_obj_set_style_bg_color(eye_right_, COLOR_CREAM, 0);
+    lv_obj_set_style_bg_opa(eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_right_, 0, 0);
     add_gesture_bubble(eye_right_);
 
-    // Mouth
-    mouth_ = lv_obj_create(face_container_);
-    lv_obj_set_size(mouth_, 62, 12);
-    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 44);
-    lv_obj_set_style_radius(mouth_, 6, 0);
+    // 右瞳孔
+    pupil_right_ = lv_obj_create(eye_right_);
+    lv_obj_set_size(pupil_right_, 28, 35);
+    lv_obj_align(pupil_right_, LV_ALIGN_CENTER, 0, 4);
+    lv_obj_set_style_radius(pupil_right_, 14, 0);
+    lv_obj_set_style_bg_color(pupil_right_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(pupil_right_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(pupil_right_, 0, 0);
+
+    // 右眼高光
+    highlight_right_ = lv_obj_create(eye_right_);
+    lv_obj_set_size(highlight_right_, 10, 10);
+    lv_obj_align(highlight_right_, LV_ALIGN_CENTER, -8, -10);
+    lv_obj_set_style_radius(highlight_right_, 5, 0);
+    lv_obj_set_style_bg_color(highlight_right_, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(highlight_right_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(highlight_right_, 0, 0);
+
+    // 左眉毛
+    eyebrow_left_ = lv_obj_create(parent);
+    lv_obj_set_size(eyebrow_left_, 70, 10);
+    lv_obj_align(eyebrow_left_, LV_ALIGN_CENTER, -80, -90);
+    lv_obj_set_style_radius(eyebrow_left_, 5, 0);
+    lv_obj_set_style_bg_color(eyebrow_left_, COLOR_CREAM, 0);
+    lv_obj_set_style_bg_opa(eyebrow_left_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eyebrow_left_, 0, 0);
+    add_gesture_bubble(eyebrow_left_);
+
+    // 右眉毛
+    eyebrow_right_ = lv_obj_create(parent);
+    lv_obj_set_size(eyebrow_right_, 70, 10);
+    lv_obj_align(eyebrow_right_, LV_ALIGN_CENTER, 80, -90);
+    lv_obj_set_style_radius(eyebrow_right_, 5, 0);
+    lv_obj_set_style_bg_color(eyebrow_right_, COLOR_CREAM, 0);
+    lv_obj_set_style_bg_opa(eyebrow_right_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eyebrow_right_, 0, 0);
+    add_gesture_bubble(eyebrow_right_);
+
+    // 嘴巴
+    mouth_ = lv_obj_create(parent);
+    lv_obj_set_size(mouth_, 80, 20);
+    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_set_style_radius(mouth_, 10, 0);
     lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
+    lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mouth_, 0, 0);
     add_gesture_bubble(mouth_);
 }
@@ -823,7 +986,7 @@ lv_obj_t* DesktopUI::CreateButton(lv_obj_t* parent, const char* text, lv_event_c
     if (cb) {
         lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
     }
-    add_gesture_bubble(btn);
+    // 不为按钮添加手势冒泡，确保点击事件正常工作
 
     lv_obj_t* txt = label_en(btn, text, &style_en);
     lv_obj_center(txt);
@@ -906,57 +1069,88 @@ void DesktopUI::SetFacePart(lv_obj_t* obj, int x, int y, int w, int h, int radiu
 }
 
 void DesktopUI::UpdateFaceAnimation() {
-    if (!face_container_ || !eye_left_ || !eye_right_ || !mouth_) return;
+    if (!eye_left_ || !eye_right_ || !mouth_) return;
 
     const DeviceState state = Application::GetInstance().GetDeviceState();
     const bool speaking = state == kDeviceStateSpeaking;
     const bool listening = state == kDeviceStateListening || state == kDeviceStateConnecting;
 
-    // Simple eye height animation
-    int eye_h = 40;
+    // ===== 眨眼动画 =====
+    int eye_h = 70;
     if (speaking) {
-        eye_h = 35 + (int)(5 * sin(anim_tick_ * 0.3));
+        eye_h = 65 + (int)(5 * sin(anim_tick_ * 0.2));
     } else if (listening) {
-        eye_h = 45;
+        eye_h = 75;
     } else {
-        // Blink
-        const int blink_phase = anim_tick_ % 32;
-        if (blink_phase >= 28) {
-            eye_h = 8;
+        const int blink_phase = anim_tick_ % 60;
+        if (blink_phase >= 55) {
+            eye_h = 10;
         }
     }
 
-    // Update eye sizes
     lv_obj_set_height(eye_left_, eye_h);
     lv_obj_set_height(eye_right_, eye_h);
-    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -42, -18);
-    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 42, -18);
+    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
+    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
 
-    // Update mouth based on state
+    // ===== 瞳孔随机移动 =====
+    if (anim_tick_ % 40 == 0) {
+        pupil_target_x_ = (float)((rand() % 12) - 6);
+        pupil_target_y_ = (float)((rand() % 8) - 4);
+    }
+    pupil_offset_x_ += (pupil_target_x_ - pupil_offset_x_) * 0.08f;
+    pupil_offset_y_ += (pupil_target_y_ - pupil_offset_y_) * 0.08f;
+
+    if (pupil_left_) {
+        lv_obj_align(pupil_left_, LV_ALIGN_CENTER, (int)pupil_offset_x_, 4 + (int)pupil_offset_y_);
+    }
+    if (pupil_right_) {
+        lv_obj_align(pupil_right_, LV_ALIGN_CENTER, (int)pupil_offset_x_, 4 + (int)pupil_offset_y_);
+    }
+    if (highlight_left_) {
+        lv_obj_align(highlight_left_, LV_ALIGN_CENTER, -8 + (int)pupil_offset_x_, -10 + (int)pupil_offset_y_);
+    }
+    if (highlight_right_) {
+        lv_obj_align(highlight_right_, LV_ALIGN_CENTER, -8 + (int)pupil_offset_x_, -10 + (int)pupil_offset_y_);
+    }
+
+    // ===== 眉毛动画 =====
+    int eyebrow_y = -90;
     if (speaking) {
-        static constexpr int mouth_heights[] = {12, 28, 22, 18, 24};
-        const int phase = anim_tick_ % 5;
-        lv_obj_set_height(mouth_, mouth_heights[phase]);
-        lv_obj_set_style_bg_color(mouth_, COLOR_GREEN, 0);
+        eyebrow_y = -92 + (int)(3 * sin(anim_tick_ * 0.15));
     } else if (listening) {
-        lv_obj_set_height(mouth_, 16);
-        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
-    } else {
-        lv_obj_set_height(mouth_, 12);
-        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
-    }
-    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 44);
-
-    // Update face border color based on emotion
-    if (strcmp(emotion_, "happy") == 0) {
-        lv_obj_set_style_border_color(face_container_, COLOR_GREEN, 0);
+        eyebrow_y = -95;
     } else if (strcmp(emotion_, "sad") == 0) {
-        lv_obj_set_style_border_color(face_container_, LV_COLOR_MAKE(0xff, 0x79, 0x79), 0);
-    } else if (strcmp(emotion_, "thinking") == 0) {
-        lv_obj_set_style_border_color(face_container_, COLOR_PURPLE, 0);
-    } else {
-        lv_obj_set_style_border_color(face_container_, COLOR_GREEN, 0);
+        eyebrow_y = -82;
     }
+
+    if (eyebrow_left_) {
+        lv_obj_align(eyebrow_left_, LV_ALIGN_CENTER, -80, eyebrow_y);
+    }
+    if (eyebrow_right_) {
+        lv_obj_align(eyebrow_right_, LV_ALIGN_CENTER, 80, eyebrow_y);
+    }
+
+    // ===== 嘴巴动画 =====
+    if (speaking) {
+        static constexpr int mouth_heights[] = {20, 35, 28, 40, 24, 32};
+        const int phase = anim_tick_ % 6;
+        lv_obj_set_height(mouth_, mouth_heights[phase]);
+        lv_obj_set_width(mouth_, 80 + (int)(15 * sin(anim_tick_ * 0.3)));
+        lv_obj_set_style_bg_color(mouth_, COLOR_GREEN, 0);
+        lv_obj_set_style_radius(mouth_, mouth_heights[phase] / 3, 0);
+    } else if (listening) {
+        lv_obj_set_height(mouth_, 25);
+        lv_obj_set_width(mouth_, 70);
+        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
+        lv_obj_set_style_radius(mouth_, 12, 0);
+    } else {
+        lv_obj_set_height(mouth_, 16);
+        lv_obj_set_width(mouth_, 60);
+        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
+        lv_obj_set_style_radius(mouth_, 8, 0);
+    }
+    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
 }
 
 // ===== Public API =====
