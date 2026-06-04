@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <ctime>
 #include <utility>
 
 #include <esp_log.h>
@@ -80,6 +81,33 @@ static lv_obj_t* bar(lv_obj_t* parent, int16_t w, int16_t h, lv_color_t color, l
     lv_obj_set_style_bg_opa(obj, opa, 0);
     add_gesture_bubble(obj);
     return obj;
+}
+
+static bool is_leap_year(int year) {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+static int days_in_month(int year, int month) {
+    static constexpr int kDays[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    if (month == 2 && is_leap_year(year)) {
+        return 29;
+    }
+    if (month < 1 || month > 12) {
+        return 30;
+    }
+    return kDays[month - 1];
+}
+
+static int first_weekday_monday_index(int year, int month) {
+    tm info = {};
+    info.tm_year = year - 1900;
+    info.tm_mon = month - 1;
+    info.tm_mday = 1;
+    info.tm_isdst = -1;
+    if (mktime(&info) == (time_t)-1) {
+        return 0;
+    }
+    return (info.tm_wday + 6) % 7;
 }
 
 // ===== Style initialization =====
@@ -191,7 +219,9 @@ static void open_app_card(uint8_t index) {
             open_xiaozhi_with_message("XiaoZhi AI", "Starting conversation...", true);
             break;
         case 3:
-            open_xiaozhi_with_message("Calendar", "Ask XiaoZhi about dates, plans, or reminders.", true);
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::CALENDAR);
+            }
             break;
         case 4:
             open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
@@ -266,6 +296,32 @@ static void radio_gesture_cb(lv_event_t* event) {
     }
 }
 
+static void calendar_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void calendar_prev_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->AdjustCalendarMonth(-1);
+    }
+}
+
+static void calendar_today_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ShowTodayCalendar();
+    }
+}
+
+static void calendar_next_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->AdjustCalendarMonth(1);
+    }
+}
+
 static void settings_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -299,6 +355,7 @@ void DesktopUI::Create() {
 
     CreateMainPage(root);
     CreateAppsPage(root);
+    CreateCalendarPage(root);
     CreateRadioPage(root);
     CreateXiaozhiPage(root);
     CreateSettingsPage(root);
@@ -316,6 +373,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     current_page_ = page;
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
+    if (calendar_page_) {
+        lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
     if (settings_page_) {
@@ -330,6 +390,13 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::APPS:
             lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show apps page");
+            break;
+        case DesktopPage::CALENDAR:
+            if (calendar_page_) {
+                lv_obj_clear_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
+                RenderCalendar();
+            }
+            ESP_LOGI(TAG, "Show calendar page");
             break;
         case DesktopPage::RADIO:
             lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
@@ -412,6 +479,26 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
             if (radio_next_) {
                 radio_next_();
             }
+            return;
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::CALENDAR) {
+        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+            ShowPage(DesktopPage::APPS);
+            return;
+        }
+        if (x >= 38 && x < 114 && y >= 264 && y < 304) {
+            AdjustCalendarMonth(-1);
+            return;
+        }
+        if (x >= 202 && x < 278 && y >= 264 && y < 304) {
+            ShowTodayCalendar();
+            return;
+        }
+        if (x >= 366 && x < 442 && y >= 264 && y < 304) {
+            AdjustCalendarMonth(1);
             return;
         }
         return;
@@ -635,7 +722,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
         {"WTR", "Weather", "Forecast", COLOR_GREEN, weather_card_cb},
         {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
-        {"CAL", "Calendar", "2026/01/01", COLOR_PURPLE, calendar_card_cb},
+        {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
         {"QTE", "Quote", "Daily", COLOR_GOLD, quote_card_cb},
         {"SET", "Settings", "System", COLOR_BLUE, settings_card_cb},
     };
@@ -675,10 +762,95 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_t* status_label = label_en(box, status, &style_muted);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 70, 34);
+    if (index == 3) {
+        calendar_app_status_label_ = status_label;
+    }
 
     lv_obj_t* arrow = label_en(box, ">", &style_muted);
     lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -14, 0);
     return box;
+}
+
+// ===== Calendar page =====
+void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
+    calendar_page_ = lv_obj_create(root);
+    lv_obj_add_style(calendar_page_, &style_screen, 0);
+    lv_obj_set_size(calendar_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(calendar_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(calendar_page_, calendar_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(calendar_page_);
+
+    lv_obj_t* brand = label_en(calendar_page_, "XiaoZhi AI", &style_en);
+    lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
+    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    CreateStatusBar(calendar_page_);
+
+    lv_obj_t* title = label_en(calendar_page_, "Calendar", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(calendar_page_, "Month View", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 122, 53);
+
+    lv_obj_t* back = CreateButton(calendar_page_, "Back", show_apps_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* panel = CreatePanel(calendar_page_, 432, 168, 24, 86);
+
+    calendar_title_label_ = label_en(panel, "---- / --", &style_gold);
+    lv_obj_set_style_text_font(calendar_title_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(calendar_title_label_, LV_ALIGN_TOP_LEFT, 16, 10);
+
+    calendar_today_label_ = label_en(panel, "Waiting for time sync", &style_muted);
+    lv_obj_set_width(calendar_today_label_, 230);
+    lv_label_set_long_mode(calendar_today_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(calendar_today_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(calendar_today_label_, LV_ALIGN_TOP_RIGHT, -16, 15);
+
+    static constexpr const char* kWeekdays[] = {"M", "T", "W", "T", "F", "S", "S"};
+    for (int col = 0; col < 7; ++col) {
+        lv_obj_t* label = label_en(panel, kWeekdays[col], &style_muted);
+        lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_width(label, 52);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 14 + col * 60, 48);
+    }
+
+    for (int i = 0; i < 42; ++i) {
+        const int col = i % 7;
+        const int row = i / 7;
+        lv_obj_t* cell = lv_obj_create(panel);
+        lv_obj_remove_style_all(cell);
+        lv_obj_set_size(cell, 52, 18);
+        lv_obj_set_style_radius(cell, 5, 0);
+        lv_obj_set_style_bg_color(cell, COLOR_SURFACE_2, 0);
+        lv_obj_set_style_bg_opa(cell, LV_OPA_TRANSP, 0);
+        lv_obj_align(cell, LV_ALIGN_TOP_LEFT, 14 + col * 60, 70 + row * 16);
+        add_gesture_bubble(cell);
+        calendar_day_cells_[i] = cell;
+
+        lv_obj_t* day = label_en(cell, "", &style_en);
+        lv_obj_set_width(day, 52);
+        lv_obj_set_style_text_align(day, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(day, &lv_font_montserrat_14, 0);
+        lv_obj_center(day);
+        calendar_day_labels_[i] = day;
+    }
+
+    lv_obj_t* prev = CreateButton(calendar_page_, "Prev", calendar_prev_cb);
+    lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 38, 268);
+
+    lv_obj_t* today = CreateButton(calendar_page_, "Today", calendar_today_cb);
+    lv_obj_align(today, LV_ALIGN_TOP_LEFT, 202, 268);
+
+    lv_obj_t* next = CreateButton(calendar_page_, "Next", calendar_next_cb);
+    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 366, 268);
+
+    lv_obj_t* hint = label_en(calendar_page_, "Swipe right: Apps", &style_muted);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+
+    RenderCalendar();
 }
 
 // ===== Radio page =====
@@ -1021,6 +1193,113 @@ void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
     lv_obj_align(battery, LV_ALIGN_TOP_RIGHT, -20, 12);
 }
 
+void DesktopUI::AdjustCalendarMonth(int delta) {
+    if (calendar_year_ <= 0 || calendar_month_ <= 0) {
+        ShowTodayCalendar();
+        return;
+    }
+
+    calendar_month_ += delta;
+    while (calendar_month_ < 1) {
+        calendar_month_ += 12;
+        calendar_year_--;
+    }
+    while (calendar_month_ > 12) {
+        calendar_month_ -= 12;
+        calendar_year_++;
+    }
+    calendar_follow_today_ = false;
+    RenderCalendar();
+    ESP_LOGI(TAG, "Calendar month changed year=%d month=%d", calendar_year_, calendar_month_);
+}
+
+void DesktopUI::ShowTodayCalendar() {
+    if (current_year_ <= 0 || current_month_ <= 0) {
+        ESP_LOGW(TAG, "Calendar today requested before time sync");
+        return;
+    }
+    calendar_year_ = current_year_;
+    calendar_month_ = current_month_;
+    calendar_follow_today_ = true;
+    RenderCalendar();
+    ESP_LOGI(TAG, "Calendar returned to today year=%d month=%d day=%d",
+             current_year_, current_month_, current_day_);
+}
+
+void DesktopUI::RenderCalendar() {
+    if (!calendar_title_label_ || !calendar_today_label_) {
+        return;
+    }
+
+    if (calendar_year_ <= 0 || calendar_month_ <= 0) {
+        lv_label_set_text(calendar_title_label_, "---- / --");
+        lv_label_set_text(calendar_today_label_, "Waiting for time sync");
+        for (int i = 0; i < 42; ++i) {
+            if (calendar_day_labels_[i]) {
+                lv_label_set_text(calendar_day_labels_[i], "");
+            }
+            if (calendar_day_cells_[i]) {
+                lv_obj_set_style_bg_opa(calendar_day_cells_[i], LV_OPA_TRANSP, 0);
+            }
+        }
+        return;
+    }
+
+    char title[32];
+    snprintf(title, sizeof(title), "%04d / %02d", calendar_year_, calendar_month_);
+    lv_label_set_text(calendar_title_label_, title);
+
+    char today[48];
+    if (current_year_ > 0) {
+        snprintf(today, sizeof(today), "Today %04d/%02d/%02d", current_year_, current_month_, current_day_);
+    } else {
+        snprintf(today, sizeof(today), "Time not synced");
+    }
+    lv_label_set_text(calendar_today_label_, today);
+
+    const int first = first_weekday_monday_index(calendar_year_, calendar_month_);
+    const int days = days_in_month(calendar_year_, calendar_month_);
+    const int prev_month = calendar_month_ == 1 ? 12 : calendar_month_ - 1;
+    const int prev_year = calendar_month_ == 1 ? calendar_year_ - 1 : calendar_year_;
+    const int prev_days = days_in_month(prev_year, prev_month);
+
+    for (int i = 0; i < 42; ++i) {
+        if (!calendar_day_labels_[i] || !calendar_day_cells_[i]) {
+            continue;
+        }
+
+        int day = 0;
+        bool in_current_month = false;
+        if (i < first) {
+            day = prev_days - first + i + 1;
+        } else if (i < first + days) {
+            day = i - first + 1;
+            in_current_month = true;
+        } else {
+            day = i - first - days + 1;
+        }
+
+        char text[16];
+        snprintf(text, sizeof(text), "%d", day);
+        lv_label_set_text(calendar_day_labels_[i], text);
+
+        const bool is_today = in_current_month &&
+                              calendar_year_ == current_year_ &&
+                              calendar_month_ == current_month_ &&
+                              day == current_day_;
+        const int col = i % 7;
+        const bool weekend = col >= 5;
+
+        lv_obj_set_style_bg_color(calendar_day_cells_[i], is_today ? COLOR_GREEN : COLOR_SURFACE_2, 0);
+        lv_obj_set_style_bg_opa(calendar_day_cells_[i], is_today ? LV_OPA_COVER : LV_OPA_TRANSP, 0);
+        lv_obj_set_style_text_color(calendar_day_labels_[i],
+                                    is_today ? COLOR_BG :
+                                    !in_current_month ? COLOR_MUTED :
+                                    weekend ? COLOR_GOLD : COLOR_TEXT,
+                                    0);
+    }
+}
+
 // ===== Time rendering =====
 void DesktopUI::FlipDigit(uint8_t index, uint8_t digit, bool animate) {
     if (index >= 4 || !clock_labels_[index]) return;
@@ -1154,7 +1433,7 @@ void DesktopUI::UpdateFaceAnimation() {
 }
 
 // ===== Public API =====
-void DesktopUI::SetTime(int hour, int minute, int month, int day, const char* weekday) {
+void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, const char* weekday) {
     if (!date_label_ || !week_label_) return;
 
     char date_text[24];
@@ -1162,14 +1441,33 @@ void DesktopUI::SetTime(int hour, int minute, int month, int day, const char* we
     snprintf(date_text, sizeof(date_text), "%02d / %02d     |", month, day);
     snprintf(time_text, sizeof(time_text), "%02d:%02d", hour, minute);
 
+    const bool date_changed = year != current_year_ || month != current_month_ || day != current_day_;
+    current_year_ = year;
+    current_month_ = month;
+    current_day_ = day;
+    if (calendar_year_ <= 0 || calendar_month_ <= 0 || calendar_follow_today_) {
+        calendar_year_ = year;
+        calendar_month_ = month;
+        calendar_follow_today_ = true;
+    }
+
     RenderBigTime(hour, minute, true);
     lv_label_set_text(date_label_, date_text);
     lv_label_set_text(week_label_, weekday ? weekday : "---");
+    if (calendar_app_status_label_) {
+        char app_status[24];
+        snprintf(app_status, sizeof(app_status), "%04d/%02d/%02d", year, month, day);
+        lv_label_set_text(calendar_app_status_label_, app_status);
+    }
 
     for (size_t i = 0; i < sizeof(status_bar_time_labels_) / sizeof(status_bar_time_labels_[0]); ++i) {
         if (status_bar_time_labels_[i]) {
             lv_label_set_text(status_bar_time_labels_[i], time_text);
         }
+    }
+
+    if (date_changed || current_page_ == DesktopPage::CALENDAR) {
+        RenderCalendar();
     }
 }
 

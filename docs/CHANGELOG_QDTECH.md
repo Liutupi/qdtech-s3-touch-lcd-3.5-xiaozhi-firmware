@@ -19,6 +19,36 @@ Verification:
 
 - Documentation-only change. Firmware build/flash not required for this entry.
 
+## 2026-06-04: Add Local Calendar Month View
+
+Scope:
+
+- Added a dedicated Calendar page in the QDTech desktop UI.
+- Calendar app tile now opens the local Calendar page instead of starting a XiaoZhi chat prompt.
+- Calendar page shows a 7x6 month grid, previous/next month controls, a Today control, weekend coloring, and today highlight.
+- Time/weather service now passes the synced year into `DesktopUI::SetTime()` so the calendar can track the current date.
+- Status bar time tracking was expanded to cover the added page.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build
+cmake --build build-qdtech
+```
+
+Build result:
+
+- `cmake --build build-qdtech` completed successfully.
+- `xiaozhi.bin` size: `0x39e7f0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x261810` bytes, about 40%.
+
+Hardware verification:
+
+- Not flashed in this entry.
+- Next hardware check should tap Apps -> Calendar, verify Today/Prev/Next, then return to Apps with Back or right swipe.
+
 ## 2026-06-04: Stabilize QDTech Desktop Base
 
 Commit:

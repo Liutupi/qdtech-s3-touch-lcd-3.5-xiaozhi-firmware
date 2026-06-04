@@ -7,6 +7,7 @@
 enum class DesktopPage {
     MAIN,
     APPS,
+    CALENDAR,
     RADIO,
     XIAOZHI,
     SETTINGS,
@@ -20,7 +21,7 @@ public:
     void HandleTap(uint16_t x, uint16_t y);
 
     // API for updating content
-    void SetTime(int hour, int minute, int month, int day, const char* weekday);
+    void SetTime(int hour, int minute, int year, int month, int day, const char* weekday);
     void SetWeather(const char* temperature, const char* summary, int weather_code);
     void SetDailyQuote(const char* quote);
     void SetNetworkStatus(const char* status);
@@ -29,6 +30,8 @@ public:
     void SetRadioState(const char* station, const char* state, const char* meta);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetXiaozhiEmotion(const char* emotion);
+    void AdjustCalendarMonth(int delta);
+    void ShowTodayCalendar();
 
     // Face animation
     void UpdateFaceAnimation();
@@ -37,6 +40,7 @@ private:
     // Pages
     lv_obj_t* main_page_ = nullptr;
     lv_obj_t* apps_page_ = nullptr;
+    lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
     lv_obj_t* settings_page_ = nullptr;
@@ -51,7 +55,20 @@ private:
     lv_obj_t* weather_meta_label_ = nullptr;
     lv_obj_t* quote_label_ = nullptr;
     lv_obj_t* network_status_label_ = nullptr;
-    lv_obj_t* status_bar_time_labels_[2] = {};
+    lv_obj_t* status_bar_time_labels_[4] = {};
+    lv_obj_t* calendar_app_status_label_ = nullptr;
+
+    // Calendar page elements
+    lv_obj_t* calendar_title_label_ = nullptr;
+    lv_obj_t* calendar_today_label_ = nullptr;
+    lv_obj_t* calendar_day_labels_[42] = {};
+    lv_obj_t* calendar_day_cells_[42] = {};
+    int current_year_ = 0;
+    int current_month_ = 0;
+    int current_day_ = 0;
+    int calendar_year_ = 0;
+    int calendar_month_ = 0;
+    bool calendar_follow_today_ = true;
 
     // Radio page elements
     lv_obj_t* radio_station_label_ = nullptr;
@@ -93,6 +110,7 @@ private:
     // Internal methods
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
+    void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
@@ -105,6 +123,7 @@ private:
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
+    void RenderCalendar();
 
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);

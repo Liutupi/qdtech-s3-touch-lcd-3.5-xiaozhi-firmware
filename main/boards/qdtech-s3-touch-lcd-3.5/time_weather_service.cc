@@ -253,7 +253,8 @@ void TimeWeatherService::UpdateTime() {
     }
     
     if (lvgl_port_lock(100)) {
-        desktop_ui_->SetTime(info.tm_hour, info.tm_min, info.tm_mon + 1, info.tm_mday, WeekdayName(info.tm_wday));
+        desktop_ui_->SetTime(info.tm_hour, info.tm_min, info.tm_year + 1900,
+                             info.tm_mon + 1, info.tm_mday, WeekdayName(info.tm_wday));
         lvgl_port_unlock();
     }
     
