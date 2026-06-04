@@ -34,12 +34,12 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-04 in the Windows workspace:
+Last verified on 2026-06-05 in the Windows workspace:
 
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified feature commit: `f86ccdb add QDTech calendar month view`
+- Last verified stability commit: `5b58b22 restore QDTech XiaoZhi chat stability`
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -53,10 +53,19 @@ Observed boot/runtime facts after flashing:
 - MQTT connected.
 - AFE/wake word started.
 - Application reached `STATE: idle`.
+- XiaoZhi AI chat was tested after the stability repair: the device entered `STATE: listening`, opened the audio channel, reached `STATE: speaking`, and did not reboot during the verified test.
 - SNTP time synchronization completed.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
+- Photos page exists and the photo task is lazy-started only when the Photos page is opened.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
+
+Important 2026-06-05 stability finding:
+
+- A previous radio smoothing change (`834d55a`) was reverted by `76c1541` because the firmware became unstable.
+- The XiaoZhi crash when entering chat was traced to internal SRAM pressure during audio-channel setup: `pthread: Failed to create task!` in `EspUdp::Connect()`.
+- Commit `5b58b22` keeps photo/radio tasks smaller or lazy, catches UDP thread creation failure instead of aborting, shortens MCP tool descriptions, reduces MCP `tools/list` payload size, and treats MCP publish failures as warnings instead of user-facing network alerts.
+- Do not reintroduce large always-running tasks, large MCP descriptions, or broad radio buffering changes without first proving XiaoZhi listen/speak on hardware.
 
 ## What Is Already Implemented
 
@@ -91,6 +100,8 @@ Short version:
 - Do not commit generated `sdkconfig`, build output, WiFi credentials, activation data, or NVS dumps.
 - Do not assume another 3.5 inch ESP32-S3 board uses the same pins, touch chip, or display controller.
 - Do not declare radio or touch fixed from a compile result alone. Hardware logs matter.
+- Do not let optional features such as Photos, Radio, or MCP tools consume enough internal SRAM to break XiaoZhi audio-channel creation.
+- Do not remove the tracked `managed_components/78__esp-ml307/esp_udp.cc` hotfix unless the equivalent behavior is moved into a maintained component patch or upstream update.
 
 ## How To Continue Development
 

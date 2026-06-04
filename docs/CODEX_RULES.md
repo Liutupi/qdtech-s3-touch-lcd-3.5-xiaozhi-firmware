@@ -30,6 +30,9 @@ git remote -v
 - Do not silently change audio pins, display pins, touch pins, flash size, partition table, or board type.
 - Do not replace the XiaoZhi voice core with a custom flow.
 - Do not broaden radio work from direct MP3 into HLS/AAC unless the user asks for it.
+- Do not add always-running QDTech tasks without checking internal SRAM headroom. Photos, Radio, SD card work, and other optional desktop services should be lazy-started or use conservative stack sizes.
+- Keep MCP tool descriptions compact. Large `tools/list` MQTT payloads can exhaust AES/TLS memory and break XiaoZhi chat.
+- If a hotfix is made under `managed_components/`, make sure it is deliberately tracked or moved into a documented component patch. This repository currently tracks a QDTech stability hotfix in `managed_components/78__esp-ml307/esp_udp.cc` even though the parent directory is normally ignored.
 
 ## Build And Flash Rules
 
@@ -63,6 +66,7 @@ For source changes, verify the affected behavior with logs:
 - Radio: play/stop/next/previous work.
 - Audio focus: XiaoZhi speaking/listening pauses radio; idle restores radio if playback was requested.
 - Weather: API/network failure does not crash the firmware.
+- After touching MCP tools, radio, photos, SD card, audio, or networking, verify XiaoZhi can enter listening and speaking without rebooting. A build-only pass is not enough for those areas.
 
 ## Documentation Rules
 
