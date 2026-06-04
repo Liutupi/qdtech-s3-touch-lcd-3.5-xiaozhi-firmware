@@ -81,6 +81,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Weather fetch with cached last successful data.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
+- Default radio station is `Music FM`, which is also the desktop tile label and has been verified on hardware.
 - Radio MCP tools:
   - `self.radio.get_status`
   - `self.radio.play`
@@ -88,6 +89,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - `self.radio.next`
   - `self.radio.previous`
 - Radio and XiaoZhi audio avoidance through lightweight audio focus.
+- Radio playback disables WiFi power save while active and uses a larger MP3 stream buffer to reduce live-stream stutter.
 
 ## Current Runtime Behavior To Verify
 
@@ -140,6 +142,8 @@ For photos:
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
+- `CNR China Voice` HTTPS sources have been observed to open with HTTP 200 and then fail TLS reads on ESP32-S3; keep HTTP MP3 stations near the top/default until stream handling is improved.
+- Radio still uses a single task for HTTP read, MP3 decode, and I2S write. A future ring-buffer producer/consumer split would be the next major stability upgrade.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - No release packaging or OTA artifact process is defined in this handoff set.
