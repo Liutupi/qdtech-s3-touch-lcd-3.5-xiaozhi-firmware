@@ -59,16 +59,12 @@ esp_jpeg_image_scale_t choose_scale(uint16_t width, uint16_t height) {
 } // namespace
 
 void PhotoService::Start(DesktopUI* desktop_ui) {
-    if (task_handle_) {
-        return;
-    }
     desktop_ui_ = desktop_ui;
     if (desktop_ui_) {
         desktop_ui_->SetPhotoActiveCallback([this](bool active) { SetActive(active); });
         desktop_ui_->SetPhotoRefreshCallback([this]() { Refresh(); });
     }
-    xTaskCreate(TaskWrapper, "photo_service", 8192, this, 2, &task_handle_);
-    ESP_LOGI(TAG, "photo service started");
+    ESP_LOGI(TAG, "photo service registered");
 }
 
 void PhotoService::SetActive(bool active) {
@@ -76,14 +72,24 @@ void PhotoService::SetActive(bool active) {
     if (previous != active) {
         ESP_LOGI(TAG, "photo playback %s", active ? "active" : "paused");
         if (active) {
+            EnsureTaskStarted();
             refresh_requested_.store(true);
         }
     }
 }
 
 void PhotoService::Refresh() {
+    EnsureTaskStarted();
     refresh_requested_.store(true);
     ESP_LOGI(TAG, "photo refresh requested");
+}
+
+void PhotoService::EnsureTaskStarted() {
+    if (task_handle_) {
+        return;
+    }
+    xTaskCreate(TaskWrapper, "photo_service", 6144, this, 2, &task_handle_);
+    ESP_LOGI(TAG, "photo service task started");
 }
 
 void PhotoService::TaskWrapper(void* arg) {

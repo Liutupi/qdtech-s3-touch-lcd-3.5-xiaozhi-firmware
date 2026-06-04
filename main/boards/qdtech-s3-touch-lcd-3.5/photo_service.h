@@ -38,6 +38,7 @@ private:
     uint8_t frame_slot_ = 0;
 
     static void TaskWrapper(void* arg);
+    void EnsureTaskStarted();
     void TaskLoop();
     bool MountSdCard();
     bool ScanPhotos();

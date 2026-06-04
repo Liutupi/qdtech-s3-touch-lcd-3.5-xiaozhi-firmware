@@ -524,15 +524,13 @@ private:
     void InitializeTools() {
         auto& mcp_server = McpServer::GetInstance();
         mcp_server.AddTool("self.system.reconfigure_wifi",
-            "Reboot the device and enter WiFi configuration mode.\n"
-            "**CAUTION** You must ask the user to confirm this action.",
+            "Reboot into WiFi setup. Confirm first.",
             PropertyList(), [this](const PropertyList& properties) {
                 ResetWifiConfiguration();
                 return true;
             });
         mcp_server.AddTool("self.weather.set_location",
-            "Set the weather location and immediately refresh weather. "
-            "Use decimal degrees for latitude and longitude, for example Zhongshan: 22.5176, 113.3928.",
+            "Set weather city by latitude and longitude.",
             PropertyList({
                 Property("city", kPropertyTypeString),
                 Property("latitude", kPropertyTypeString),
@@ -547,12 +545,12 @@ private:
                 return std::string("Weather location updated to ") + city + " (" + latitude + ", " + longitude + ").";
             });
         mcp_server.AddTool("self.radio.get_status",
-            "Get the current network radio status, including station name and playback state.",
+            "Get radio status.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 return radio_service_.GetStatusJson();
             });
         mcp_server.AddTool("self.radio.play",
-            "Start or resume the network radio. Optionally select a station by name first.",
+            "Play radio, optionally by station name.",
             PropertyList({
                 Property("station", kPropertyTypeString, std::string("")),
             }), [this](const PropertyList& properties) -> ReturnValue {
@@ -564,19 +562,19 @@ private:
                 return true;
             });
         mcp_server.AddTool("self.radio.stop",
-            "Stop network radio playback.",
+            "Stop radio.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 radio_service_.Stop();
                 return true;
             });
         mcp_server.AddTool("self.radio.next",
-            "Switch to the next network radio station and start playback.",
+            "Next radio station.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 radio_service_.Next();
                 return true;
             });
         mcp_server.AddTool("self.radio.previous",
-            "Switch to the previous network radio station and start playback.",
+            "Previous radio station.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 radio_service_.Prev();
                 return true;
@@ -584,7 +582,7 @@ private:
         
         // WiFi管理工具
         mcp_server.AddTool("self.wifi.list_saved",
-            "List all saved WiFi networks. Returns a JSON array of SSID names.",
+            "List saved WiFi networks.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 auto wifi_list = GetSavedWifiList();
                 std::string json = "[";
@@ -598,7 +596,7 @@ private:
                 return json;
             });
         mcp_server.AddTool("self.wifi.switch",
-            "Switch to a different WiFi network. The device will disconnect from current WiFi and connect to the new one.",
+            "Switch WiFi network.",
             PropertyList({
                 Property("ssid", kPropertyTypeString),
                 Property("password", kPropertyTypeString, std::string("")),
@@ -616,7 +614,7 @@ private:
                 }
             });
         mcp_server.AddTool("self.wifi.remove",
-            "Remove a saved WiFi network by index (0-based).",
+            "Remove saved WiFi by index.",
             PropertyList({
                 Property("index", kPropertyTypeInteger),
             }), [this](const PropertyList& properties) -> ReturnValue {
@@ -629,7 +627,7 @@ private:
                 }
             });
         mcp_server.AddTool("self.wifi.set_default",
-            "Set a saved WiFi network as default by index (0-based). This network will be tried first when connecting.",
+            "Set default saved WiFi by index.",
             PropertyList({
                 Property("index", kPropertyTypeInteger),
             }), [this](const PropertyList& properties) -> ReturnValue {

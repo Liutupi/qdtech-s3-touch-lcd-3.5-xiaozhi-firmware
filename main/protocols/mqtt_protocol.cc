@@ -115,8 +115,12 @@ bool MqttProtocol::SendText(const std::string& text) {
         return false;
     }
     if (!mqtt_->Publish(publish_topic_, text)) {
-        ESP_LOGE(TAG, "Failed to publish message: %s", text.c_str());
-        SetError(Lang::Strings::SERVER_ERROR);
+        const bool is_mcp_message = text.find("\"type\":\"mcp\"") != std::string::npos;
+        ESP_LOGW(TAG, "Failed to publish %s message, size=%u",
+                 is_mcp_message ? "MCP" : "text", static_cast<unsigned>(text.size()));
+        if (!is_mcp_message) {
+            SetError(Lang::Strings::SERVER_ERROR);
+        }
         return false;
     }
     return true;

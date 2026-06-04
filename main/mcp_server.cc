@@ -36,17 +36,14 @@ void McpServer::AddCommonTools() {
     auto& board = Board::GetInstance();
 
     AddTool("self.get_device_status",
-        "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\n"
-        "Use this tool for: \n"
-        "1. Answering questions about current condition (e.g. what is the current volume of the audio speaker?)\n"
-        "2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, etc.)",
+        "Get current device, audio, screen, battery, and network status.",
         PropertyList(),
         [&board](const PropertyList& properties) -> ReturnValue {
             return board.GetDeviceStatusJson();
         });
 
     AddTool("self.audio_speaker.set_volume", 
-        "Set the volume of the audio speaker. If the current volume is unknown, you must call `self.get_device_status` tool first and then call this tool.",
+        "Set speaker volume.",
         PropertyList({
             Property("volume", kPropertyTypeInteger, 0, 100)
         }), 
@@ -73,7 +70,7 @@ void McpServer::AddCommonTools() {
     auto display = board.GetDisplay();
     if (display && !display->GetTheme().empty()) {
         AddTool("self.screen.set_theme",
-            "Set the theme of the screen. The theme can be `light` or `dark`.",
+            "Set screen theme.",
             PropertyList({
                 Property("theme", kPropertyTypeString)
             }),
@@ -255,7 +252,7 @@ void McpServer::ReplyError(int id, const std::string& message) {
 }
 
 void McpServer::GetToolsList(int id, const std::string& cursor) {
-    const int max_payload_size = 8000;
+    const int max_payload_size = 1200;
     std::string json = "{\"tools\":[";
     
     bool found_cursor = cursor.empty();

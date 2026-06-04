@@ -74,6 +74,31 @@ Verification:
 - Rebuilt successfully with `cmake --build build-qdtech`.
 - Flashed successfully to COM13 at 921600 baud.
 
+## 2026-06-04: Restore XiaoZhi AI Stability After Photo/Radio Work
+
+Problem observed:
+
+- Entering XiaoZhi AI could reboot the board.
+- Backtrace resolved to `MqttProtocol::OpenAudioChannel()` -> `EspUdp::Connect()` -> `std::thread`, where UDP receive thread creation failed and C++ terminated the process.
+- MCP `tools/list` replies were large enough to cause repeated MQTT publish failures and `esp-aes: Failed to allocate memory`.
+- Each MCP publish failure triggered the generic network error alert, causing repeated speaker pops.
+
+Fix:
+
+- Reverted the risky radio streaming optimization commit.
+- Made `EspUdp::Connect()` catch `std::system_error` when creating the UDP receive thread and return `false` instead of aborting.
+- Reduced MCP `tools/list` page size and shortened common/QDTech MCP tool descriptions.
+- Treated MCP publish failures as warnings instead of user-facing audio alerts.
+- Made the photo slideshow task lazy-start only when the Photos page is opened.
+- Reduced radio task stack from 8192 to 6144 bytes.
+
+Verification:
+
+- Built successfully with `cmake --build build-qdtech`.
+- Flashed successfully to COM13 at 921600 baud.
+- XiaoZhi AI reached `STATE: listening` and `STATE: speaking`.
+- Serial log showed XiaoZhi replies including `你好，小志。` and no reboot.
+
 ## 2026-06-04: Add Local Calendar Month View
 
 Scope:

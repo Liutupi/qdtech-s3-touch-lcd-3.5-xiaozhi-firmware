@@ -76,7 +76,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Reads JPG/JPEG files from `/sdcard/photos`.
   - Uses SDMMC 4-bit bus from the product specification.
   - Cross-fades between decoded photos.
-  - Pauses decoding when leaving the Photos page.
+  - Photo task lazy-starts only when opening Photos, so XiaoZhi keeps internal SRAM headroom.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Weather location MCP tool: `self.weather.set_location`.
@@ -140,6 +140,7 @@ For photos:
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
+- MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - No release packaging or OTA artifact process is defined in this handoff set.

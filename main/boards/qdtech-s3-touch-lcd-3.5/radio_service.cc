@@ -97,7 +97,7 @@ void RadioService::Start(DesktopUI* desktop_ui) {
     });
     xTaskCreate([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
-    }, "radio_service", 8192, this, 4, nullptr);
+    }, "radio_service", 6144, this, 4, nullptr);
     SetUi("Ready", "Tap Play");
 }
 
