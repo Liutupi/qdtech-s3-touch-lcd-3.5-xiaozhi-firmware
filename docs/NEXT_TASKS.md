@@ -16,9 +16,25 @@ This list is intentionally ordered. Future work should start at the top unless t
 - Re-verify radio playback through the actual board speaker.
 - Re-verify touch tap/swipe after display or UI coordinate changes.
 - Re-verify weather failure behavior with network disconnected or API failure.
+- Re-verify Chinese daily-card wrapping after adding any new festival, history, or quote text.
 - Record the COM port, commit hash, and important logs in future changelog entries.
 
-## Priority 2: Audio Focus Hardening
+## Priority 2: Daily Card Content Growth
+
+Current state:
+
+- Main-page daily card is date-linked and local/offline.
+- Content priority is festival, then history-on-this-day, then daily quote.
+- Current Chinese rendering uses generated LXGW WenKai 16 px and 20 px subset fonts.
+
+Next work:
+
+- Expand the festival and history tables gradually.
+- Decide whether lunar festivals should be calculated locally or loaded from a data file.
+- Regenerate `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c` whenever new Chinese glyphs are introduced.
+- Keep body text short enough for the 438x94 main-page card.
+
+## Priority 3: Audio Focus Hardening
 
 Current state:
 
@@ -34,7 +50,7 @@ Next work:
 - Add logs for every focus owner transition.
 - Verify repeated play/pause/stop calls remain idempotent.
 
-## Priority 3: Radio Stability
+## Priority 4: Radio Stability
 
 Current state:
 
@@ -50,7 +66,7 @@ Next work:
 - Add diagnostics for transport type and content type when a station fails.
 - Add a simple user-visible error state for repeated reconnect failure.
 
-## Priority 4: Touch Input Migration
+## Priority 5: Touch Input Migration
 
 Current state:
 
@@ -66,7 +82,7 @@ Next work:
 - Test edge coordinates in all four corners of the landscape display.
 - Check release handling and long press behavior before removing manual dispatch.
 
-## Priority 5: Display Refresh
+## Priority 6: Display Refresh
 
 Current state:
 
@@ -80,7 +96,7 @@ Next work:
 - Consider smaller dirty-region updates if they do not break orientation.
 - Avoid large display-driver rewrites until hardware-visible behavior is captured.
 
-## Priority 6: Settings And UI Growth
+## Priority 7: Settings And UI Growth
 
 Only start after the stability base is boring and repeatable.
 

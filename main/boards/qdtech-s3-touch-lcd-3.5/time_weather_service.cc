@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstdio>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -64,39 +65,103 @@ static void LoadWeatherLocation(WeatherLocation* location) {
     }
 }
 
-static const char* DAILY_QUOTES[] = {
-    "Stay patient and trust your next small step.",
-    "Make today lighter, clearer, and a little braver.",
-    "A calm mind turns hard work into steady progress.",
-    "Do the useful thing first; confidence follows.",
-    "Small wins compound when you keep showing up.",
-    "The day opens when attention becomes simple.",
-    "Less noise, more signal, one good move at a time.",
-    "What you build with care keeps working for you.",
-    "Begin before it feels perfect.",
-    "Clarity is made by moving, not waiting.",
-    "A focused hour can change the shape of the day.",
-    "Keep the promise small enough to keep.",
-    "Good work is quiet before it is obvious.",
-    "Choose the next honest action.",
-    "Energy follows direction.",
-    "Steady is faster than scattered.",
-    "Leave the page better than you found it.",
-    "The future likes prepared hands.",
-    "One clean decision clears a crowded room.",
-    "Build the rhythm, then let the rhythm carry you.",
-    "You do not need more pressure; you need a clearer path.",
-    "Attention is the first form of care.",
-    "Progress often sounds like a quiet yes.",
-    "Make room for the better version to arrive.",
-    "The work becomes easier when the next step is visible.",
-    "Trust repetition. It is how skill learns your name.",
-    "A good day starts by removing one needless thing.",
-    "Let the simple thing be enough to begin.",
-    "Direction beats intensity when the road is long.",
-    "Your next step is allowed to be modest.",
-    "Keep your standards high and your breath slow.",
+struct FestivalEntry {
+    uint8_t month;
+    uint8_t day;
+    const char* title;
+    const char* text;
 };
+
+struct HistoryEntry {
+    uint8_t month;
+    uint8_t day;
+    const char* year;
+    const char* text;
+};
+
+static const FestivalEntry FESTIVALS[] = {
+    {1, 1, "元旦", "新的一年，愿你日日有光。"},
+    {3, 8, "妇女节", "愿她们自在生长，温柔而有力量。"},
+    {3, 12, "植树节", "种下一点绿色，也种下一点希望。"},
+    {5, 1, "劳动节", "向认真生活的人致敬。"},
+    {5, 4, "青年节", "愿热爱不老，脚步不停。"},
+    {6, 1, "儿童节", "愿童心常在，眼里有光。"},
+    {7, 1, "建党节", "初心如磐，步履向前。"},
+    {8, 1, "建军节", "山河有守，万家灯火。"},
+    {9, 10, "教师节", "一支粉笔，点亮许多远方。"},
+    {10, 1, "国庆节", "山河锦绣，家国同庆。"},
+    {12, 25, "圣诞节", "愿冬夜有暖，心中有光。"},
+};
+
+static const HistoryEntry HISTORY_TODAY[] = {
+    {1, 1, "1912", "中华民国临时政府成立。"},
+    {3, 12, "1925", "孙中山先生逝世。"},
+    {4, 12, "1961", "加加林进入太空。"},
+    {5, 4, "1919", "五四运动爆发。"},
+    {6, 5, "1972", "联合国人类环境会议开幕。"},
+    {7, 20, "1969", "人类首次登上月球。"},
+    {9, 10, "1985", "中国第一个教师节。"},
+    {10, 1, "1949", "中华人民共和国成立。"},
+};
+
+static const char* DAILY_QUOTES[] = {
+    "把眼前的小事做好，日子自然会发光。",
+    "慢慢来，也是在向前。",
+    "今天也要认真吃饭，认真生活。",
+    "心里有光，路就不算远。",
+    "先完成，再慢慢变好。",
+    "把复杂留给系统，把温柔留给自己。",
+    "愿你有耐心，也有锋芒。",
+    "安静努力的人，终会被时间看见。",
+    "每一次稳定，都是未来的底座。",
+    "不必追赶所有风，只要守住方向。",
+    "把今天过清楚，就是很好的答案。",
+    "小步不停，也会走到远方。",
+    "愿你的热爱，有处安放。",
+    "清醒一点，松弛一点，继续一点。",
+    "生活会奖励认真修补的人。",
+    "今天的好心情，从少一点杂音开始。",
+};
+
+static const FestivalEntry* FindFestival(int month, int day) {
+    for (const auto& entry : FESTIVALS) {
+        if (entry.month == month && entry.day == day) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+static const HistoryEntry* FindHistoryToday(int month, int day) {
+    for (const auto& entry : HISTORY_TODAY) {
+        if (entry.month == month && entry.day == day) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+static void BuildDailyCardText(const tm& info, char* title, size_t title_size,
+                               char* body, size_t body_size) {
+    const int month = info.tm_mon + 1;
+    const int day = info.tm_mday;
+
+    if (const FestivalEntry* festival = FindFestival(month, day)) {
+        snprintf(title, title_size, "%s", festival->title);
+        snprintf(body, body_size, "%s", festival->text);
+        return;
+    }
+
+    if (const HistoryEntry* history = FindHistoryToday(month, day)) {
+        snprintf(title, title_size, "%s", "历史上的今天");
+        snprintf(body, body_size, "%s · %s", history->year, history->text);
+        return;
+    }
+
+    const size_t quote_count = sizeof(DAILY_QUOTES) / sizeof(DAILY_QUOTES[0]);
+    snprintf(title, title_size, "%s", "今日一句");
+    snprintf(body, body_size, "%s", DAILY_QUOTES[info.tm_yday % quote_count]);
+}
 
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
@@ -261,8 +326,14 @@ void TimeWeatherService::UpdateTime() {
     // 每日金句
     if (info.tm_yday != last_quote_yday_) {
         last_quote_yday_ = info.tm_yday;
-        const size_t quote_count = sizeof(DAILY_QUOTES) / sizeof(DAILY_QUOTES[0]);
-        SetDailyQuoteSafe(DAILY_QUOTES[info.tm_yday % quote_count]);
+        char daily_date[16];
+        char daily_title[48];
+        char daily_body[128];
+        snprintf(daily_date, sizeof(daily_date), "%02d/%02d", info.tm_mon + 1, info.tm_mday);
+        BuildDailyCardText(info, daily_title, sizeof(daily_title), daily_body, sizeof(daily_body));
+        ESP_LOGI(TAG, "Daily card updated for %04d-%02d-%02d", info.tm_year + 1900,
+                 info.tm_mon + 1, info.tm_mday);
+        SetDailyCardSafe(daily_date, daily_title, daily_body);
     }
 }
 
@@ -403,6 +474,16 @@ void TimeWeatherService::SetDailyQuoteSafe(const char* quote) {
     }
     if (lvgl_port_lock(100)) {
         desktop_ui_->SetDailyQuote(quote);
+        lvgl_port_unlock();
+    }
+}
+
+void TimeWeatherService::SetDailyCardSafe(const char* date, const char* title, const char* body) {
+    if (!desktop_ui_) {
+        return;
+    }
+    if (lvgl_port_lock(100)) {
+        desktop_ui_->SetDailyCard(date, title, body);
         lvgl_port_unlock();
     }
 }

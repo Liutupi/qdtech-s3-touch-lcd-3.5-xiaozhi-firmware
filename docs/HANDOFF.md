@@ -39,7 +39,7 @@ Last verified on 2026-06-05 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-05 photo SD scan and pure full-screen slideshow update
+- Last verified update: 2026-06-06 weather visuals and Chinese daily-card layout update
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -55,6 +55,8 @@ Observed boot/runtime facts after flashing:
 - Application reached `STATE: idle`.
 - XiaoZhi AI chat was tested after the stability repair: the device entered `STATE: listening`, opened the audio channel, reached `STATE: speaking`, and did not reboot during the verified test.
 - SNTP time synchronization completed.
+- Daily card updated after SNTP sync and rendered date-linked Chinese content with embedded LXGW WenKai subset fonts.
+- Weather visual mapping updated after weather fetch; captured log showed cloudy visual mapping for Open-Meteo code `1`.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
@@ -77,6 +79,8 @@ Important 2026-06-05 stability finding:
 - Local Calendar page with month grid, Today, Prev, and Next controls.
 - Local Photos page replacing the previous Weather app tile, reading JPEG photos from common SD directories and playing them as a pure full-screen slideshow.
 - Time and weather service.
+- Main-page daily card with date-linked festival, history-on-this-day, and local quote fallback content.
+- Embedded LXGW WenKai LVGL subset fonts for the current daily-card Chinese text.
 - MP3 network radio service.
 - MCP tools for weather location and radio controls.
 - Lightweight audio focus behavior so XiaoZhi states can pause the radio.
@@ -103,6 +107,8 @@ Short version:
 - Do not declare radio or touch fixed from a compile result alone. Hardware logs matter.
 - Do not let optional features such as Photos, Radio, or MCP tools consume enough internal SRAM to break XiaoZhi audio-channel creation.
 - Do not remove the tracked `managed_components/78__esp-ml307/esp_udp.cc` hotfix unless the equivalent behavior is moved into a maintained component patch or upstream update.
+- Do not add new Chinese daily-card strings without regenerating both tracked LXGW WenKai subset fonts.
+- Do not commit `.codex_tmp/` or the full LXGW WenKai TTF used only for local font generation.
 
 ## How To Continue Development
 

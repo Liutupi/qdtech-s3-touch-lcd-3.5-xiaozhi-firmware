@@ -36,6 +36,7 @@ private:
     void SetWeatherSafe(const char* temperature, const char* summary, int weather_code);
     void SetNetworkStatusSafe(const char* status);
     void SetDailyQuoteSafe(const char* quote);
+    void SetDailyCardSafe(const char* date, const char* title, const char* body);
     
     static const char* WeekdayName(int wday);
     static const char* WeatherDesc(int code);

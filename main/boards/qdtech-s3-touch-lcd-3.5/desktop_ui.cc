@@ -18,6 +18,8 @@ LV_FONT_DECLARE(lv_font_montserrat_14);
 LV_FONT_DECLARE(lv_font_montserrat_16);
 LV_FONT_DECLARE(lv_font_montserrat_20);
 LV_FONT_DECLARE(lv_font_montserrat_48);
+LV_FONT_DECLARE(qd_font_lxgw_16);
+LV_FONT_DECLARE(qd_font_lxgw_20);
 
 // Color palette
 static constexpr lv_color_t COLOR_BG = LV_COLOR_MAKE(0x00, 0x00, 0x00);
@@ -82,6 +84,17 @@ static lv_obj_t* bar(lv_obj_t* parent, int16_t w, int16_t h, lv_color_t color, l
     lv_obj_set_style_bg_opa(obj, opa, 0);
     add_gesture_bubble(obj);
     return obj;
+}
+
+static void set_weather_part_visible(lv_obj_t* obj, bool visible) {
+    if (!obj) {
+        return;
+    }
+    if (visible) {
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 static bool is_leap_year(int year) {
@@ -675,22 +688,38 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_obj_t* title = label_en(panel, "Weather", &style_muted);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 12, 8);
 
-    // Sun
-    lv_obj_t* sun = circle(panel, 54, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(sun, LV_ALIGN_TOP_LEFT, 56, 32);
+    // Weather icon pieces are reused for all weather codes to keep the main page light.
+    weather_sun_ = circle(panel, 54, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 56, 28);
 
     // Clouds
-    lv_obj_t* cloud_a = circle(panel, 38, COLOR_CREAM, LV_OPA_30);
-    lv_obj_align(cloud_a, LV_ALIGN_TOP_LEFT, 48, 66);
-    lv_obj_t* cloud_b = circle(panel, 46, COLOR_CREAM, LV_OPA_30);
-    lv_obj_align(cloud_b, LV_ALIGN_TOP_LEFT, 76, 58);
-    lv_obj_t* cloud_c = bar(panel, 80, 26, COLOR_CREAM, LV_OPA_30);
-    lv_obj_align(cloud_c, LV_ALIGN_TOP_LEFT, 48, 82);
+    weather_cloud_[0] = circle(panel, 38, COLOR_CREAM, LV_OPA_70);
+    lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 42, 60);
+    weather_cloud_[1] = circle(panel, 46, COLOR_CREAM, LV_OPA_80);
+    lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 72, 52);
+    weather_cloud_[2] = bar(panel, 88, 26, COLOR_CREAM, LV_OPA_80);
+    lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 40, 78);
 
-    // Sun animation
+    for (int i = 0; i < 3; ++i) {
+        weather_rain_[i] = bar(panel, 4, 20, COLOR_BLUE, LV_OPA_80);
+        lv_obj_align(weather_rain_[i], LV_ALIGN_TOP_LEFT, 55 + i * 22, 100);
+        lv_obj_set_style_transform_rotation(weather_rain_[i], 180, 0);
+
+        weather_snow_[i] = circle(panel, 8, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_align(weather_snow_[i], LV_ALIGN_TOP_LEFT, 54 + i * 24, 104);
+    }
+
+    weather_storm_[0] = bar(panel, 10, 32, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(weather_storm_[0], LV_ALIGN_TOP_LEFT, 84, 92);
+    lv_obj_set_style_transform_rotation(weather_storm_[0], 250, 0);
+    weather_storm_[1] = bar(panel, 10, 26, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(weather_storm_[1], LV_ALIGN_TOP_LEFT, 72, 112);
+    lv_obj_set_style_transform_rotation(weather_storm_[1], 250, 0);
+
+    // Shared weather pulse animation
     lv_anim_t anim;
     lv_anim_init(&anim);
-    lv_anim_set_var(&anim, sun);
+    lv_anim_set_var(&anim, weather_sun_);
     lv_anim_set_values(&anim, LV_OPA_40, LV_OPA_COVER);
     lv_anim_set_time(&anim, 1600);
     lv_anim_set_playback_time(&anim, 1600);
@@ -700,32 +729,49 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
 
     weather_temp_label_ = label_en(panel, "-- C", &style_en);
     lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(weather_temp_label_, LV_ALIGN_BOTTOM_LEFT, 12, -27);
+    lv_obj_set_width(weather_temp_label_, 142);
+    lv_label_set_long_mode(weather_temp_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 12, 108);
 
     weather_meta_label_ = label_en(panel, "Weather pending", &style_green);
     lv_obj_set_width(weather_meta_label_, 142);
     lv_label_set_long_mode(weather_meta_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(weather_meta_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(weather_meta_label_, LV_ALIGN_BOTTOM_LEFT, 12, -10);
+    lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 12, 132);
+
+    ApplyWeatherVisual(-1);
 }
 
 void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     lv_obj_t* panel = CreatePanel(parent, 438, 94, 20, 214);
 
-    lv_obj_t* title = label_en(panel, "Quote", &style_gold);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 16, 9);
+    daily_card_date_label_ = label_en(panel, "--/--", &style_gold);
+    lv_obj_set_width(daily_card_date_label_, 82);
+    lv_obj_set_style_text_align(daily_card_date_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(daily_card_date_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
 
-    quote_label_ = label_en(panel, "Every sunrise is a fresh chance to begin again.", &style_en);
-    lv_obj_set_width(quote_label_, 405);
+    daily_card_title_label_ = label_en(panel, "今日", &style_muted);
+    lv_obj_set_width(daily_card_title_label_, 82);
+    lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_16, 0);
+    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
+
+    lv_obj_t* divider = bar(panel, 2, 62, COLOR_LINE, LV_OPA_COVER);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 112, 16);
+
+    quote_label_ = label_en(panel, "正在同步今日卡片", &style_en);
+    lv_obj_set_width(quote_label_, 286);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(quote_label_, &lv_font_montserrat_16, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 16, 32);
+    lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 132, 14);
 
     network_status_label_ = label_en(panel, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, 405);
+    lv_obj_set_width(network_status_label_, 286);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 16, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 132, -7);
 }
 
 // ===== Apps page =====
@@ -1620,16 +1666,61 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
     lv_anim_start(&fade_out);
 }
 
+void DesktopUI::ApplyWeatherVisual(int weather_code) {
+    const bool is_clear = weather_code == 0;
+    const bool is_cloud = weather_code == 1 || weather_code == 2 || weather_code == 3 ||
+                          weather_code == 45 || weather_code == 48 || weather_code < 0;
+    const bool is_rain = (weather_code >= 51 && weather_code <= 67) ||
+                         (weather_code >= 80 && weather_code <= 82);
+    const bool is_snow = weather_code >= 71 && weather_code <= 77;
+    const bool is_storm = weather_code >= 95;
+
+    set_weather_part_visible(weather_sun_, is_clear || weather_code == 1 || weather_code == 2);
+    if (weather_sun_) {
+        lv_obj_set_style_opa(weather_sun_, is_clear ? LV_OPA_COVER : LV_OPA_50, 0);
+    }
+
+    const bool show_cloud = is_cloud || is_rain || is_snow || is_storm;
+    for (auto* cloud : weather_cloud_) {
+        set_weather_part_visible(cloud, show_cloud);
+    }
+
+    for (auto* rain : weather_rain_) {
+        set_weather_part_visible(rain, is_rain || is_storm);
+    }
+    for (auto* snow : weather_snow_) {
+        set_weather_part_visible(snow, is_snow);
+    }
+    for (auto* storm : weather_storm_) {
+        set_weather_part_visible(storm, is_storm);
+    }
+
+    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d storm=%d",
+             weather_code, is_clear, show_cloud, is_rain, is_snow, is_storm);
+}
+
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {
     if (!weather_temp_label_ || !weather_meta_label_) return;
     lv_label_set_text(weather_temp_label_, temperature ? temperature : "-- C");
     lv_label_set_text(weather_meta_label_, summary ? summary : "Weather pending");
-    (void)weather_code;
+    ApplyWeatherVisual(weather_code);
 }
 
 void DesktopUI::SetDailyQuote(const char* quote) {
     if (!quote_label_ || !quote) return;
     lv_label_set_text(quote_label_, quote);
+}
+
+void DesktopUI::SetDailyCard(const char* date, const char* title, const char* body) {
+    if (daily_card_date_label_ && date) {
+        lv_label_set_text(daily_card_date_label_, date);
+    }
+    if (daily_card_title_label_ && title) {
+        lv_label_set_text(daily_card_title_label_, title);
+    }
+    if (quote_label_ && body) {
+        lv_label_set_text(quote_label_, body);
+    }
 }
 
 void DesktopUI::SetNetworkStatus(const char* status) {

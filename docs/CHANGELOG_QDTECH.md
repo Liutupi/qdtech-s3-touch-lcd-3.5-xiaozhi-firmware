@@ -2,6 +2,50 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-06: Weather Visuals And Chinese Daily Card
+
+Scope:
+
+- Improved the main-page weather card so Open-Meteo weather codes select clear, cloudy, rain, snow, and storm visuals instead of always showing the sunny icon.
+- Adjusted weather temperature and detail label positions to avoid overlap.
+- Replaced the English quote card content flow with a date-linked daily card.
+- Daily card priority is now fixed Gregorian festival first, history-on-this-day second, and local daily quote fallback third.
+- Added embedded LXGW WenKai 16 px and 20 px LVGL subset fonts for the current Chinese daily-card text.
+- Laid out the daily card as left-side date/category and right-side larger Chinese body text to use the full card width.
+- Kept the font source TTF out of Git; only generated LVGL subset C files are tracked.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" reconfigure build
+idf.py -B build-qdtech -p COM13 -b 921600 flash
+```
+
+Build result:
+
+- Build completed successfully after reconfigure so the new generated font C files were included.
+- `xiaozhi.bin` size: `0x3c0c10`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x23f3f0` bytes, about 37%.
+
+Hardware/runtime verification on COM13:
+
+- Firmware flashed successfully at 921600 baud.
+- Boot reached `Desktop UI created`.
+- Application reached `STATE: idle`.
+- SNTP synchronized.
+- Daily card logged `Daily card updated for 2026-06-06`.
+- Weather card logged a cloudy visual mapping for weather code `1`.
+- Weather fetch completed for Zhongshan with temperature and cached update time.
+- No panic, abort, or Guru Meditation was observed in the captured startup log.
+
+Maintainer notes:
+
+- If new Chinese daily-card text is added, regenerate both `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c` so all glyphs exist.
+- Do not commit `.codex_tmp/`; it only held the temporary LXGW WenKai TTF used to generate the subset fonts.
+- The historical-events table is intentionally small for this phase. Expand it gradually and verify card wrapping on the real 480x320 screen.
+
 ## 2026-06-05: Finish MicroSD Full-Screen Photo Slideshow
 
 Scope:

@@ -25,6 +25,7 @@ public:
     void SetTime(int hour, int minute, int year, int month, int day, const char* weekday);
     void SetWeather(const char* temperature, const char* summary, int weather_code);
     void SetDailyQuote(const char* quote);
+    void SetDailyCard(const char* date, const char* title, const char* body);
     void SetNetworkStatus(const char* status);
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
@@ -58,8 +59,15 @@ private:
     lv_obj_t* colon_label_ = nullptr;
     lv_obj_t* date_label_ = nullptr;
     lv_obj_t* week_label_ = nullptr;
+    lv_obj_t* weather_sun_ = nullptr;
+    lv_obj_t* weather_cloud_[3] = {};
+    lv_obj_t* weather_rain_[3] = {};
+    lv_obj_t* weather_snow_[3] = {};
+    lv_obj_t* weather_storm_[2] = {};
     lv_obj_t* weather_temp_label_ = nullptr;
     lv_obj_t* weather_meta_label_ = nullptr;
+    lv_obj_t* daily_card_date_label_ = nullptr;
+    lv_obj_t* daily_card_title_label_ = nullptr;
     lv_obj_t* quote_label_ = nullptr;
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
@@ -142,6 +150,7 @@ private:
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
     void RenderCalendar();
+    void ApplyWeatherVisual(int weather_code);
 
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);

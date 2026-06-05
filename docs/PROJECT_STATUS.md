@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-05
+Date: 2026-06-06
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -82,6 +82,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Photo task lazy-starts only when opening Photos, so XiaoZhi keeps internal SRAM headroom.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
+- Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.
+- Main-page daily card uses embedded LXGW WenKai subset fonts and rotates date-linked local content:
+  - fixed Gregorian festival first
+  - history-on-this-day second
+  - daily quote fallback third
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
 - Radio MCP tools:
@@ -104,6 +109,8 @@ After flashing, look for these logs:
 - AFE/wake word startup.
 - `Application: STATE: idle`
 - `TimeWeather: Time synchronized`
+- `TimeWeather: Daily card updated for YYYY-MM-DD`
+- `DesktopUI: Weather visual code=...`
 
 For radio/audio focus:
 
@@ -116,6 +123,8 @@ For weather:
 
 - Network/API failure should not crash the app.
 - If previous weather exists, UI should keep cached data and log cached use.
+- Weather visuals should change with Open-Meteo weather codes instead of always showing the clear/sun state.
+- Daily card should render Chinese text without missing glyph boxes or mojibake.
 
 For calendar:
 
@@ -142,6 +151,8 @@ For photos:
 - Display flush still rotates/copies into the physical panel path and can log slow flushes.
 - Radio currently supports direct MP3 streams. HLS/AAC should be treated as future work.
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.
+- Daily-card festival/history data is currently a small built-in table, not a full calendar database.
+- The daily-card Chinese font is an embedded subset; adding new Chinese text requires regenerating `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c`.
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
