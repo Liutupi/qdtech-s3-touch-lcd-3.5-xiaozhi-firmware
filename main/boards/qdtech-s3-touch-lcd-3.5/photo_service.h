@@ -11,6 +11,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <esp_err.h>
 #include <sdmmc_cmd.h>
 
 class PhotoService {
@@ -31,6 +32,9 @@ private:
     std::atomic<bool> active_{false};
     std::atomic<bool> refresh_requested_{false};
     bool mounted_ = false;
+    esp_err_t last_mount_error_ = ESP_OK;
+    uint8_t last_mount_width_ = 0;
+    uint32_t mount_attempts_ = 0;
     sdmmc_card_t* card_ = nullptr;
     std::vector<std::string> photos_;
     size_t current_index_ = 0;
@@ -41,7 +45,9 @@ private:
     void EnsureTaskStarted();
     void TaskLoop();
     bool MountSdCard();
+    bool TryMountSdCard(uint8_t width, int max_freq_khz);
     bool ScanPhotos();
+    void ScanPhotoDir(const char* dir_path);
     bool DecodePhoto(const std::string& path, Frame& frame, uint16_t& width, uint16_t& height);
     void FreeFrame(Frame& frame);
     void ClearFrames();

@@ -39,7 +39,7 @@ Last verified on 2026-06-05 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified stability commit: `5b58b22 restore QDTech XiaoZhi chat stability`
+- Last verified update: 2026-06-05 photo SD scan and pure full-screen slideshow update
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -58,6 +58,7 @@ Observed boot/runtime facts after flashing:
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
+- Photos were verified on hardware after the SD scan and display fixes: the slideshow reads the prepared MicroSD photos, colors render normally, images fill the 480x320 screen, no text controls are shown, and left/right swipe exits back to Apps.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
 Important 2026-06-05 stability finding:
@@ -74,7 +75,7 @@ Important 2026-06-05 stability finding:
 - CST9217/TDDI touch polling with tap/swipe dispatch.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
 - Local Calendar page with month grid, Today, Prev, and Next controls.
-- Local Photos page replacing the previous Weather app tile, reading JPEG photos from `/sdcard/photos`.
+- Local Photos page replacing the previous Weather app tile, reading JPEG photos from common SD directories and playing them as a pure full-screen slideshow.
 - Time and weather service.
 - MP3 network radio service.
 - MCP tools for weather location and radio controls.

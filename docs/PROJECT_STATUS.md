@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-04
+Date: 2026-06-05
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -73,8 +73,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Calendar month view with Today, Prev, Next, today highlight, weekend coloring, and previous/next month filler days.
 - Photo slideshow page from MicroSD card:
   - Apps tile `Photos` replaces the previous Weather app tile.
-  - Reads JPG/JPEG files from `/sdcard/photos`.
-  - Uses SDMMC 4-bit bus from the product specification.
+  - Reads JPG/JPEG files from `/sdcard/photos`, `/sdcard/PHOTOS`, `/sdcard/Photos`, `/sdcard/PHOTOS_READY`, `/sdcard/photos_ready`, or the SD root.
+  - Skips macOS resource files such as `._001.jpg`.
+  - Uses SDMMC 4-bit bus from the product specification, with a 1-bit low-speed fallback if 4-bit mount fails.
+  - Displays photos as a pure full-screen 480x320 slideshow with no status bar, Back button, Refresh button, or text overlay.
+  - Exits the photo page with either left or right swipe back to Apps.
   - Cross-fades between decoded photos.
   - Photo task lazy-starts only when opening Photos, so XiaoZhi keeps internal SRAM headroom.
 - Time display through SNTP.
@@ -125,12 +128,13 @@ For calendar:
 
 For photos:
 
-- Put JPG files under `/photos` on a FAT-formatted MicroSD card.
+- Put baseline JPG/JPEG files under `/photos` or `/PHOTOS` on a FAT-formatted MicroSD card.
+- For best results, use 480x320 landscape JPG files with simple ASCII filenames such as `001.jpg`.
 - Swipe left from the main page to Apps.
 - Tap Photos tile.
 - Logs should show `PhotoService` SD mount and photo scan results.
-- Photos should loop with a soft fade between images.
-- Back or right swipe should pause the slideshow and return to Apps.
+- Photos should loop full-screen with a soft fade between images and no visible text controls.
+- Left or right swipe should pause the slideshow and return to Apps.
 
 ## Known Limitations
 
@@ -143,4 +147,5 @@ For photos:
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
+- The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - No release packaging or OTA artifact process is defined in this handoff set.

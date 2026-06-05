@@ -2,6 +2,42 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-05: Finish MicroSD Full-Screen Photo Slideshow
+
+Scope:
+
+- Made the Photos page a pure full-screen slideshow with no title, status bar, Back button, Refresh button, hint text, or status text overlay.
+- Added left-swipe and right-swipe exit from Photos back to Apps.
+- Expanded photo scanning to common SD directory names: `/photos`, `/PHOTOS`, `/Photos`, `/PHOTOS_READY`, `/photos_ready`, and the SD root.
+- Skips hidden/macOS resource files such as `._001.jpg`.
+- Added SDMMC mount fallback from 4-bit default speed to 1-bit 10 MHz when 4-bit mount fails.
+- Added clearer SD mount and photo directory scan logs.
+- Fixed JPEG RGB565 color output by disabling the extra JPEG byte swap.
+- Changed photo scaling to cover the full 480x320 landscape screen.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build
+idf.py -B build-qdtech -p COM13 -b 921600 flash
+```
+
+Build result:
+
+- Build completed successfully.
+- `xiaozhi.bin` size: `0x3af950`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2506b0` bytes, about 39%.
+
+Hardware/user verification:
+
+- SD card mounted and photos displayed.
+- Photo colors were confirmed normal after disabling JPEG byte swap.
+- Photos were confirmed full-screen.
+- Visible Photos page text and buttons were removed.
+- Photos page exits with left or right swipe.
+
 ## 2026-06-04: Project Handoff Notebook
 
 Scope:

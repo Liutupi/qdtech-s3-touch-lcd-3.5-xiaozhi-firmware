@@ -1,5 +1,6 @@
 #include "desktop_ui.h"
 #include "application.h"
+#include "config.h"
 
 #include <cstdio>
 #include <cstring>
@@ -301,14 +302,12 @@ static void radio_gesture_cb(lv_event_t* event) {
 static void photo_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
-    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
-        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    if (!indev || !g_desktop_ui) {
+        return;
     }
-}
-
-static void photo_refresh_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        g_desktop_ui->RequestPhotoRefresh();
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    if (dir == LV_DIR_RIGHT || dir == LV_DIR_LEFT) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
     }
 }
 
@@ -828,24 +827,11 @@ void DesktopUI::CreatePhotoPage(lv_obj_t* root) {
     lv_obj_add_event_cb(photo_page_, photo_gesture_cb, LV_EVENT_GESTURE, NULL);
     add_gesture_bubble(photo_page_);
 
-    lv_obj_t* brand = label_en(photo_page_, "XiaoZhi AI", &style_en);
-    lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
-
-    CreateStatusBar(photo_page_);
-
-    lv_obj_t* title = label_en(photo_page_, "Photos", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
-
-    lv_obj_t* sub = label_en(photo_page_, "SD Slideshow", &style_muted);
-    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 96, 53);
-
-    lv_obj_t* back = CreateButton(photo_page_, "Back", show_apps_cb);
-    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
-
-    lv_obj_t* frame = CreatePanel(photo_page_, 432, 178, 24, 84);
+    lv_obj_t* frame = CreatePanel(photo_page_, DISPLAY_WIDTH, DISPLAY_HEIGHT, 0, 0);
     lv_obj_set_style_bg_color(frame, LV_COLOR_MAKE(0x06, 0x06, 0x06), 0);
+    lv_obj_set_style_border_width(frame, 0, 0);
+    lv_obj_set_style_radius(frame, 0, 0);
+    lv_obj_move_background(frame);
 
     photo_image_a_ = lv_image_create(frame);
     photo_image_b_ = lv_image_create(frame);
@@ -855,27 +841,6 @@ void DesktopUI::CreatePhotoPage(lv_obj_t* root) {
     lv_obj_center(photo_image_b_);
     add_gesture_bubble(photo_image_a_);
     add_gesture_bubble(photo_image_b_);
-
-    photo_title_label_ = label_en(frame, "Photos", &style_gold);
-    lv_obj_set_style_text_font(photo_title_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(photo_title_label_, LV_ALIGN_CENTER, 0, -18);
-
-    photo_detail_label_ = label_en(frame, "Insert SD card with /photos/*.jpg", &style_muted);
-    lv_obj_set_width(photo_detail_label_, 392);
-    lv_label_set_long_mode(photo_detail_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(photo_detail_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(photo_detail_label_, LV_ALIGN_CENTER, 0, 16);
-
-    lv_obj_t* refresh = CreateButton(photo_page_, "Refresh", photo_refresh_cb);
-    lv_obj_align(refresh, LV_ALIGN_TOP_LEFT, 202, 270);
-
-    photo_refresh_label_ = label_en(photo_page_, "/sdcard/photos", &style_muted);
-    lv_obj_set_width(photo_refresh_label_, 180);
-    lv_label_set_long_mode(photo_refresh_label_, LV_LABEL_LONG_DOT);
-    lv_obj_align(photo_refresh_label_, LV_ALIGN_TOP_LEFT, 24, 276);
-
-    lv_obj_t* hint = label_en(photo_page_, "Swipe right: Apps", &style_muted);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
 // ===== Calendar page =====
@@ -1594,11 +1559,13 @@ void DesktopUI::RequestPhotoRefresh() {
 }
 
 void DesktopUI::SetPhotoState(const char* title, const char* detail) {
+    (void)title;
+    (void)detail;
     if (photo_title_label_) {
-        lv_label_set_text(photo_title_label_, title ? title : "Photos");
+        lv_obj_add_flag(photo_title_label_, LV_OBJ_FLAG_HIDDEN);
     }
     if (photo_detail_label_) {
-        lv_label_set_text(photo_detail_label_, detail ? detail : "/sdcard/photos");
+        lv_obj_add_flag(photo_detail_label_, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -1618,10 +1585,17 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
     lv_obj_t* prev = photo_show_a_ ? photo_image_a_ : photo_image_b_;
     photo_show_a_ = !photo_show_a_;
 
+    if (photo_title_label_) {
+        lv_obj_add_flag(photo_title_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (photo_detail_label_) {
+        lv_obj_add_flag(photo_detail_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+
     lv_image_set_src(next, image);
-    int32_t scale_x = image->header.w > 0 ? (430 * 256) / image->header.w : 256;
-    int32_t scale_y = image->header.h > 0 ? (176 * 256) / image->header.h : 256;
-    int32_t scale = LV_MIN(scale_x, scale_y);
+    int32_t scale_x = image->header.w > 0 ? (DISPLAY_WIDTH * 256) / image->header.w : 256;
+    int32_t scale_y = image->header.h > 0 ? (DISPLAY_HEIGHT * 256) / image->header.h : 256;
+    int32_t scale = LV_MAX(scale_x, scale_y);
     if (scale <= 0) {
         scale = 256;
     }

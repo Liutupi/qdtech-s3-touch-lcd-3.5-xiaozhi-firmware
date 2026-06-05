@@ -26,10 +26,20 @@
 namespace {
 constexpr const char* kMountPoint = "/sdcard";
 constexpr const char* kPhotoDir = "/sdcard/photos";
+constexpr const char* kPhotoDirs[] = {
+    "/sdcard/photos",
+    "/sdcard/PHOTOS",
+    "/sdcard/Photos",
+    "/sdcard/PHOTOS_READY",
+    "/sdcard/photos_ready",
+    "/sdcard",
+};
 constexpr size_t kMaxInputBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxOutputBytes = 960 * 640 * 2;
 constexpr TickType_t kSlideDelay = pdMS_TO_TICKS(6000);
 constexpr TickType_t kIdleDelay = pdMS_TO_TICKS(500);
+constexpr int kSdFreqDefaultKhz = SDMMC_FREQ_DEFAULT;
+constexpr int kSdFreqFallbackKhz = 10000;
 
 bool ends_with_photo_ext(const char* name) {
     if (!name) {
@@ -40,6 +50,13 @@ bool ends_with_photo_ext(const char* name) {
         return static_cast<char>(std::tolower(c));
     });
     return lower.ends_with(".jpg") || lower.ends_with(".jpeg");
+}
+
+bool is_hidden_or_resource_file(const char* name) {
+    if (!name || name[0] == '\0') {
+        return true;
+    }
+    return name[0] == '.' || (name[0] == '_' && name[1] == '.');
 }
 
 esp_jpeg_image_scale_t choose_scale(uint16_t width, uint16_t height) {
@@ -88,8 +105,14 @@ void PhotoService::EnsureTaskStarted() {
     if (task_handle_) {
         return;
     }
-    xTaskCreate(TaskWrapper, "photo_service", 6144, this, 2, &task_handle_);
-    ESP_LOGI(TAG, "photo service task started");
+    BaseType_t ret = xTaskCreate(TaskWrapper, "photo_service", 6144, this, 2, &task_handle_);
+    if (ret != pdPASS) {
+        task_handle_ = nullptr;
+        ESP_LOGE(TAG, "photo service task create failed ret=%ld", static_cast<long>(ret));
+        SetUiState("Photos unavailable", "Not enough memory");
+        return;
+    }
+    ESP_LOGI(TAG, "photo service task started stack=6144");
 }
 
 void PhotoService::TaskWrapper(void* arg) {
@@ -106,14 +129,18 @@ void PhotoService::TaskLoop() {
         }
 
         if (!MountSdCard()) {
-            SetUiState("SD card not ready", "Check MicroSD card");
+            char detail[96];
+            snprintf(detail, sizeof(detail), "mount err=%s try=%lu",
+                     esp_err_to_name(last_mount_error_),
+                     static_cast<unsigned long>(mount_attempts_));
+            SetUiState("SD card not ready", detail);
             vTaskDelay(pdMS_TO_TICKS(3000));
             continue;
         }
 
         if (refresh_requested_.exchange(false) || photos_.empty()) {
             if (!ScanPhotos()) {
-                SetUiState("No photos", "Put JPG files in /photos");
+                SetUiState("No photos", "Checked /photos and /PHOTOS");
                 vTaskDelay(pdMS_TO_TICKS(3000));
                 continue;
             }
@@ -158,17 +185,44 @@ bool PhotoService::MountSdCard() {
         return true;
     }
 
+    ++mount_attempts_;
+    last_mount_width_ = 0;
+    last_mount_error_ = ESP_OK;
+
+    if (TryMountSdCard(PHOTO_SDMMC_BUS_WIDTH, kSdFreqDefaultKhz)) {
+        return true;
+    }
+
+    if (PHOTO_SDMMC_BUS_WIDTH != 1) {
+        ESP_LOGW(TAG, "sd 4-bit mount failed, fallback to 1-bit low speed");
+        if (TryMountSdCard(1, kSdFreqFallbackKhz)) {
+            return true;
+        }
+    }
+
+    ESP_LOGW(TAG, "sd card not ready after attempt=%lu last_err=%s",
+             static_cast<unsigned long>(mount_attempts_), esp_err_to_name(last_mount_error_));
+    return false;
+}
+
+bool PhotoService::TryMountSdCard(uint8_t width, int max_freq_khz) {
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    host.max_freq_khz = max_freq_khz;
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
-    slot_config.width = PHOTO_SDMMC_BUS_WIDTH;
+    slot_config.width = width;
     slot_config.clk = PHOTO_SDMMC_CLK_PIN;
     slot_config.cmd = PHOTO_SDMMC_CMD_PIN;
     slot_config.d0 = PHOTO_SDMMC_D0_PIN;
-    slot_config.d1 = PHOTO_SDMMC_D1_PIN;
-    slot_config.d2 = PHOTO_SDMMC_D2_PIN;
-    slot_config.d3 = PHOTO_SDMMC_D3_PIN;
+    if (width >= 4) {
+        slot_config.d1 = PHOTO_SDMMC_D1_PIN;
+        slot_config.d2 = PHOTO_SDMMC_D2_PIN;
+        slot_config.d3 = PHOTO_SDMMC_D3_PIN;
+    } else {
+        slot_config.d1 = GPIO_NUM_NC;
+        slot_config.d2 = GPIO_NUM_NC;
+        slot_config.d3 = GPIO_NUM_NC;
+    }
     slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -179,20 +233,23 @@ bool PhotoService::MountSdCard() {
         .use_one_fat = false,
     };
 
-    ESP_LOGI(TAG, "mount sdmmc clk=%d cmd=%d d0=%d d1=%d d2=%d d3=%d width=%d",
+    ESP_LOGI(TAG, "mount sdmmc clk=%d cmd=%d d0=%d d1=%d d2=%d d3=%d width=%u freq=%d",
              PHOTO_SDMMC_CLK_PIN, PHOTO_SDMMC_CMD_PIN, PHOTO_SDMMC_D0_PIN,
-             PHOTO_SDMMC_D1_PIN, PHOTO_SDMMC_D2_PIN, PHOTO_SDMMC_D3_PIN,
-             PHOTO_SDMMC_BUS_WIDTH);
+             slot_config.d1, slot_config.d2, slot_config.d3, width, max_freq_khz);
     esp_err_t err = esp_vfs_fat_sdmmc_mount(kMountPoint, &host, &slot_config, &mount_config, &card_);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "sd card mount failed: %s", esp_err_to_name(err));
+        last_mount_error_ = err;
+        ESP_LOGW(TAG, "sd card mount failed width=%u freq=%d err=%s",
+                 width, max_freq_khz, esp_err_to_name(err));
         card_ = nullptr;
         return false;
     }
 
     mounted_ = true;
+    last_mount_width_ = width;
+    last_mount_error_ = ESP_OK;
     sdmmc_card_print_info(stdout, card_);
-    ESP_LOGI(TAG, "sd card mounted");
+    ESP_LOGI(TAG, "sd card mounted width=%u freq=%d", width, max_freq_khz);
     return true;
 }
 
@@ -200,25 +257,54 @@ bool PhotoService::ScanPhotos() {
     photos_.clear();
     current_index_ = 0;
 
-    DIR* dir = opendir(kPhotoDir);
-    if (!dir) {
-        ESP_LOGW(TAG, "open photo dir failed: %s", kPhotoDir);
-        return false;
+    for (const char* dir : kPhotoDirs) {
+        ScanPhotoDir(dir);
     }
-
-    struct dirent* entry = nullptr;
-    while ((entry = readdir(dir)) != nullptr) {
-        if (entry->d_type == DT_DIR || !ends_with_photo_ext(entry->d_name)) {
-            continue;
-        }
-        std::string path = std::string(kPhotoDir) + "/" + entry->d_name;
-        photos_.push_back(path);
-    }
-    closedir(dir);
 
     std::sort(photos_.begin(), photos_.end());
+    photos_.erase(std::unique(photos_.begin(), photos_.end()), photos_.end());
     ESP_LOGI(TAG, "photo scan found %u jpg files", static_cast<unsigned>(photos_.size()));
     return !photos_.empty();
+}
+
+void PhotoService::ScanPhotoDir(const char* dir_path) {
+    DIR* dir = opendir(dir_path);
+    if (!dir) {
+        ESP_LOGI(TAG, "skip photo dir: %s errno=%d %s", dir_path, errno, strerror(errno));
+        return;
+    }
+
+    uint32_t entries = 0;
+    uint32_t jpg_count = 0;
+    struct dirent* entry = nullptr;
+    while ((entry = readdir(dir)) != nullptr) {
+        ++entries;
+        if (is_hidden_or_resource_file(entry->d_name) || !ends_with_photo_ext(entry->d_name)) {
+            if (entries <= 12) {
+                ESP_LOGD(TAG, "skip photo entry dir=%s name=%s", dir_path, entry->d_name);
+            }
+            continue;
+        }
+
+        std::string path = std::string(dir_path) + "/" + entry->d_name;
+        struct stat st = {};
+        if (stat(path.c_str(), &st) != 0) {
+            ESP_LOGW(TAG, "photo candidate stat failed: %s errno=%d %s", path.c_str(), errno, strerror(errno));
+            continue;
+        }
+        if (S_ISDIR(st.st_mode) || st.st_size <= 0) {
+            continue;
+        }
+
+        photos_.push_back(path);
+        ++jpg_count;
+        if (jpg_count <= 5) {
+            ESP_LOGI(TAG, "photo candidate: %s size=%u", path.c_str(), static_cast<unsigned>(st.st_size));
+        }
+    }
+    closedir(dir);
+    ESP_LOGI(TAG, "photo dir scanned: %s entries=%lu jpg=%lu",
+             dir_path, static_cast<unsigned long>(entries), static_cast<unsigned long>(jpg_count));
 }
 
 bool PhotoService::DecodePhoto(const std::string& path, Frame& frame, uint16_t& width, uint16_t& height) {
@@ -262,7 +348,7 @@ bool PhotoService::DecodePhoto(const std::string& path, Frame& frame, uint16_t& 
         .out_format = JPEG_IMAGE_FORMAT_RGB565,
         .out_scale = JPEG_IMAGE_SCALE_0,
         .flags = {
-            .swap_color_bytes = 1,
+            .swap_color_bytes = 0,
         },
         .advanced = {
             .working_buffer = nullptr,
