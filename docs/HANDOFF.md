@@ -39,7 +39,7 @@ Last verified on 2026-06-13 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-13 unified desktop navigation and non-destructive Radio page exit
+- Last verified update: 2026-06-13 fixed Photos black screen caused by photo task stack allocation failure
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -68,6 +68,7 @@ Observed boot/runtime facts after flashing:
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
 - Photos were verified on hardware after the SD scan and display fixes: the slideshow reads the prepared MicroSD photos, colors render normally, images fill the 480x320 screen, no text controls are shown, and left/right swipe exits back to Apps.
+- PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
 Important 2026-06-05 stability finding:
@@ -114,6 +115,7 @@ Short version:
 - Do not assume another 3.5 inch ESP32-S3 board uses the same pins, touch chip, or display controller.
 - Do not declare radio or touch fixed from a compile result alone. Hardware logs matter.
 - Do not let optional features such as Photos, Radio, or MCP tools consume enough internal SRAM to break XiaoZhi audio-channel creation.
+- Do not create and hide duplicate LVGL layouts as a migration shortcut; remove obsolete objects after the replacement layout is proven.
 - Do not remove the tracked `managed_components/78__esp-ml307/esp_udp.cc` hotfix unless the equivalent behavior is moved into a maintained component patch or upstream update.
 - Do not add new Chinese daily-card strings without regenerating both tracked LXGW WenKai subset fonts.
 - Do not add new Chinese Focus Timer strings without regenerating both tracked LXGW WenKai subset fonts.

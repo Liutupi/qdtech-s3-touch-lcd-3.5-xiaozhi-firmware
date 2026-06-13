@@ -2,6 +2,41 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-13: Fix Black Photos Page After Settings Growth
+
+Problem:
+
+- Opening Photos showed a black screen.
+- Runtime logs proved the Photos page activated, but the lazy photo task failed to start:
+  - `PhotoService: photo service task create failed ret=-1`
+- The SD card and JPEG files were not the cause.
+
+Fix:
+
+- Removed the obsolete Settings controls that were still being created and then hidden behind the new Settings layout.
+- Moved the 6144-byte PhotoService task stack to PSRAM with an internal-memory fallback.
+- Added internal-memory and largest-free-block diagnostics around photo task creation.
+- Kept normal Photos behavior lazy: the task still starts only when Photos is opened.
+
+Verification:
+
+- Final firmware built successfully.
+- `xiaozhi.bin` size: `0x3c3c30`.
+- Final firmware flashed successfully to COM13 at 921600 baud.
+- A temporary, uncommitted boot self-test activated PhotoService and confirmed:
+  - task created with `memory=psram`
+  - SD card mounted in 4-bit mode at 20 MHz
+  - 53 JPG files found in the physical photos directory
+  - repeated 480x320 JPEG decode succeeded
+- The temporary auto-activation was removed before the final build and flash.
+- No panic, abort, or Guru Meditation appeared during the self-test.
+
+Maintainer notes:
+
+- Do not restore hidden duplicate Settings object trees; hidden LVGL objects still consume memory.
+- Keep optional service task stacks in PSRAM where the ESP-IDF configuration and workload permit it.
+- If task creation fails again, inspect both total internal SRAM and the largest contiguous internal block.
+
 ## 2026-06-13: Unify Desktop Navigation Rules
 
 Scope:

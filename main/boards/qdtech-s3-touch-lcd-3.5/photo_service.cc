@@ -18,6 +18,7 @@
 #include <esp_lvgl_port.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/idf_additions.h>
 #include <freertos/task.h>
 #include <jpeg_decoder.h>
 
@@ -105,14 +106,36 @@ void PhotoService::EnsureTaskStarted() {
     if (task_handle_) {
         return;
     }
-    BaseType_t ret = xTaskCreate(TaskWrapper, "photo_service", 6144, this, 2, &task_handle_);
+
+    constexpr uint32_t stack_size = 6144;
+    ESP_LOGI(TAG, "photo task create free_internal=%u largest_internal=%u",
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+
+    BaseType_t ret = xTaskCreateWithCaps(
+        TaskWrapper, "photo_service", stack_size, this, 2, &task_handle_,
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (ret == pdPASS) {
+        ESP_LOGI(TAG, "photo service task started stack=%u memory=psram",
+                 static_cast<unsigned>(stack_size));
+        return;
+    }
+
+    ESP_LOGW(TAG, "photo task PSRAM create failed ret=%ld, trying internal memory",
+             static_cast<long>(ret));
+    task_handle_ = nullptr;
+    ret = xTaskCreate(TaskWrapper, "photo_service", stack_size, this, 2, &task_handle_);
     if (ret != pdPASS) {
         task_handle_ = nullptr;
-        ESP_LOGE(TAG, "photo service task create failed ret=%ld", static_cast<long>(ret));
+        ESP_LOGE(TAG, "photo service task create failed ret=%ld free_internal=%u largest_internal=%u",
+                 static_cast<long>(ret),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
         SetUiState("Photos unavailable", "Not enough memory");
         return;
     }
-    ESP_LOGI(TAG, "photo service task started stack=6144");
+    ESP_LOGI(TAG, "photo service task started stack=%u memory=internal",
+             static_cast<unsigned>(stack_size));
 }
 
 void PhotoService::TaskWrapper(void* arg) {

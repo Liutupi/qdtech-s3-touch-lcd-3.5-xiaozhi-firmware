@@ -85,7 +85,8 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Displays photos as a pure full-screen 480x320 slideshow with no status bar, Back button, Refresh button, or text overlay.
   - Exits the photo page with either left or right swipe back to Apps.
   - Cross-fades between decoded photos.
-  - Photo task lazy-starts only when opening Photos, so XiaoZhi keeps internal SRAM headroom.
+  - Photo task lazy-starts only when opening Photos.
+  - Photo task stack is allocated from PSRAM first, with an internal-memory fallback and allocation diagnostics.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.
@@ -196,6 +197,7 @@ For photos:
 - Radio stations are still compiled into `radio_service.cc`.
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
+- PhotoService depends on `CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y`; retain this setting for the current PSRAM-backed task stack.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.

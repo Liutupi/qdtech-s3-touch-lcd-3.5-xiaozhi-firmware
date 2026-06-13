@@ -1343,67 +1343,6 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_t* back = CreateButton(settings_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
-    // WiFi Section Title
-    lv_obj_t* wifi_title = label_en(settings_page_, "WiFi Networks", &style_gold);
-    lv_obj_set_style_text_font(wifi_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(wifi_title, LV_ALIGN_TOP_LEFT, 24, 82);
-
-    // WiFi list panel
-    lv_obj_t* list_panel = lv_obj_create(settings_page_);
-    lv_obj_add_style(list_panel, &style_panel, 0);
-    lv_obj_set_size(list_panel, 438, 160);
-    lv_obj_align(list_panel, LV_ALIGN_TOP_LEFT, 14, 106);
-    lv_obj_set_scroll_dir(list_panel, LV_DIR_VER);
-    add_gesture_bubble(list_panel);
-    
-    // 创建WiFi列表容器
-    lv_obj_t* list_container = lv_obj_create(list_panel);
-    lv_obj_remove_style_all(list_container);
-    lv_obj_set_size(list_container, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(list_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(list_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    add_gesture_bubble(list_container);
-    
-    // 添加滚动条样式
-    lv_obj_set_scrollbar_mode(list_panel, LV_SCROLLBAR_MODE_AUTO);
-    
-    // Help text for WiFi management
-    lv_obj_t* wifi_help = label_en(settings_page_, "Say: 'Switch to WiFi name' or 'Remove WiFi index'", &style_muted);
-    lv_obj_set_style_text_font(wifi_help, &lv_font_montserrat_12, 0);
-    lv_obj_align(wifi_help, LV_ALIGN_TOP_LEFT, 24, 272);
-    
-    // Other Settings Section
-    lv_obj_t* other_title = label_en(settings_page_, "Other Settings", &style_gold);
-    lv_obj_set_style_text_font(other_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(other_title, LV_ALIGN_TOP_LEFT, 24, 296);
-    
-    // Settings options
-    lv_obj_t* opt1 = CreatePanel(settings_page_, 438, 36, 14, 320);
-    lv_obj_t* opt1_label = label_en(opt1, "Brightness", &style_en);
-    lv_obj_align(opt1_label, LV_ALIGN_LEFT_MID, 16, 0);
-    
-    lv_obj_t* opt2 = CreatePanel(settings_page_, 438, 36, 14, 362);
-    lv_obj_t* opt2_label = label_en(opt2, "Volume", &style_en);
-    lv_obj_align(opt2_label, LV_ALIGN_LEFT_MID, 16, 0);
-    
-    lv_obj_t* opt3 = CreatePanel(settings_page_, 438, 36, 14, 404);
-    lv_obj_t* opt3_label = label_en(opt3, "Weather Location", &style_en);
-    lv_obj_align(opt3_label, LV_ALIGN_LEFT_MID, 16, 0);
-    
-    // Hint text
-    lv_obj_t* hint = label_en(settings_page_, "Swipe right: Apps", &style_muted);
-    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
-    
-    // 保存列表容器的引用
-    lv_obj_add_flag(wifi_title, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(list_panel, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(wifi_help, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(other_title, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(opt1, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(opt2, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(opt3, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(hint, LV_OBJ_FLAG_HIDDEN);
-
     settings_content_ = lv_obj_create(settings_page_);
     lv_obj_add_style(settings_content_, &style_panel, 0);
     lv_obj_set_size(settings_content_, 452, 220);
