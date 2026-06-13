@@ -19,6 +19,8 @@ class DesktopUI {
 public:
     void Create();
     void ShowPage(DesktopPage page);
+    void HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
+                            int64_t duration_ms);
     void HandleSwipe(int16_t dx, int16_t dy);
     void HandleTap(uint16_t x, uint16_t y);
 
@@ -130,6 +132,7 @@ private:
     lv_obj_t* settings_brightness_value_ = nullptr;
     lv_obj_t* settings_volume_slider_ = nullptr;
     lv_obj_t* settings_volume_value_ = nullptr;
+    lv_obj_t* settings_content_ = nullptr;
 
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
@@ -178,6 +181,7 @@ private:
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
     void RefreshSettingsControls();
+    bool HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x);
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
     void UpdateFocusUI();

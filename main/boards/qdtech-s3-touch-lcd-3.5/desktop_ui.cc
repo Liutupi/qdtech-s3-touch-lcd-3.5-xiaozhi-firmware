@@ -553,6 +553,34 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
     }
 }
 
+void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
+                                   int64_t duration_ms) {
+    const int16_t dx = static_cast<int16_t>(end_x) - static_cast<int16_t>(start_x);
+    const int16_t dy = static_cast<int16_t>(end_y) - static_cast<int16_t>(start_y);
+
+    if (current_page_ == DesktopPage::SETTINGS) {
+        if (LV_ABS(dy) > 30 && LV_ABS(dy) > LV_ABS(dx)) {
+            if (settings_content_) {
+                lv_obj_scroll_by_bounded(settings_content_, 0, dy, LV_ANIM_ON);
+                ESP_LOGI(TAG, "Settings scroll dy=%d", dy);
+            }
+            return;
+        }
+        if (HandleSettingsSliderRelease(start_x, start_y, end_x)) {
+            return;
+        }
+    }
+
+    if (duration_ms < 300 && LV_ABS(dx) < 30 && LV_ABS(dy) < 30) {
+        HandleTap(end_x, end_y);
+    } else if (duration_ms < 500) {
+        HandleSwipe(dx, dy);
+    } else {
+        ESP_LOGI(TAG, "Touch release ignored dx=%d dy=%d duration=%dms",
+                 dx, dy, static_cast<int>(duration_ms));
+    }
+}
+
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
 
@@ -661,6 +689,13 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         if (x >= 342 && x < 450 && y >= 134 && y < 176) {
             SetFocusMode(false);
             return;
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::SETTINGS) {
+        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
+            ShowPage(DesktopPage::APPS);
         }
         return;
     }
@@ -1364,21 +1399,21 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_flag(opt3, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(hint, LV_OBJ_FLAG_HIDDEN);
 
-    lv_obj_t* content = lv_obj_create(settings_page_);
-    lv_obj_add_style(content, &style_panel, 0);
-    lv_obj_set_size(content, 452, 220);
-    lv_obj_align(content, LV_ALIGN_TOP_LEFT, 14, 88);
-    lv_obj_set_scroll_dir(content, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_ACTIVE);
-    lv_obj_set_style_pad_all(content, 10, 0);
-    lv_obj_set_style_pad_bottom(content, 14, 0);
-    add_gesture_bubble(content);
+    settings_content_ = lv_obj_create(settings_page_);
+    lv_obj_add_style(settings_content_, &style_panel, 0);
+    lv_obj_set_size(settings_content_, 452, 220);
+    lv_obj_align(settings_content_, LV_ALIGN_TOP_LEFT, 14, 88);
+    lv_obj_set_scroll_dir(settings_content_, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(settings_content_, LV_SCROLLBAR_MODE_ACTIVE);
+    lv_obj_set_style_pad_all(settings_content_, 10, 0);
+    lv_obj_set_style_pad_bottom(settings_content_, 14, 0);
+    add_gesture_bubble(settings_content_);
 
-    lv_obj_t* system_title = label_en(content, "Display & Sound", &style_gold);
+    lv_obj_t* system_title = label_en(settings_content_, "Display & Sound", &style_gold);
     lv_obj_set_style_text_font(system_title, &lv_font_montserrat_16, 0);
     lv_obj_align(system_title, LV_ALIGN_TOP_LEFT, 4, 2);
 
-    lv_obj_t* brightness_row = lv_obj_create(content);
+    lv_obj_t* brightness_row = lv_obj_create(settings_content_);
     lv_obj_add_style(brightness_row, &style_panel, 0);
     lv_obj_set_size(brightness_row, 414, 58);
     lv_obj_align(brightness_row, LV_ALIGN_TOP_LEFT, 0, 28);
@@ -1398,7 +1433,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(settings_brightness_slider_, COLOR_CREAM, LV_PART_KNOB);
     lv_obj_add_event_cb(settings_brightness_slider_, settings_brightness_cb, LV_EVENT_RELEASED, NULL);
 
-    lv_obj_t* volume_row = lv_obj_create(content);
+    lv_obj_t* volume_row = lv_obj_create(settings_content_);
     lv_obj_add_style(volume_row, &style_panel, 0);
     lv_obj_set_size(volume_row, 414, 58);
     lv_obj_align(volume_row, LV_ALIGN_TOP_LEFT, 0, 94);
@@ -1418,11 +1453,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_CREAM, LV_PART_KNOB);
     lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
 
-    lv_obj_t* network_title = label_en(content, "Network", &style_gold);
+    lv_obj_t* network_title = label_en(settings_content_, "Network", &style_gold);
     lv_obj_set_style_text_font(network_title, &lv_font_montserrat_16, 0);
     lv_obj_align(network_title, LV_ALIGN_TOP_LEFT, 4, 166);
 
-    lv_obj_t* new_list_panel = lv_obj_create(content);
+    lv_obj_t* new_list_panel = lv_obj_create(settings_content_);
     lv_obj_add_style(new_list_panel, &style_panel, 0);
     lv_obj_set_size(new_list_panel, 414, 108);
     lv_obj_align(new_list_panel, LV_ALIGN_TOP_LEFT, 0, 192);
@@ -1439,11 +1474,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_pad_row(new_list_container, 5, 0);
     add_gesture_bubble(new_list_container);
 
-    lv_obj_t* weather_title = label_en(content, "Weather", &style_gold);
+    lv_obj_t* weather_title = label_en(settings_content_, "Weather", &style_gold);
     lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
     lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 316);
 
-    lv_obj_t* weather_row = lv_obj_create(content);
+    lv_obj_t* weather_row = lv_obj_create(settings_content_);
     lv_obj_add_style(weather_row, &style_panel, 0);
     lv_obj_set_size(weather_row, 414, 58);
     lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 342);
@@ -2098,6 +2133,42 @@ void DesktopUI::RefreshSettingsControls() {
         snprintf(value_text, sizeof(value_text), "%d%%", volume);
         lv_label_set_text(settings_volume_value_, value_text);
     }
+}
+
+bool DesktopUI::HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x) {
+    auto apply_slider = [this, start_x, start_y, end_x](lv_obj_t* slider, int min_value, int max_value,
+                                                        const std::function<void(int)>& apply) {
+        if (!slider) {
+            return false;
+        }
+
+        lv_area_t area;
+        lv_obj_get_coords(slider, &area);
+        lv_area_t content_area;
+        lv_obj_get_coords(settings_content_, &content_area);
+        constexpr int16_t touch_padding = 16;
+        if (start_x < content_area.x1 || start_x > content_area.x2 ||
+            start_y < content_area.y1 || start_y > content_area.y2) {
+            return false;
+        }
+        if (start_x < area.x1 - touch_padding || start_x > area.x2 + touch_padding ||
+            start_y < area.y1 - touch_padding || start_y > area.y2 + touch_padding) {
+            return false;
+        }
+
+        const int32_t width = area.x2 > area.x1 ? area.x2 - area.x1 : 1;
+        const int32_t clamped_x = LV_CLAMP(area.x1, static_cast<int32_t>(end_x), area.x2);
+        const int value = min_value + (clamped_x - area.x1) * (max_value - min_value) / width;
+        apply(value);
+        return true;
+    };
+
+    if (apply_slider(settings_brightness_slider_, 5, 100,
+                     [this](int value) { SetSystemBrightness(value); })) {
+        return true;
+    }
+    return apply_slider(settings_volume_slider_, 0, 100,
+                        [this](int value) { SetSystemVolume(value); });
 }
 
 void DesktopUI::ToggleFocusTimer() {

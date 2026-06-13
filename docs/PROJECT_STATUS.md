@@ -98,6 +98,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Provides working brightness and output-volume sliders.
   - Synchronizes controls from the current hardware values when the page opens.
   - Persists brightness and volume changes when slider interaction finishes.
+  - Bridges the current manual touch path to slider release and vertical content scrolling.
   - Keeps WiFi scan results and weather-location status in the same page.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
@@ -177,6 +178,7 @@ For photos:
 ## Known Limitations
 
 - Touch is still manually polled and dispatched; it is not yet a standard LVGL input device.
+- Settings has a scoped manual-touch adapter, but new interactive LVGL widgets still need explicit handling until `lv_indev_t` migration.
 - Display flush still rotates/copies into the physical panel path and can log slow flushes.
 - Radio currently supports direct MP3 streams. HLS/AAC should be treated as future work.
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.

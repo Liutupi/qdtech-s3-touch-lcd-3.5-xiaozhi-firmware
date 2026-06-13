@@ -8,6 +8,11 @@ Scope:
 
 - Replaced the off-screen Settings content with a scrollable layout sized for the 480x320 display.
 - Added working brightness and output-volume sliders.
+- Added a manual-touch release bridge for the current non-`lv_indev_t` input path:
+  - horizontal slider release applies the final brightness or volume value
+  - vertical release scrolls the Settings content
+  - hidden slider regions cannot receive touches outside the visible content viewport
+  - the Settings Back control has a matching manual touch zone
 - Hardware values are synchronized when Settings opens.
 - Changes are persisted only when slider interaction finishes, avoiding repeated NVS writes while dragging.
 - Kept WiFi scan results and weather-location status available in the page.
@@ -24,9 +29,9 @@ idf.py -B build-qdtech -p COM13 -b 921600 flash
 Build result:
 
 - Build completed successfully.
-- `xiaozhi.bin` size: `0x3c3910`.
+- `xiaozhi.bin` size: `0x3c3cd0`.
 - Smallest app partition: `0x600000`.
-- Free app partition space: `0x23c6f0` bytes, about 37%.
+- Free app partition space: `0x23c330` bytes, about 37%.
 
 Hardware/runtime verification on COM13:
 
@@ -37,12 +42,15 @@ Hardware/runtime verification on COM13:
 - Application reached `STATE: idle`.
 - SNTP synchronized.
 - No panic, abort, or Guru Meditation appeared in the captured startup log.
-- Physical slider dragging and persisted-value restoration still require user-visible confirmation on the touchscreen.
+- Physical brightness dragging was confirmed with values from 16% through 100%.
+- Physical vertical Settings scrolling was confirmed in both directions.
+- Physical volume dragging, Back control, and persisted-value restoration still require user-visible confirmation on the touchscreen.
 
 Maintainer notes:
 
 - Do not call `Board::GetInstance()` from `DesktopUI::Create()` while the QDTech board singleton is still being constructed.
 - Slider changes are applied on release to limit persistent-storage writes.
+- Settings currently has an explicit manual-touch adapter because the board has not yet migrated to a standard LVGL input device.
 
 ## 2026-06-13: Replace QTE With Focus Timer And Reduce Layout Overlap
 

@@ -90,6 +90,8 @@ Current state:
 - `QdtechTouch::ReadFirstPoint()` reads and maps the first touch point.
 - Board code performs tap/swipe detection manually.
 - Logs exist for touch tap/swipe events without logging every poll.
+- `DesktopUI::HandleTouchRelease()` now centralizes release classification.
+- Settings sliders and scrolling have a scoped manual-touch bridge.
 
 Next work:
 

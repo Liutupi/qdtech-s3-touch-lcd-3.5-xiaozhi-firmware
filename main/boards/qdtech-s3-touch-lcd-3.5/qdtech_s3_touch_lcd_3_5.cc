@@ -485,28 +485,17 @@ private:
             int16_t dy = (int16_t)touch_last_y_ - (int16_t)touch_start_y_;
             int64_t duration = now_ms - touch_start_ms_;
 
-            if (duration < TOUCH_TAP_THRESHOLD_MS && abs(dx) < 30 && abs(dy) < 30) {
-                ESP_LOGI(TAG, "touch tap x=%u y=%u duration=%dms", touch_last_x_, touch_last_y_, static_cast<int>(duration));
-                HandleTap(touch_last_x_, touch_last_y_);
-            } else if (duration < 500) {
-                ESP_LOGI(TAG, "touch swipe dx=%d dy=%d duration=%dms", dx, dy, static_cast<int>(duration));
-                HandleSwipe(dx, dy);
-            } else {
-                ESP_LOGI(TAG, "touch release ignored dx=%d dy=%d duration=%dms", dx, dy, static_cast<int>(duration));
-            }
+            ESP_LOGI(TAG, "touch release x=%u y=%u dx=%d dy=%d duration=%dms",
+                     touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
+            HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
         }
     }
 
-    void HandleTap(uint16_t x, uint16_t y) {
+    void HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
+                            int64_t duration_ms) {
         if (display_ && lvgl_port_lock(0)) {
-            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleTap(x, y);
-            lvgl_port_unlock();
-        }
-    }
-
-    void HandleSwipe(int16_t dx, int16_t dy) {
-        if (display_ && lvgl_port_lock(0)) {
-            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleSwipe(dx, dy);
+            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleTouchRelease(
+                start_x, start_y, end_x, end_y, duration_ms);
             lvgl_port_unlock();
         }
     }

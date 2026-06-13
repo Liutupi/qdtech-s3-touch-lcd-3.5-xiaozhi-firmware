@@ -61,6 +61,7 @@ Observed boot/runtime facts after flashing:
 - Focus Timer was reworked into a sparse three-column layout after the first version visually overlapped on the 480x320 display.
 - Settings now uses a scrollable layout that fits the 480x320 display.
 - Settings brightness and volume sliders read the current hardware values when the page opens and persist changes when the user releases the slider.
+- The current manual touch path has an explicit Settings adapter for slider release, vertical scrolling, and Back navigation until standard LVGL input migration.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
@@ -116,6 +117,7 @@ Short version:
 - Do not add new Chinese Focus Timer strings without regenerating both tracked LXGW WenKai subset fonts.
 - Do not let the Focus Timer page become visually dense again; verify spacing on the 480x320 hardware screen.
 - Do not read `Board::GetInstance()` while `DesktopUI::Create()` is running inside the board constructor. Defer hardware-backed control synchronization until the page is opened.
+- Do not assume LVGL widget callbacks receive touch input on this board; current touch is manually polled and dispatched.
 - Do not commit `.codex_tmp/` or the full LXGW WenKai TTF used only for local font generation.
 
 ## How To Continue Development
