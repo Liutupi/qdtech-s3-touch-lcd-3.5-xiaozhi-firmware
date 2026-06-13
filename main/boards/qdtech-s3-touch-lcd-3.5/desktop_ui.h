@@ -10,6 +10,7 @@ enum class DesktopPage {
     PHOTO,
     CALENDAR,
     RADIO,
+    FOCUS,
     XIAOZHI,
     SETTINGS,
 };
@@ -34,6 +35,9 @@ public:
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
+    void ToggleFocusTimer();
+    void ResetFocusTimer();
+    void SetFocusMode(bool work_mode);
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
     void SetPhotoState(const char* title, const char* detail);
@@ -104,6 +108,21 @@ private:
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
 
+    // Focus timer page elements
+    lv_obj_t* focus_page_ = nullptr;
+    lv_obj_t* focus_arc_ = nullptr;
+    lv_obj_t* focus_time_label_ = nullptr;
+    lv_obj_t* focus_state_label_ = nullptr;
+    lv_obj_t* focus_mode_label_ = nullptr;
+    lv_obj_t* focus_start_label_ = nullptr;
+    lv_obj_t* focus_completed_label_ = nullptr;
+    lv_timer_t* focus_timer_ = nullptr;
+    bool focus_running_ = false;
+    bool focus_is_work_ = true;
+    uint32_t focus_remaining_sec_ = 25 * 60;
+    uint32_t focus_total_sec_ = 25 * 60;
+    uint16_t focus_completed_count_ = 0;
+
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
     lv_obj_t* eye_left_ = nullptr;
@@ -138,6 +157,7 @@ private:
     void CreatePhotoPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
+    void CreateFocusPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
     void CreateStatusBar(lv_obj_t* parent);
@@ -151,6 +171,7 @@ private:
     void UpdateWifiList();
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
+    void UpdateFocusUI();
 
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);
@@ -160,4 +181,5 @@ private:
     static void ObjYCb(void* obj, int32_t value);
     static void ColonTimerCb(lv_timer_t* timer);
     static void FaceTimerCb(lv_timer_t* timer);
+    static void FocusTimerCb(lv_timer_t* timer);
 };

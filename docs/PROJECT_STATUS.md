@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-06
+Date: 2026-06-13
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -67,6 +67,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - apps page
   - photo page
   - calendar page
+  - focus timer page
   - XiaoZhi page
   - radio page
   - settings page
@@ -87,6 +88,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - fixed Gregorian festival first
   - history-on-this-day second
   - daily quote fallback third
+- Focus Timer page:
+  - Apps tile `FOC / Focus / 25 min` replaces the previous QTE/Quote chat tile.
+  - Opens a local 25 minute focus / 5 minute break timer instead of starting XiaoZhi chat.
+  - Supports start/pause, reset, focus/break mode selection, and an in-memory completed-session counter.
+  - Uses a sparse three-column layout to avoid overlap on the 480x320 screen.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
 - Radio MCP tools:
@@ -135,6 +141,16 @@ For calendar:
 - Tap Today to return to the synced current month.
 - Back or right swipe should return to Apps.
 
+For focus timer:
+
+- Swipe left from the main page to Apps.
+- Tap the `FOC / Focus / 25 min` tile.
+- Focus page should open without starting XiaoZhi chat.
+- Tap Start to begin/pause the countdown.
+- Tap Reset to restore the selected mode duration.
+- Tap focus/break controls to switch between 25 minute and 5 minute modes.
+- Right swipe should return to Apps.
+
 For photos:
 
 - Put baseline JPG/JPEG files under `/photos` or `/PHOTOS` on a FAT-formatted MicroSD card.
@@ -153,6 +169,8 @@ For photos:
 - Weather provider failures such as 429/502 can still happen; current goal is graceful behavior, not guaranteed data.
 - Daily-card festival/history data is currently a small built-in table, not a full calendar database.
 - The daily-card Chinese font is an embedded subset; adding new Chinese text requires regenerating `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c`.
+- Focus Timer completed count is in-memory only and resets on reboot.
+- Focus Timer has no alarm sound or persisted settings yet.
 - Settings UI is not yet a full configuration center.
 - Radio stations are still compiled into `radio_service.cc`.
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.

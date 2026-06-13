@@ -34,12 +34,12 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-05 in the Windows workspace:
+Last verified on 2026-06-13 in the Windows workspace:
 
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-06 weather visuals and Chinese daily-card layout update
+- Last verified update: 2026-06-13 QTE tile replaced by local Focus Timer page and overlap-reduced timer layout
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -57,6 +57,8 @@ Observed boot/runtime facts after flashing:
 - SNTP time synchronization completed.
 - Daily card updated after SNTP sync and rendered date-linked Chinese content with embedded LXGW WenKai subset fonts.
 - Weather visual mapping updated after weather fetch; captured log showed cloudy visual mapping for Open-Meteo code `1`.
+- Apps tile `FOC / Focus / 25 min` opens the local Focus Timer page instead of starting a XiaoZhi quote chat.
+- Focus Timer was reworked into a sparse three-column layout after the first version visually overlapped on the 480x320 display.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
@@ -77,6 +79,7 @@ Important 2026-06-05 stability finding:
 - CST9217/TDDI touch polling with tap/swipe dispatch.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
 - Local Calendar page with month grid, Today, Prev, and Next controls.
+- Local Focus Timer page with 25 minute focus mode, 5 minute break mode, start/pause, reset, and in-memory completion count.
 - Local Photos page replacing the previous Weather app tile, reading JPEG photos from common SD directories and playing them as a pure full-screen slideshow.
 - Time and weather service.
 - Main-page daily card with date-linked festival, history-on-this-day, and local quote fallback content.
@@ -108,6 +111,8 @@ Short version:
 - Do not let optional features such as Photos, Radio, or MCP tools consume enough internal SRAM to break XiaoZhi audio-channel creation.
 - Do not remove the tracked `managed_components/78__esp-ml307/esp_udp.cc` hotfix unless the equivalent behavior is moved into a maintained component patch or upstream update.
 - Do not add new Chinese daily-card strings without regenerating both tracked LXGW WenKai subset fonts.
+- Do not add new Chinese Focus Timer strings without regenerating both tracked LXGW WenKai subset fonts.
+- Do not let the Focus Timer page become visually dense again; verify spacing on the 480x320 hardware screen.
 - Do not commit `.codex_tmp/` or the full LXGW WenKai TTF used only for local font generation.
 
 ## How To Continue Development

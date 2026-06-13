@@ -189,6 +189,26 @@ void DesktopUI::FaceTimerCb(lv_timer_t* timer) {
     }
 }
 
+void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->focus_running_) {
+        return;
+    }
+    if (self->focus_remaining_sec_ > 0) {
+        self->focus_remaining_sec_--;
+    }
+    if (self->focus_remaining_sec_ == 0) {
+        self->focus_running_ = false;
+        if (self->focus_is_work_) {
+            self->focus_completed_count_++;
+            ESP_LOGI(TAG, "Focus session completed count=%u", self->focus_completed_count_);
+        } else {
+            ESP_LOGI(TAG, "Focus break completed");
+        }
+    }
+    self->UpdateFocusUI();
+}
+
 // ===== Page navigation =====
 static DesktopUI* g_desktop_ui = nullptr;
 
@@ -240,7 +260,9 @@ static void open_app_card(uint8_t index) {
             }
             break;
         case 4:
-            open_xiaozhi_with_message("Quote", "Ask XiaoZhi for a daily quote or encouragement.", true);
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::FOCUS);
+            }
             break;
         case 5:
             if (g_desktop_ui) {
@@ -276,7 +298,7 @@ static void calendar_card_cb(lv_event_t* event) {
     }
 }
 
-static void quote_card_cb(lv_event_t* event) {
+static void focus_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(4);
     }
@@ -350,6 +372,38 @@ static void calendar_next_cb(lv_event_t* event) {
     }
 }
 
+static void focus_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void focus_start_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ToggleFocusTimer();
+    }
+}
+
+static void focus_reset_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ResetFocusTimer();
+    }
+}
+
+static void focus_work_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->SetFocusMode(true);
+    }
+}
+
+static void focus_break_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->SetFocusMode(false);
+    }
+}
+
 static void settings_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -386,6 +440,7 @@ void DesktopUI::Create() {
     CreatePhotoPage(root);
     CreateCalendarPage(root);
     CreateRadioPage(root);
+    CreateFocusPage(root);
     CreateXiaozhiPage(root);
     CreateSettingsPage(root);
 
@@ -408,6 +463,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     }
     if (calendar_page_) {
         lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (focus_page_) {
+        lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -441,6 +499,13 @@ void DesktopUI::ShowPage(DesktopPage page) {
             lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show radio page");
             break;
+        case DesktopPage::FOCUS:
+            if (focus_page_) {
+                lv_obj_clear_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
+                UpdateFocusUI();
+            }
+            ESP_LOGI(TAG, "Show focus page");
+            break;
         case DesktopPage::XIAOZHI:
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show xiaozhi page");
@@ -465,7 +530,7 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
     const int16_t max_dy = 90;
 
     if (dx > min_dx && LV_ABS(dy) < max_dy) {
-        ShowPage(DesktopPage::MAIN);
+        ShowPage(current_page_ == DesktopPage::APPS ? DesktopPage::MAIN : DesktopPage::APPS);
     } else if (dx < -min_dx && LV_ABS(dy) < max_dy) {
         ShowPage(DesktopPage::APPS);
     }
@@ -558,6 +623,26 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         }
         if (x >= 366 && x < 442 && y >= 264 && y < 304) {
             AdjustCalendarMonth(1);
+            return;
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::FOCUS) {
+        if (x >= 128 && x < 260 && y >= 262 && y < 306) {
+            ToggleFocusTimer();
+            return;
+        }
+        if (x >= 276 && x < 388 && y >= 262 && y < 306) {
+            ResetFocusTimer();
+            return;
+        }
+        if (x >= 342 && x < 450 && y >= 82 && y < 124) {
+            SetFocusMode(true);
+            return;
+        }
+        if (x >= 342 && x < 450 && y >= 134 && y < 176) {
+            SetFocusMode(false);
             return;
         }
         return;
@@ -815,7 +900,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
         {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
         {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
-        {"QTE", "Quote", "Daily", COLOR_GOLD, quote_card_cb},
+        {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
         {"SET", "Settings", "System", COLOR_BLUE, settings_card_cb},
     };
 
@@ -1026,6 +1111,138 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
 
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
+void DesktopUI::CreateFocusPage(lv_obj_t* root) {
+    focus_page_ = lv_obj_create(root);
+    lv_obj_add_style(focus_page_, &style_screen, 0);
+    lv_obj_set_size(focus_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(focus_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(focus_page_, focus_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(focus_page_);
+
+    CreateStatusBar(focus_page_);
+
+    lv_obj_t* title = label_en(focus_page_, "专注时钟", &style_en);
+    lv_obj_set_style_text_font(title, &qd_font_lxgw_20, 0);
+    lv_obj_set_style_text_color(title, COLOR_CREAM, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 42);
+
+    lv_obj_t* sub = label_en(focus_page_, "Focus Timer", &style_gold);
+    lv_obj_set_style_text_font(sub, &lv_font_montserrat_16, 0);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 118, 46);
+    focus_mode_label_ = sub;
+
+    lv_obj_t* left_panel = CreatePanel(focus_page_, 104, 116, 22, 86);
+    lv_obj_set_style_bg_color(left_panel, LV_COLOR_MAKE(0x11, 0x0f, 0x0c), 0);
+    lv_obj_set_style_border_color(left_panel, LV_COLOR_MAKE(0x31, 0x25, 0x1b), 0);
+    lv_obj_t* left_kicker = label_en(left_panel, "状态", &style_gold);
+    lv_obj_set_style_text_font(left_kicker, &qd_font_lxgw_16, 0);
+    lv_obj_align(left_kicker, LV_ALIGN_TOP_LEFT, 14, 14);
+    lv_obj_t* left_quote = label_en(left_panel, "专注当下\n收获未来", &style_muted);
+    lv_obj_set_width(left_quote, 76);
+    lv_label_set_long_mode(left_quote, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(left_quote, &qd_font_lxgw_16, 0);
+    lv_obj_set_style_text_line_space(left_quote, 8, 0);
+    lv_obj_align(left_quote, LV_ALIGN_TOP_LEFT, 14, 48);
+
+    focus_arc_ = lv_arc_create(focus_page_);
+    lv_obj_remove_style_all(focus_arc_);
+    lv_obj_set_size(focus_arc_, 172, 172);
+    lv_obj_align(focus_arc_, LV_ALIGN_TOP_LEFT, 142, 70);
+    lv_arc_set_rotation(focus_arc_, 270);
+    lv_arc_set_bg_angles(focus_arc_, 0, 360);
+    lv_arc_set_range(focus_arc_, 0, 1000);
+    lv_obj_set_style_arc_width(focus_arc_, 11, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(focus_arc_, LV_COLOR_MAKE(0x33, 0x20, 0x15), LV_PART_MAIN);
+    lv_obj_set_style_arc_width(focus_arc_, 11, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(focus_arc_, LV_COLOR_MAKE(0xff, 0x7a, 0x2d), LV_PART_INDICATOR);
+    lv_obj_set_style_opa(focus_arc_, LV_OPA_TRANSP, LV_PART_KNOB);
+
+    lv_obj_t* inner = circle(focus_page_, 126, LV_COLOR_MAKE(0x0e, 0x0d, 0x0b), LV_OPA_COVER);
+    lv_obj_align(inner, LV_ALIGN_TOP_LEFT, 165, 93);
+
+    focus_time_label_ = label_en(focus_page_, "25:00", &style_en);
+    lv_obj_set_width(focus_time_label_, 148);
+    lv_obj_set_style_text_align(focus_time_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(focus_time_label_, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_color(focus_time_label_, COLOR_CREAM, 0);
+    lv_obj_align(focus_time_label_, LV_ALIGN_TOP_LEFT, 154, 123);
+
+    focus_state_label_ = label_en(focus_page_, "准备开始", &style_gold);
+    lv_obj_set_width(focus_state_label_, 148);
+    lv_obj_set_style_text_align(focus_state_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(focus_state_label_, &qd_font_lxgw_16, 0);
+    lv_obj_align(focus_state_label_, LV_ALIGN_TOP_LEFT, 154, 178);
+
+    lv_obj_t* work_btn = lv_obj_create(focus_page_);
+    lv_obj_add_style(work_btn, &style_panel, 0);
+    lv_obj_set_size(work_btn, 108, 42);
+    lv_obj_align(work_btn, LV_ALIGN_TOP_LEFT, 342, 82);
+    lv_obj_set_style_border_color(work_btn, LV_COLOR_MAKE(0xff, 0x62, 0x2e), 0);
+    lv_obj_clear_flag(work_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(work_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(work_btn, focus_work_cb, LV_EVENT_CLICKED, NULL);
+    add_gesture_bubble(work_btn);
+    lv_obj_t* work_label = label_en(work_btn, "专注 25 分钟", &style_en);
+    lv_obj_set_style_text_font(work_label, &qd_font_lxgw_16, 0);
+    lv_obj_align(work_label, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t* break_btn = lv_obj_create(focus_page_);
+    lv_obj_add_style(break_btn, &style_panel, 0);
+    lv_obj_set_size(break_btn, 108, 42);
+    lv_obj_align(break_btn, LV_ALIGN_TOP_LEFT, 342, 134);
+    lv_obj_clear_flag(break_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(break_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(break_btn, focus_break_cb, LV_EVENT_CLICKED, NULL);
+    add_gesture_bubble(break_btn);
+    lv_obj_t* break_label = label_en(break_btn, "休息 5 分钟", &style_muted);
+    lv_obj_set_style_text_font(break_label, &qd_font_lxgw_16, 0);
+    lv_obj_align(break_label, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t* done_panel = lv_obj_create(focus_page_);
+    lv_obj_add_style(done_panel, &style_panel, 0);
+    lv_obj_set_size(done_panel, 108, 54);
+    lv_obj_align(done_panel, LV_ALIGN_TOP_LEFT, 342, 198);
+    lv_obj_clear_flag(done_panel, LV_OBJ_FLAG_SCROLLABLE);
+    add_gesture_bubble(done_panel);
+    lv_obj_t* done_title = label_en(done_panel, "今日完成", &style_muted);
+    lv_obj_set_style_text_font(done_title, &qd_font_lxgw_16, 0);
+    lv_obj_align(done_title, LV_ALIGN_TOP_LEFT, 14, 8);
+    focus_completed_label_ = label_en(done_panel, "0 个番茄", &style_gold);
+    lv_obj_set_style_text_font(focus_completed_label_, &qd_font_lxgw_16, 0);
+    lv_obj_align(focus_completed_label_, LV_ALIGN_TOP_LEFT, 14, 30);
+
+    lv_obj_t* start_btn = lv_obj_create(focus_page_);
+    lv_obj_add_style(start_btn, &style_panel, 0);
+    lv_obj_set_size(start_btn, 132, 44);
+    lv_obj_align(start_btn, LV_ALIGN_TOP_LEFT, 128, 262);
+    lv_obj_set_style_bg_color(start_btn, LV_COLOR_MAKE(0xe9, 0x45, 0x19), 0);
+    lv_obj_set_style_border_color(start_btn, LV_COLOR_MAKE(0xff, 0x8a, 0x32), 0);
+    lv_obj_clear_flag(start_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(start_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(start_btn, focus_start_cb, LV_EVENT_CLICKED, NULL);
+    add_gesture_bubble(start_btn);
+    focus_start_label_ = label_en(start_btn, "开始", &style_en);
+    lv_obj_set_style_text_font(focus_start_label_, &qd_font_lxgw_20, 0);
+    lv_obj_align(focus_start_label_, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t* reset_btn = lv_obj_create(focus_page_);
+    lv_obj_add_style(reset_btn, &style_panel, 0);
+    lv_obj_set_size(reset_btn, 112, 44);
+    lv_obj_align(reset_btn, LV_ALIGN_TOP_LEFT, 276, 262);
+    lv_obj_clear_flag(reset_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(reset_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(reset_btn, focus_reset_cb, LV_EVENT_CLICKED, NULL);
+    add_gesture_bubble(reset_btn);
+    lv_obj_t* reset_label = label_en(reset_btn, "重置", &style_en);
+    lv_obj_set_style_text_font(reset_label, &qd_font_lxgw_20, 0);
+    lv_obj_align(reset_label, LV_ALIGN_CENTER, 0, 0);
+
+    focus_timer_ = lv_timer_create(FocusTimerCb, 1000, this);
+    lv_timer_pause(focus_timer_);
+    UpdateFocusUI();
 }
 
 // ===== XiaoZhi page =====
@@ -1720,6 +1937,86 @@ void DesktopUI::SetDailyCard(const char* date, const char* title, const char* bo
     }
     if (quote_label_ && body) {
         lv_label_set_text(quote_label_, body);
+    }
+}
+
+void DesktopUI::ToggleFocusTimer() {
+    if (focus_remaining_sec_ == 0) {
+        ResetFocusTimer();
+    }
+    focus_running_ = !focus_running_;
+    if (focus_timer_) {
+        if (focus_running_) {
+            lv_timer_resume(focus_timer_);
+        } else {
+            lv_timer_pause(focus_timer_);
+        }
+    }
+    ESP_LOGI(TAG, "Focus timer %s mode=%s remaining=%lu",
+             focus_running_ ? "start" : "pause", focus_is_work_ ? "work" : "break",
+             static_cast<unsigned long>(focus_remaining_sec_));
+    UpdateFocusUI();
+}
+
+void DesktopUI::ResetFocusTimer() {
+    focus_running_ = false;
+    focus_total_sec_ = focus_is_work_ ? 25 * 60 : 5 * 60;
+    focus_remaining_sec_ = focus_total_sec_;
+    if (focus_timer_) {
+        lv_timer_pause(focus_timer_);
+    }
+    ESP_LOGI(TAG, "Focus timer reset mode=%s", focus_is_work_ ? "work" : "break");
+    UpdateFocusUI();
+}
+
+void DesktopUI::SetFocusMode(bool work_mode) {
+    if (focus_is_work_ == work_mode && focus_remaining_sec_ == focus_total_sec_) {
+        UpdateFocusUI();
+        return;
+    }
+    focus_is_work_ = work_mode;
+    ResetFocusTimer();
+    ESP_LOGI(TAG, "Focus mode changed to %s", focus_is_work_ ? "work" : "break");
+}
+
+void DesktopUI::UpdateFocusUI() {
+    if (!focus_time_label_) {
+        return;
+    }
+
+    char time_text[16];
+    snprintf(time_text, sizeof(time_text), "%02lu:%02lu",
+             static_cast<unsigned long>(focus_remaining_sec_ / 60),
+             static_cast<unsigned long>(focus_remaining_sec_ % 60));
+    lv_label_set_text(focus_time_label_, time_text);
+
+    const int32_t progress = focus_total_sec_ == 0
+        ? 0
+        : static_cast<int32_t>((focus_remaining_sec_ * 1000) / focus_total_sec_);
+    if (focus_arc_) {
+        lv_arc_set_value(focus_arc_, progress);
+        const lv_color_t arc_color = focus_is_work_
+            ? lv_color_make(0xff, 0x7a, 0x2d)
+            : lv_color_make(0x92, 0xd7, 0xff);
+        lv_obj_set_style_arc_color(focus_arc_, arc_color, LV_PART_INDICATOR);
+    }
+
+    if (focus_state_label_) {
+        const char* state = focus_remaining_sec_ == 0
+            ? (focus_is_work_ ? "专注完成" : "休息完成")
+            : (focus_running_ ? (focus_is_work_ ? "专注中" : "休息中") : "准备开始");
+        lv_label_set_text(focus_state_label_, state);
+    }
+    if (focus_mode_label_) {
+        lv_label_set_text(focus_mode_label_, focus_is_work_ ? "Focus Timer" : "Break Timer");
+    }
+    if (focus_start_label_) {
+        lv_label_set_text(focus_start_label_, focus_running_ ? "暂停" : "开始");
+    }
+    if (focus_completed_label_) {
+        char done_text[32];
+        snprintf(done_text, sizeof(done_text), "%u 个番茄", focus_completed_count_);
+        lv_label_set_text(focus_completed_label_, done_text);
     }
 }
 

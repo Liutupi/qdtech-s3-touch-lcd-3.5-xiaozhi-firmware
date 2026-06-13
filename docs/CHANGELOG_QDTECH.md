@@ -2,6 +2,58 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-13: Replace QTE With Focus Timer And Reduce Layout Overlap
+
+Scope:
+
+- Replaced the Apps page `QTE / Quote / Daily` tile with `FOC / Focus / 25 min`.
+- The tile now opens a local Focus Timer page instead of starting a XiaoZhi quote chat.
+- Added a lightweight LVGL focus timer state machine:
+  - 25 minute focus mode
+  - 5 minute break mode
+  - start/pause
+  - reset
+  - completed focus-session counter
+- Reworked the Focus Timer page after hardware feedback that the first version had overlapping elements.
+- Current layout is a small-screen three-column dashboard:
+  - left status/quote card
+  - center timer ring and time readout
+  - right focus/break controls and completed count
+  - bottom start/reset buttons
+- Updated manual touch hot zones for the new Focus Timer button positions.
+- Regenerated embedded LXGW WenKai 16 px and 20 px subset fonts for the added Chinese UI text.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build
+idf.py -B build-qdtech -p COM13 -b 921600 flash
+```
+
+Build result:
+
+- Build completed successfully. The outer `idf.py` command timed out once while Ninja continued in the background; the background build finished successfully.
+- `xiaozhi.bin` size: `0x3c2ff0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x23d010` bytes, about 37%.
+
+Hardware/runtime verification on COM13:
+
+- Firmware flashed successfully at 921600 baud.
+- Boot reached `Desktop UI created`.
+- Application reached `STATE: idle`.
+- SNTP synchronized.
+- Daily card updated for `2026-06-13`.
+- Weather fetch completed for Zhongshan.
+- No panic, abort, or Guru Meditation was observed in the captured startup log.
+
+Maintainer notes:
+
+- Focus Timer is currently local UI state only; completed count is not persisted in NVS.
+- If Focus Timer Chinese labels change, regenerate both `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c`.
+- Keep the Focus page sparse on the 480x320 screen; avoid re-adding large decorative elements unless hardware-visible spacing is checked.
+
 ## 2026-06-06: Weather Visuals And Chinese Daily Card
 
 Scope:
