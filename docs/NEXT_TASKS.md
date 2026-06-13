@@ -19,6 +19,7 @@ This list is intentionally ordered. Future work should start at the top unless t
 - Re-verify Chinese daily-card wrapping after adding any new festival, history, or quote text.
 - Re-verify Focus Timer visual spacing and touch zones after any layout change.
 - Record the COM port, commit hash, and important logs in future changelog entries.
+- Complete a user-visible pass of Main -> Apps -> Radio -> Apps -> Main and confirm Radio keeps playing after leaving its page.
 
 ## Priority 2: Daily Card Content Growth
 

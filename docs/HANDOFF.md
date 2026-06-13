@@ -39,7 +39,7 @@ Last verified on 2026-06-13 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-13 Settings page made visible and functional with persistent brightness and volume controls
+- Last verified update: 2026-06-13 unified desktop navigation and non-destructive Radio page exit
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -62,6 +62,8 @@ Observed boot/runtime facts after flashing:
 - Settings now uses a scrollable layout that fits the 480x320 display.
 - Settings brightness and volume sliders read the current hardware values when the page opens and persist changes when the user releases the slider.
 - The current manual touch path has an explicit Settings adapter for slider release, vertical scrolling, and Back navigation until standard LVGL input migration.
+- Navigation now follows Main -> Apps -> feature pages, with right-swipe back; Photos preserves left-or-right swipe exit.
+- Leaving the Radio page does not stop playback. Radio Stop is an explicit user action.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.

@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-13: Unify Desktop Navigation Rules
+
+Scope:
+
+- Added a single `NavigateBack()` rule:
+  - Apps returns to Main.
+  - Feature pages return to Apps.
+- Aligned manual swipe behavior with the visible navigation model:
+  - Main left swipe opens Apps.
+  - Apps right swipe returns to Main.
+  - Feature pages right swipe return to Apps.
+  - Photos keeps the previously accepted left-or-right swipe exit.
+- Removed hidden tap-to-exit and refresh zones from the full-screen Photos page.
+- Leaving the Radio page no longer implicitly stops playback; Stop remains an explicit transport action.
+- Simplified the Apps footer hint to `Swipe right: Home`.
+
+Verification:
+
+- Build completed successfully.
+- `xiaozhi.bin` size: `0x3c3cc0`.
+- Firmware flashed successfully to COM13 at 921600 baud.
+- Boot reached `Desktop UI created`, touch initialization, `STATE: idle`, and SNTP synchronization.
+- Physical right-swipe exit from Photos logged `Navigate back page=2 target=1` and returned to Apps.
+- No panic, abort, or Guru Meditation appeared in the captured logs.
+- Main/Apps/Radio navigation and background-radio continuity still need a complete user-visible pass on the touchscreen.
+
 ## 2026-06-13: Make Settings Visible And Functional
 
 Scope:

@@ -19,6 +19,7 @@ class DesktopUI {
 public:
     void Create();
     void ShowPage(DesktopPage page);
+    void NavigateBack();
     void HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
                             int64_t duration_ms);
     void HandleSwipe(int16_t dx, int16_t dy);

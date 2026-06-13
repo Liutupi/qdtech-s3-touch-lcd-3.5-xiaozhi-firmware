@@ -62,6 +62,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - XiaoZhi voice stack remains the core application.
 - Landscape LVGL display with QDTech board-specific flush path.
 - Touch tap/swipe polling for desktop navigation.
+- Unified navigation hierarchy:
+  - Main left swipe opens Apps.
+  - Apps right swipe returns to Main.
+  - Feature pages right swipe return to Apps.
+  - Photos exits to Apps with either horizontal swipe.
 - Desktop UI pages:
   - main page
   - apps page
@@ -128,6 +133,7 @@ After flashing, look for these logs:
 For radio/audio focus:
 
 - Start radio.
+- Leave the Radio page and confirm playback continues.
 - Trigger XiaoZhi listening or speaking.
 - Radio should log audio focus yield/pause behavior.
 - When XiaoZhi returns idle, radio should resume if the user had requested playback.
@@ -192,4 +198,5 @@ For photos:
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
+- Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.
 - No release packaging or OTA artifact process is defined in this handoff set.

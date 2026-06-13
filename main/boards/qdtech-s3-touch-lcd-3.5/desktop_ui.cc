@@ -214,9 +214,9 @@ void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
 // ===== Page navigation =====
 static DesktopUI* g_desktop_ui = nullptr;
 
-static void show_main_cb(lv_event_t* event) {
+static void navigate_back_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        g_desktop_ui->ShowPage(DesktopPage::MAIN);
+        g_desktop_ui->NavigateBack();
     }
 }
 
@@ -546,11 +546,30 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
     const int16_t min_dx = 70;
     const int16_t max_dy = 90;
 
-    if (dx > min_dx && LV_ABS(dy) < max_dy) {
-        ShowPage(current_page_ == DesktopPage::APPS ? DesktopPage::MAIN : DesktopPage::APPS);
-    } else if (dx < -min_dx && LV_ABS(dy) < max_dy) {
-        ShowPage(DesktopPage::APPS);
+    if (LV_ABS(dy) >= max_dy) {
+        return;
     }
+
+    if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > min_dx) {
+        NavigateBack();
+    } else if (current_page_ == DesktopPage::MAIN && dx < -min_dx) {
+        ShowPage(DesktopPage::APPS);
+    } else if (current_page_ != DesktopPage::MAIN && dx > min_dx) {
+        NavigateBack();
+    }
+}
+
+void DesktopUI::NavigateBack() {
+    if (current_page_ == DesktopPage::MAIN) {
+        return;
+    }
+
+    const DesktopPage target = current_page_ == DesktopPage::APPS
+        ? DesktopPage::MAIN
+        : DesktopPage::APPS;
+    ESP_LOGI(TAG, "Navigate back page=%d target=%d",
+             static_cast<int>(current_page_), static_cast<int>(target));
+    ShowPage(target);
 }
 
 void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
@@ -593,7 +612,7 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (current_page_ == DesktopPage::XIAOZHI) {
         if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            ShowPage(DesktopPage::APPS);
+            NavigateBack();
             return;
         }
         if (x >= 177 && x < 303 && y >= 264 && y < 302) {
@@ -605,10 +624,7 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (current_page_ == DesktopPage::RADIO) {
         if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            if (radio_stop_) {
-                radio_stop_();
-            }
-            ShowPage(DesktopPage::APPS);
+            NavigateBack();
             return;
         }
         if (x >= 40 && x < 126 && y >= 230 && y < 280) {
@@ -639,23 +655,12 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::PHOTO) {
-        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            ShowPage(DesktopPage::APPS);
-            return;
-        }
-        if (x >= 202 && x < 278 && y >= 268 && y < 308) {
-            if (photo_refresh_callback_) {
-                SetPhotoState("Refreshing", "Scanning SD card");
-                photo_refresh_callback_();
-            }
-            return;
-        }
         return;
     }
 
     if (current_page_ == DesktopPage::CALENDAR) {
         if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            ShowPage(DesktopPage::APPS);
+            NavigateBack();
             return;
         }
         if (x >= 38 && x < 114 && y >= 264 && y < 304) {
@@ -695,7 +700,7 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (current_page_ == DesktopPage::SETTINGS) {
         if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            ShowPage(DesktopPage::APPS);
+            NavigateBack();
         }
         return;
     }
@@ -705,7 +710,7 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-        ShowPage(DesktopPage::MAIN);
+        NavigateBack();
         return;
     }
 
@@ -935,7 +940,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_t* sub = label_en(apps_page_, "App Center", &style_muted);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
-    lv_obj_t* back = CreateButton(apps_page_, "Back", show_main_cb);
+    lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     // App tiles
@@ -963,7 +968,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         }
     }
 
-    lv_obj_t* hint = label_en(apps_page_, "Swipe left: Apps   Swipe right: Home", &style_muted);
+    lv_obj_t* hint = label_en(apps_page_, "Swipe right: Home", &style_muted);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
@@ -1049,7 +1054,7 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_t* sub = label_en(calendar_page_, "Month View", &style_muted);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 122, 53);
 
-    lv_obj_t* back = CreateButton(calendar_page_, "Back", show_apps_cb);
+    lv_obj_t* back = CreateButton(calendar_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     lv_obj_t* panel = CreatePanel(calendar_page_, 432, 168, 24, 86);
@@ -1131,7 +1136,7 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_t* sub = label_en(radio_page_, "Network FM", &style_muted);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 88, 53);
 
-    lv_obj_t* back = CreateButton(radio_page_, "Back", show_apps_cb);
+    lv_obj_t* back = CreateButton(radio_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     lv_obj_t* panel = CreatePanel(radio_page_, 432, 134, 24, 88);
@@ -1335,7 +1340,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_t* sub = label_en(settings_page_, "System Configuration", &style_muted);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 100, 53);
 
-    lv_obj_t* back = CreateButton(settings_page_, "Back", show_apps_cb);
+    lv_obj_t* back = CreateButton(settings_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     // WiFi Section Title
