@@ -93,6 +93,12 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Opens a local 25 minute focus / 5 minute break timer instead of starting XiaoZhi chat.
   - Supports start/pause, reset, focus/break mode selection, and an in-memory completed-session counter.
   - Uses a sparse three-column layout to avoid overlap on the 480x320 screen.
+- Settings page:
+  - Uses a vertically scrollable layout sized for the 480x320 display.
+  - Provides working brightness and output-volume sliders.
+  - Synchronizes controls from the current hardware values when the page opens.
+  - Persists brightness and volume changes when slider interaction finishes.
+  - Keeps WiFi scan results and weather-location status in the same page.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
 - Radio MCP tools:
@@ -151,6 +157,13 @@ For focus timer:
 - Tap focus/break controls to switch between 25 minute and 5 minute modes.
 - Right swipe should return to Apps.
 
+For settings:
+
+- Open Settings and confirm the Brightness and Volume rows are visible.
+- Drag each slider and release it; the displayed percentage and hardware output should change.
+- Leave and reopen Settings; controls should reflect the current values.
+- Reboot and confirm the saved brightness and volume are restored.
+
 For photos:
 
 - Put baseline JPG/JPEG files under `/photos` or `/PHOTOS` on a FAT-formatted MicroSD card.
@@ -171,7 +184,7 @@ For photos:
 - The daily-card Chinese font is an embedded subset; adding new Chinese text requires regenerating `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c`.
 - Focus Timer completed count is in-memory only and resets on reboot.
 - Focus Timer has no alarm sound or persisted settings yet.
-- Settings UI is not yet a full configuration center.
+- Settings does not yet provide an on-device weather city editor, radio station editor, or startup preferences.
 - Radio stations are still compiled into `radio_service.cc`.
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.

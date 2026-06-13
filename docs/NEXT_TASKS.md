@@ -117,11 +117,17 @@ Next work:
 
 Only start after the stability base is boring and repeatable.
 
-Possible additions:
+Current state:
+
+- The Settings page is scrollable and usable on the 480x320 display.
+- Brightness and volume sliders are connected to hardware and persist changes.
+- WiFi scan results remain visible in the Settings page.
+- Hardware values are deliberately read only when Settings opens, avoiding board-constructor re-entry during desktop creation.
+
+Next work:
 
 - Visual weather city editor backed by NVS.
 - Radio station management from file storage.
-- Volume, brightness, and startup radio preference in NVS.
+- Startup radio preference in NVS.
 - Better WiFi settings page.
-- Pomodoro module.
 - UI polish for clock/weather/radio cards.

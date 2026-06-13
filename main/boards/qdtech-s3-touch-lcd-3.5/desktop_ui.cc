@@ -1,6 +1,8 @@
 #include "desktop_ui.h"
 #include "application.h"
 #include "config.h"
+#include "audio_codecs/audio_codec.h"
+#include "boards/common/board.h"
 
 #include <cstdio>
 #include <cstring>
@@ -412,6 +414,20 @@ static void settings_gesture_cb(lv_event_t* event) {
     }
 }
 
+static void settings_brightness_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_RELEASED && g_desktop_ui) {
+        auto* slider = static_cast<lv_obj_t*>(lv_event_get_target(event));
+        g_desktop_ui->SetSystemBrightness(lv_slider_get_value(slider));
+    }
+}
+
+static void settings_volume_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_RELEASED && g_desktop_ui) {
+        auto* slider = static_cast<lv_obj_t*>(lv_event_get_target(event));
+        g_desktop_ui->SetSystemVolume(lv_slider_get_value(slider));
+    }
+}
+
 static void main_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -513,6 +529,7 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::SETTINGS:
             if (settings_page_) {
                 lv_obj_clear_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
+                RefreshSettingsControls();
                 UpdateWifiList();
             }
             ESP_LOGI(TAG, "Show settings page");
@@ -1338,7 +1355,106 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
     
     // 保存列表容器的引用
-    lv_obj_set_user_data(settings_page_, list_container);
+    lv_obj_add_flag(wifi_title, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(list_panel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifi_help, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(other_title, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(opt1, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(opt2, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(opt3, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(hint, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t* content = lv_obj_create(settings_page_);
+    lv_obj_add_style(content, &style_panel, 0);
+    lv_obj_set_size(content, 452, 220);
+    lv_obj_align(content, LV_ALIGN_TOP_LEFT, 14, 88);
+    lv_obj_set_scroll_dir(content, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_ACTIVE);
+    lv_obj_set_style_pad_all(content, 10, 0);
+    lv_obj_set_style_pad_bottom(content, 14, 0);
+    add_gesture_bubble(content);
+
+    lv_obj_t* system_title = label_en(content, "Display & Sound", &style_gold);
+    lv_obj_set_style_text_font(system_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(system_title, LV_ALIGN_TOP_LEFT, 4, 2);
+
+    lv_obj_t* brightness_row = lv_obj_create(content);
+    lv_obj_add_style(brightness_row, &style_panel, 0);
+    lv_obj_set_size(brightness_row, 414, 58);
+    lv_obj_align(brightness_row, LV_ALIGN_TOP_LEFT, 0, 28);
+    lv_obj_clear_flag(brightness_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* brightness_label = label_en(brightness_row, "Brightness", &style_en);
+    lv_obj_align(brightness_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    settings_brightness_value_ = label_en(brightness_row, "--%", &style_gold);
+    lv_obj_set_width(settings_brightness_value_, 48);
+    lv_obj_set_style_text_align(settings_brightness_value_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(settings_brightness_value_, LV_ALIGN_TOP_RIGHT, -14, 8);
+    settings_brightness_slider_ = lv_slider_create(brightness_row);
+    lv_slider_set_range(settings_brightness_slider_, 5, 100);
+    lv_obj_set_size(settings_brightness_slider_, 382, 12);
+    lv_obj_align(settings_brightness_slider_, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_style_bg_color(settings_brightness_slider_, COLOR_LINE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(settings_brightness_slider_, COLOR_GOLD, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(settings_brightness_slider_, COLOR_CREAM, LV_PART_KNOB);
+    lv_obj_add_event_cb(settings_brightness_slider_, settings_brightness_cb, LV_EVENT_RELEASED, NULL);
+
+    lv_obj_t* volume_row = lv_obj_create(content);
+    lv_obj_add_style(volume_row, &style_panel, 0);
+    lv_obj_set_size(volume_row, 414, 58);
+    lv_obj_align(volume_row, LV_ALIGN_TOP_LEFT, 0, 94);
+    lv_obj_clear_flag(volume_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* volume_label = label_en(volume_row, "Volume", &style_en);
+    lv_obj_align(volume_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    settings_volume_value_ = label_en(volume_row, "--%", &style_green);
+    lv_obj_set_width(settings_volume_value_, 48);
+    lv_obj_set_style_text_align(settings_volume_value_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(settings_volume_value_, LV_ALIGN_TOP_RIGHT, -14, 8);
+    settings_volume_slider_ = lv_slider_create(volume_row);
+    lv_slider_set_range(settings_volume_slider_, 0, 100);
+    lv_obj_set_size(settings_volume_slider_, 382, 12);
+    lv_obj_align(settings_volume_slider_, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_LINE, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_GREEN, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_CREAM, LV_PART_KNOB);
+    lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
+
+    lv_obj_t* network_title = label_en(content, "Network", &style_gold);
+    lv_obj_set_style_text_font(network_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(network_title, LV_ALIGN_TOP_LEFT, 4, 166);
+
+    lv_obj_t* new_list_panel = lv_obj_create(content);
+    lv_obj_add_style(new_list_panel, &style_panel, 0);
+    lv_obj_set_size(new_list_panel, 414, 108);
+    lv_obj_align(new_list_panel, LV_ALIGN_TOP_LEFT, 0, 192);
+    lv_obj_set_scroll_dir(new_list_panel, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(new_list_panel, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_all(new_list_panel, 6, 0);
+    add_gesture_bubble(new_list_panel);
+
+    lv_obj_t* new_list_container = lv_obj_create(new_list_panel);
+    lv_obj_remove_style_all(new_list_container);
+    lv_obj_set_size(new_list_container, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(new_list_container, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(new_list_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(new_list_container, 5, 0);
+    add_gesture_bubble(new_list_container);
+
+    lv_obj_t* weather_title = label_en(content, "Weather", &style_gold);
+    lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 316);
+
+    lv_obj_t* weather_row = lv_obj_create(content);
+    lv_obj_add_style(weather_row, &style_panel, 0);
+    lv_obj_set_size(weather_row, 414, 58);
+    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 342);
+    lv_obj_clear_flag(weather_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* weather_label = label_en(weather_row, "Location", &style_en);
+    lv_obj_align(weather_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    lv_obj_t* weather_value = label_en(weather_row, "Configured by XiaoZhi / MCP", &style_muted);
+    lv_obj_set_style_text_font(weather_value, &lv_font_montserrat_12, 0);
+    lv_obj_align(weather_value, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+
+    lv_obj_set_user_data(settings_page_, new_list_container);
 }
 
 void DesktopUI::UpdateWifiList() {
@@ -1937,6 +2053,50 @@ void DesktopUI::SetDailyCard(const char* date, const char* title, const char* bo
     }
     if (quote_label_ && body) {
         lv_label_set_text(quote_label_, body);
+    }
+}
+
+void DesktopUI::SetSystemBrightness(int value) {
+    value = LV_CLAMP(5, value, 100);
+    auto* backlight = Board::GetInstance().GetBacklight();
+    if (!backlight) {
+        ESP_LOGW(TAG, "Brightness change ignored: no backlight");
+        return;
+    }
+    backlight->SetBrightness(static_cast<uint8_t>(value), true);
+    ESP_LOGI(TAG, "Settings brightness=%d", value);
+    RefreshSettingsControls();
+}
+
+void DesktopUI::SetSystemVolume(int value) {
+    value = LV_CLAMP(0, value, 100);
+    auto* codec = Board::GetInstance().GetAudioCodec();
+    if (!codec) {
+        ESP_LOGW(TAG, "Volume change ignored: no audio codec");
+        return;
+    }
+    codec->SetOutputVolume(value);
+    ESP_LOGI(TAG, "Settings volume=%d", value);
+    RefreshSettingsControls();
+}
+
+void DesktopUI::RefreshSettingsControls() {
+    char value_text[16];
+
+    if (settings_brightness_slider_ && settings_brightness_value_) {
+        auto* backlight = Board::GetInstance().GetBacklight();
+        const int brightness = backlight ? backlight->brightness() : 100;
+        lv_slider_set_value(settings_brightness_slider_, brightness, LV_ANIM_OFF);
+        snprintf(value_text, sizeof(value_text), "%d%%", brightness);
+        lv_label_set_text(settings_brightness_value_, value_text);
+    }
+
+    if (settings_volume_slider_ && settings_volume_value_) {
+        auto* codec = Board::GetInstance().GetAudioCodec();
+        const int volume = codec ? codec->output_volume() : 70;
+        lv_slider_set_value(settings_volume_slider_, volume, LV_ANIM_OFF);
+        snprintf(value_text, sizeof(value_text), "%d%%", volume);
+        lv_label_set_text(settings_volume_value_, value_text);
     }
 }
 

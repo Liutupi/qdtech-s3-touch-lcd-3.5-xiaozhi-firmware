@@ -2,6 +2,48 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-13: Make Settings Visible And Functional
+
+Scope:
+
+- Replaced the off-screen Settings content with a scrollable layout sized for the 480x320 display.
+- Added working brightness and output-volume sliders.
+- Hardware values are synchronized when Settings opens.
+- Changes are persisted only when slider interaction finishes, avoiding repeated NVS writes while dragging.
+- Kept WiFi scan results and weather-location status available in the page.
+- Fixed an initialization deadlock found during hardware verification by deferring `Board::GetInstance()` access until after board construction.
+
+Verification:
+
+```powershell
+. 'C:\Users\Administrator\esp-idf\export.ps1'
+idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build
+idf.py -B build-qdtech -p COM13 -b 921600 flash
+```
+
+Build result:
+
+- Build completed successfully.
+- `xiaozhi.bin` size: `0x3c3910`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x23c6f0` bytes, about 37%.
+
+Hardware/runtime verification on COM13:
+
+- Firmware flashed successfully at 921600 baud.
+- Boot reached `Desktop UI created`.
+- Touch controller reported 5 points.
+- WiFi and MQTT connected.
+- Application reached `STATE: idle`.
+- SNTP synchronized.
+- No panic, abort, or Guru Meditation appeared in the captured startup log.
+- Physical slider dragging and persisted-value restoration still require user-visible confirmation on the touchscreen.
+
+Maintainer notes:
+
+- Do not call `Board::GetInstance()` from `DesktopUI::Create()` while the QDTech board singleton is still being constructed.
+- Slider changes are applied on release to limit persistent-storage writes.
+
 ## 2026-06-13: Replace QTE With Focus Timer And Reduce Layout Overlap
 
 Scope:

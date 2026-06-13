@@ -39,7 +39,7 @@ Last verified on 2026-06-13 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
 - Branch: `codex/qdtech-landscape-v176`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-13 QTE tile replaced by local Focus Timer page and overlap-reduced timer layout
+- Last verified update: 2026-06-13 Settings page made visible and functional with persistent brightness and volume controls
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
@@ -59,6 +59,8 @@ Observed boot/runtime facts after flashing:
 - Weather visual mapping updated after weather fetch; captured log showed cloudy visual mapping for Open-Meteo code `1`.
 - Apps tile `FOC / Focus / 25 min` opens the local Focus Timer page instead of starting a XiaoZhi quote chat.
 - Focus Timer was reworked into a sparse three-column layout after the first version visually overlapped on the 480x320 display.
+- Settings now uses a scrollable layout that fits the 480x320 display.
+- Settings brightness and volume sliders read the current hardware values when the page opens and persist changes when the user releases the slider.
 - Calendar tile opens the local Calendar page.
 - Calendar Next button changed the displayed month during hardware testing.
 - Photos page exists and the photo task is lazy-started only when the Photos page is opened.
@@ -113,6 +115,7 @@ Short version:
 - Do not add new Chinese daily-card strings without regenerating both tracked LXGW WenKai subset fonts.
 - Do not add new Chinese Focus Timer strings without regenerating both tracked LXGW WenKai subset fonts.
 - Do not let the Focus Timer page become visually dense again; verify spacing on the 480x320 hardware screen.
+- Do not read `Board::GetInstance()` while `DesktopUI::Create()` is running inside the board constructor. Defer hardware-backed control synchronization until the page is opened.
 - Do not commit `.codex_tmp/` or the full LXGW WenKai TTF used only for local font generation.
 
 ## How To Continue Development

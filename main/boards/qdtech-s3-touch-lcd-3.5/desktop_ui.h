@@ -38,6 +38,8 @@ public:
     void ToggleFocusTimer();
     void ResetFocusTimer();
     void SetFocusMode(bool work_mode);
+    void SetSystemBrightness(int value);
+    void SetSystemVolume(int value);
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
     void SetPhotoState(const char* title, const char* detail);
@@ -123,6 +125,12 @@ private:
     uint32_t focus_total_sec_ = 25 * 60;
     uint16_t focus_completed_count_ = 0;
 
+    // Settings page elements
+    lv_obj_t* settings_brightness_slider_ = nullptr;
+    lv_obj_t* settings_brightness_value_ = nullptr;
+    lv_obj_t* settings_volume_slider_ = nullptr;
+    lv_obj_t* settings_volume_value_ = nullptr;
+
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
     lv_obj_t* eye_left_ = nullptr;
@@ -169,6 +177,7 @@ private:
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
+    void RefreshSettingsControls();
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
     void UpdateFocusUI();
