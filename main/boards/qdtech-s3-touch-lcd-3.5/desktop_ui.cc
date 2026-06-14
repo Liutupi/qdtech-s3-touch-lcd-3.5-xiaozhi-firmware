@@ -812,6 +812,15 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
         lv_obj_set_style_text_color(digit, i < 2 ? COLOR_CREAM : COLOR_GOLD, 0);
         lv_obj_align(digit, LV_ALIGN_CENTER, 0, -2);
         clock_labels_[i] = digit;
+        
+        // Shadow for pulse effect
+        lv_obj_t* shadow = lv_label_create(card);
+        lv_label_set_text(shadow, "0");
+        lv_obj_set_style_text_font(shadow, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_color(shadow, COLOR_GOLD, 0);
+        lv_obj_set_style_text_opa(shadow, LV_OPA_20, 0);
+        lv_obj_align(shadow, LV_ALIGN_CENTER, 2, 0);
+        clock_shadow_[i] = shadow;
     }
 
     colon_label_ = label_en(time_group, ":", &style_en);
@@ -819,6 +828,9 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_set_style_text_color(colon_label_, COLOR_CREAM, 0);
     lv_obj_align(colon_label_, LV_ALIGN_TOP_LEFT, 111, 54);
     lv_timer_create(ColonTimerCb, 500, this);
+    
+    // Clock shadow pulse animation
+    lv_timer_create(ClockShadowCb, 100, this);
 
     RenderBigTime(0, 0, false);
 }
@@ -868,6 +880,10 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_exec_cb(&anim, ObjOpaCb);
     lv_anim_start(&anim);
+    
+    // Weather particle animation timer
+    weather_particle_timer_ = lv_timer_create(WeatherParticleCb, 200, this);
+    lv_timer_pause(weather_particle_timer_);
 
     weather_temp_label_ = label_en(panel, "-- C", &style_en);
     lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
@@ -885,35 +901,38 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
 }
 
 void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
-    lv_obj_t* panel = CreatePanel(parent, 438, 94, 20, 214);
+    daily_card_panel_ = CreatePanel(parent, 438, 94, 20, 214);
 
-    daily_card_date_label_ = label_en(panel, "--/--", &style_gold);
+    daily_card_date_label_ = label_en(daily_card_panel_, "--/--", &style_gold);
     lv_obj_set_width(daily_card_date_label_, 82);
     lv_obj_set_style_text_align(daily_card_date_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(daily_card_date_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
 
-    daily_card_title_label_ = label_en(panel, "今日", &style_muted);
+    daily_card_title_label_ = label_en(daily_card_panel_, "今日", &style_muted);
     lv_obj_set_width(daily_card_title_label_, 82);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_16, 0);
     lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
 
-    lv_obj_t* divider = bar(panel, 2, 62, COLOR_LINE, LV_OPA_COVER);
+    lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 112, 16);
 
-    quote_label_ = label_en(panel, "正在同步今日卡片", &style_en);
+    quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
     lv_obj_set_width(quote_label_, 286);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
     lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 132, 14);
 
-    network_status_label_ = label_en(panel, "XiaoZhi AI", &style_muted);
+    network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
     lv_obj_set_width(network_status_label_, 286);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
     lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 132, -7);
+    
+    // Daily card breathing animation
+    lv_timer_create(DailyCardBreathCb, 50, this);
 }
 
 // ===== Apps page =====
@@ -2006,6 +2025,15 @@ void DesktopUI::ApplyWeatherVisual(int weather_code) {
     for (auto* storm : weather_storm_) {
         set_weather_part_visible(storm, is_storm);
     }
+    
+    // Start/stop particle animation based on weather
+    if (weather_particle_timer_) {
+        if (is_clear || is_cloud) {
+            lv_timer_resume(weather_particle_timer_);
+        } else {
+            lv_timer_pause(weather_particle_timer_);
+        }
+    }
 
     ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d storm=%d",
              weather_code, is_clear, show_cloud, is_rain, is_snow, is_storm);
@@ -2237,4 +2265,94 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
 
 void DesktopUI::SetXiaozhiEmotion(const char* emotion) {
     emotion_ = emotion ? emotion : "neutral";
+}
+
+void DesktopUI::DailyCardBreathCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->daily_card_panel_) return;
+    
+    // Breathing animation: opacity 235-255 (0.92-1.0)
+    static uint8_t breath_dir = 0; // 0=up, 1=down
+    static lv_opa_t breath_opa = 235;
+    
+    if (breath_dir == 0) {
+        breath_opa += 1;
+        if (breath_opa >= 255) breath_dir = 1;
+    } else {
+        breath_opa -= 1;
+        if (breath_opa <= 235) breath_dir = 0;
+    }
+    
+    lv_obj_set_style_opa(self->daily_card_panel_, breath_opa, 0);
+}
+
+void DesktopUI::ClockShadowCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self) return;
+    
+    // Shadow pulse: opacity 10-40
+    static uint8_t shadow_dir = 0;
+    static lv_opa_t shadow_opa = 10;
+    
+    if (shadow_dir == 0) {
+        shadow_opa += 1;
+        if (shadow_opa >= 40) shadow_dir = 1;
+    } else {
+        shadow_opa -= 1;
+        if (shadow_opa <= 10) shadow_dir = 0;
+    }
+    
+    for (int i = 0; i < 4; ++i) {
+        if (self->clock_shadow_[i]) {
+            lv_obj_set_style_text_opa(self->clock_shadow_[i], shadow_opa, 0);
+            // Update shadow text to match digit
+            if (self->clock_labels_[i]) {
+                const char* txt = lv_label_get_text(self->clock_labels_[i]);
+                lv_label_set_text(self->clock_shadow_[i], txt);
+            }
+        }
+    }
+}
+
+void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->weather_sun_) return;
+    
+    // Simple particle effect: create small circles that float up
+    lv_obj_t* parent = lv_obj_get_parent(self->weather_sun_);
+    if (!parent) return;
+    
+    // Create a small particle
+    lv_obj_t* particle = lv_obj_create(parent);
+    lv_obj_remove_style_all(particle);
+    lv_obj_set_size(particle, 4, 4);
+    lv_obj_set_style_radius(particle, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(particle, COLOR_GOLD, 0);
+    lv_obj_set_style_bg_opa(particle, LV_OPA_60, 0);
+    
+    // Random position near sun
+    int16_t x = 56 + (esp_random() % 54);
+    int16_t y = 28 + (esp_random() % 30);
+    lv_obj_align(particle, LV_ALIGN_TOP_LEFT, x, y);
+    
+    // Float up animation
+    lv_anim_t anim;
+    lv_anim_init(&anim);
+    lv_anim_set_var(&anim, particle);
+    lv_anim_set_values(&anim, y, y - 40);
+    lv_anim_set_time(&anim, 1500);
+    lv_anim_set_exec_cb(&anim, ObjYCb);
+    lv_anim_set_ready_cb(&anim, [](lv_anim_t* a) {
+        lv_obj_del(static_cast<lv_obj_t*>(a->var));
+    });
+    lv_anim_start(&anim);
+    
+    // Fade out
+    lv_anim_t fade;
+    lv_anim_init(&fade);
+    lv_anim_set_var(&fade, particle);
+    lv_anim_set_values(&fade, LV_OPA_60, LV_OPA_TRANSP);
+    lv_anim_set_time(&fade, 1500);
+    lv_anim_set_exec_cb(&fade, ObjOpaCb);
+    lv_anim_start(&fade);
 }

@@ -34,14 +34,14 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-13 in the Windows workspace:
+Last verified on 2026-06-14 in the macOS workspace:
 
-- Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
-- Branch: `codex/qdtech-landscape-v176`
-- User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-13 fixed Photos black screen caused by photo task stack allocation failure
+- Workspace: `/tmp/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Branch: `main`
+- User remote branch: `origin/main`
+- Last verified update: 2026-06-14 added visual animations (breathing, shadow pulse, weather particles) and optimized time/weather sync
 - Build directory used for board verification: `build-qdtech`
-- Serial port used during the last device flash: `COM13`
+- Serial port used during the last device flash: `/dev/tty.usbmodem212401`
 
 Observed boot/runtime facts after flashing:
 
@@ -94,6 +94,14 @@ Important 2026-06-05 stability finding:
 - MCP tools for weather location and radio controls.
 - Lightweight audio focus behavior so XiaoZhi states can pause the radio.
 - Radio reconnect/fallback handling and remembered last successful station URL.
+- Main page visual enhancements:
+  - Daily card breathing animation (opacity 0.92-1.0) for subtle visual depth.
+  - Clock digit shadow pulse effect (opacity 10-40) for time display ceremony.
+  - Weather particle animation (golden particles floating up from sun) for clear/cloudy weather.
+- Optimized time/weather sync speed:
+  - SNTP wait time reduced from 30s to 15s (500ms polling).
+  - Weather API timeout reduced from 20s to 10s.
+  - Weather retry attempts reduced from 3 to 2.
 
 ## What Still Needs Work
 

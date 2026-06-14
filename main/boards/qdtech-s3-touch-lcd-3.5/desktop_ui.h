@@ -81,6 +81,11 @@ private:
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
     lv_obj_t* calendar_app_status_label_ = nullptr;
+    
+    // Animation elements
+    lv_obj_t* daily_card_panel_ = nullptr;
+    lv_obj_t* clock_shadow_[4] = {};
+    lv_timer_t* weather_particle_timer_ = nullptr;
 
     // Photo page elements
     lv_obj_t* photo_image_a_ = nullptr;
@@ -196,4 +201,7 @@ private:
     static void ColonTimerCb(lv_timer_t* timer);
     static void FaceTimerCb(lv_timer_t* timer);
     static void FocusTimerCb(lv_timer_t* timer);
+    static void DailyCardBreathCb(lv_timer_t* timer);
+    static void ClockShadowCb(lv_timer_t* timer);
+    static void WeatherParticleCb(lv_timer_t* timer);
 };
