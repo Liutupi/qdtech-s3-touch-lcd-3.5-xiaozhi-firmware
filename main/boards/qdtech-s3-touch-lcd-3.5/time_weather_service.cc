@@ -293,13 +293,13 @@ void TimeWeatherService::StartSntp() {
 bool TimeWeatherService::WaitTimeReady() {
     time_t now = 0;
     tm timeinfo = {};
-    for (int i = 0; i < 30; ++i) {
+    for (int i = 0; i < 15; ++i) {
         time(&now);
         localtime_r(&now, &timeinfo);
         if (timeinfo.tm_year >= (2024 - 1900)) {
             return true;
         }
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
     return false;
 }
@@ -364,7 +364,7 @@ bool TimeWeatherService::FetchWeather() {
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
     config.url = url;
-    config.timeout_ms = 20000;
+    config.timeout_ms = 10000;
     config.event_handler = HttpEventHandler;
     config.user_data = response;
     config.crt_bundle_attach = esp_crt_bundle_attach;
@@ -372,7 +372,7 @@ bool TimeWeatherService::FetchWeather() {
     
     esp_err_t err = ESP_FAIL;
     int status = 0;
-    for (int attempt = 1; attempt <= 3; ++attempt) {
+    for (int attempt = 1; attempt <= 2; ++attempt) {
         response[0] = 0;
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (!client) {
@@ -390,8 +390,8 @@ bool TimeWeatherService::FetchWeather() {
         }
 
         ESP_LOGW(TAG, "weather fetch failed attempt=%d err=%s status=%d", attempt, esp_err_to_name(err), status);
-        if (attempt < 3) {
-            vTaskDelay(pdMS_TO_TICKS(1500 * attempt));
+        if (attempt < 2) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 
