@@ -2,9 +2,14 @@
 
 ## Snapshot
 
-Date: 2026-06-13
+Date: 2026-06-14
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
+
+## Version History
+
+- v1.0 (2026-06-14): Stable release with optimized time/weather sync
+- v1.1 (2026-06-14): Visual animations and further sync optimization
 
 ## Confirmed Hardware From Source
 
@@ -115,6 +120,14 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - `self.radio.next`
   - `self.radio.previous`
 - Radio and XiaoZhi audio avoidance through lightweight audio focus.
+- Main page visual enhancements (v1.1):
+  - Daily card breathing animation (opacity 0.92-1.0) for subtle visual depth.
+  - Clock digit shadow pulse effect (opacity 10-40) for time display ceremony.
+  - Weather particle animation (golden particles floating up from sun) for clear/cloudy weather.
+- Optimized time/weather sync speed (v1.0/v1.1):
+  - SNTP wait time reduced from 30s to 15s (500ms polling).
+  - Weather API timeout reduced from 20s to 10s.
+  - Weather retry attempts reduced from 3 to 2.
 
 ## Current Runtime Behavior To Verify
 
