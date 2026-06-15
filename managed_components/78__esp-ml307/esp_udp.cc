@@ -3,7 +3,6 @@
 #include <esp_log.h>
 #include <unistd.h>
 #include <cstring>
-#include <system_error>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -45,15 +44,7 @@ bool EspUdp::Connect(const std::string& host, int port) {
     }
 
     connected_ = true;
-    try {
-        receive_thread_ = std::thread(&EspUdp::ReceiveTask, this);
-    } catch (const std::system_error& e) {
-        ESP_LOGE(TAG, "Failed to create UDP receive thread: %s", e.what());
-        connected_ = false;
-        close(udp_fd_);
-        udp_fd_ = -1;
-        return false;
-    }
+    receive_thread_ = std::thread(&EspUdp::ReceiveTask, this);
     return true;
 }
 

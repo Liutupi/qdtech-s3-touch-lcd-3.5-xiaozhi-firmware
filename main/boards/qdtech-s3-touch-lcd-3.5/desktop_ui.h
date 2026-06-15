@@ -49,6 +49,12 @@ public:
     void SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail);
     void RequestPhotoRefresh();
 
+    // Radio actions (public for LVGL callbacks)
+    std::function<void()> radio_play_pause_;
+    std::function<void()> radio_stop_;
+    std::function<void()> radio_next_;
+    std::function<void()> radio_prev_;
+
     // Face animation
     void UpdateFaceAnimation();
 
@@ -113,10 +119,6 @@ private:
     lv_obj_t* radio_station_label_ = nullptr;
     lv_obj_t* radio_state_label_ = nullptr;
     lv_obj_t* radio_meta_label_ = nullptr;
-    std::function<void()> radio_play_pause_;
-    std::function<void()> radio_stop_;
-    std::function<void()> radio_next_;
-    std::function<void()> radio_prev_;
 
     // Focus timer page elements
     lv_obj_t* focus_page_ = nullptr;

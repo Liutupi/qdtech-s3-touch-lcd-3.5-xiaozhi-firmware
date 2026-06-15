@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-14
+Date: 2026-06-15
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -10,6 +10,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 
 - v1.0 (2026-06-14): Stable release with optimized time/weather sync
 - v1.1 (2026-06-14): Visual animations and further sync optimization
+- v1.2 (2026-06-15): P0-P6 optimization, LVGL touch migration, font fix, NVS persistence
 
 ## Confirmed Hardware From Source
 

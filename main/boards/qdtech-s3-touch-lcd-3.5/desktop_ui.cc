@@ -11,6 +11,8 @@
 #include <utility>
 
 #include <esp_log.h>
+#include <nvs_flash.h>
+#include <nvs.h>
 #include <ssid_manager.h>
 
 #define TAG "DesktopUI"
@@ -191,6 +193,25 @@ void DesktopUI::FaceTimerCb(lv_timer_t* timer) {
     }
 }
 
+static void SaveFocusCount(uint16_t count) {
+    nvs_handle_t handle;
+    if (nvs_open("focus", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u16(handle, "completed", count);
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+static uint16_t LoadFocusCount() {
+    nvs_handle_t handle;
+    uint16_t count = 0;
+    if (nvs_open("focus", NVS_READONLY, &handle) == ESP_OK) {
+        nvs_get_u16(handle, "completed", &count);
+        nvs_close(handle);
+    }
+    return count;
+}
+
 void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
     if (!self || !self->focus_running_) {
@@ -203,6 +224,7 @@ void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
         self->focus_running_ = false;
         if (self->focus_is_work_) {
             self->focus_completed_count_++;
+            SaveFocusCount(self->focus_completed_count_);
             ESP_LOGI(TAG, "Focus session completed count=%u", self->focus_completed_count_);
         } else {
             ESP_LOGI(TAG, "Focus break completed");
@@ -371,6 +393,38 @@ static void calendar_today_cb(lv_event_t* event) {
 static void calendar_next_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
         g_desktop_ui->AdjustCalendarMonth(1);
+    }
+}
+
+static void radio_prev_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->radio_prev_) {
+            g_desktop_ui->radio_prev_();
+        }
+    }
+}
+
+static void radio_play_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->radio_play_pause_) {
+            g_desktop_ui->radio_play_pause_();
+        }
+    }
+}
+
+static void radio_stop_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->radio_stop_) {
+            g_desktop_ui->radio_stop_();
+        }
+    }
+}
+
+static void radio_next_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->radio_next_) {
+            g_desktop_ui->radio_next_();
+        }
     }
 }
 
@@ -578,6 +632,8 @@ void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t 
     const int16_t dy = static_cast<int16_t>(end_y) - static_cast<int16_t>(start_y);
 
     if (current_page_ == DesktopPage::SETTINGS) {
+        // Settings page scrolling and sliders are now handled by LVGL
+        // Only keep gesture detection for swipe navigation
         if (LV_ABS(dy) > 30 && LV_ABS(dy) > LV_ABS(dx)) {
             if (settings_content_) {
                 lv_obj_scroll_by_bounded(settings_content_, 0, dy, LV_ANIM_ON);
@@ -585,9 +641,8 @@ void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t 
             }
             return;
         }
-        if (HandleSettingsSliderRelease(start_x, start_y, end_x)) {
-            return;
-        }
+        // Slider interactions are now handled by LVGL click events
+        return;
     }
 
     if (duration_ms < 300 && LV_ABS(dx) < 30 && LV_ABS(dy) < 30) {
@@ -623,34 +678,7 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::RADIO) {
-        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            NavigateBack();
-            return;
-        }
-        if (x >= 24 && x < 120 && y >= 180 && y < 220) {
-            if (radio_prev_) {
-                radio_prev_();
-            }
-            return;
-        }
-        if (x >= 124 && x < 220 && y >= 180 && y < 220) {
-            if (radio_play_pause_) {
-                radio_play_pause_();
-            }
-            return;
-        }
-        if (x >= 224 && x < 320 && y >= 180 && y < 220) {
-            if (radio_stop_) {
-                radio_stop_();
-            }
-            return;
-        }
-        if (x >= 324 && x < 420 && y >= 180 && y < 220) {
-            if (radio_next_) {
-                radio_next_();
-            }
-            return;
-        }
+        // Radio page buttons are now handled by LVGL click events
         return;
     }
 
@@ -659,42 +687,12 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::CALENDAR) {
-        if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-            NavigateBack();
-            return;
-        }
-        if (x >= 38 && x < 114 && y >= 264 && y < 304) {
-            AdjustCalendarMonth(-1);
-            return;
-        }
-        if (x >= 202 && x < 278 && y >= 264 && y < 304) {
-            ShowTodayCalendar();
-            return;
-        }
-        if (x >= 366 && x < 442 && y >= 264 && y < 304) {
-            AdjustCalendarMonth(1);
-            return;
-        }
+        // Calendar page buttons are now handled by LVGL click events
         return;
     }
 
     if (current_page_ == DesktopPage::FOCUS) {
-        if (x >= 128 && x < 260 && y >= 262 && y < 306) {
-            ToggleFocusTimer();
-            return;
-        }
-        if (x >= 276 && x < 388 && y >= 262 && y < 306) {
-            ResetFocusTimer();
-            return;
-        }
-        if (x >= 342 && x < 450 && y >= 82 && y < 124) {
-            SetFocusMode(true);
-            return;
-        }
-        if (x >= 342 && x < 450 && y >= 134 && y < 176) {
-            SetFocusMode(false);
-            return;
-        }
+        // Focus page buttons are now handled by LVGL click events
         return;
     }
 
@@ -709,26 +707,9 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         return;
     }
 
-    if (x >= 360 && x < 470 && y >= 35 && y < 90) {
-        NavigateBack();
-        return;
-    }
-
-    constexpr int16_t tile_w = 204;
-    constexpr int16_t tile_h = 62;
-    constexpr int16_t tile_x0 = 24;
-    constexpr int16_t tile_y0 = 86;
-    constexpr int16_t tile_x_gap = 218;
-    constexpr int16_t tile_y_gap = 72;
-
-    for (uint8_t i = 0; i < 6; ++i) {
-        const int16_t tile_x = tile_x0 + (i % 2) * tile_x_gap;
-        const int16_t tile_y = tile_y0 + (i / 2) * tile_y_gap;
-        if (x >= tile_x && x < tile_x + tile_w && y >= tile_y && y < tile_y + tile_h) {
-            open_app_card(i);
-            return;
-        }
-    }
+    // Apps page buttons are now handled by LVGL click events
+    // Only keep gesture detection for swipe navigation
+    return;
 }
 
 // ===== Main page =====
@@ -910,26 +891,26 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
 
     daily_card_title_label_ = label_en(daily_card_panel_, "今日", &style_muted);
-    lv_obj_set_width(daily_card_title_label_, 82);
+    lv_obj_set_width(daily_card_title_label_, 100);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_16, 0);
     lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
-    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 112, 16);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 120, 16);
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, 286);
+    lv_obj_set_width(quote_label_, 278);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 132, 14);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 140, 14);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, 286);
+    lv_obj_set_width(network_status_label_, 278);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 132, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 140, -7);
     
     // Daily card breathing animation
     lv_timer_create(DailyCardBreathCb, 50, this);
@@ -1172,16 +1153,16 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
     // 播放控制按钮
-    lv_obj_t* prev = CreateButton(radio_page_, "Prev", nullptr);
+    lv_obj_t* prev = CreateButton(radio_page_, "Prev", radio_prev_cb);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 24, 180);
 
-    lv_obj_t* play = CreateButton(radio_page_, "Play", nullptr);
+    lv_obj_t* play = CreateButton(radio_page_, "Play", radio_play_cb);
     lv_obj_align(play, LV_ALIGN_TOP_LEFT, 124, 180);
 
-    lv_obj_t* stop = CreateButton(radio_page_, "Stop", nullptr);
+    lv_obj_t* stop = CreateButton(radio_page_, "Stop", radio_stop_cb);
     lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 224, 180);
 
-    lv_obj_t* next = CreateButton(radio_page_, "Next", nullptr);
+    lv_obj_t* next = CreateButton(radio_page_, "Next", radio_next_cb);
     lv_obj_align(next, LV_ALIGN_TOP_LEFT, 324, 180);
 
     // 电台数量信息
@@ -1324,6 +1305,7 @@ void DesktopUI::CreateFocusPage(lv_obj_t* root) {
 
     focus_timer_ = lv_timer_create(FocusTimerCb, 1000, this);
     lv_timer_pause(focus_timer_);
+    focus_completed_count_ = LoadFocusCount();
     UpdateFocusUI();
 }
 

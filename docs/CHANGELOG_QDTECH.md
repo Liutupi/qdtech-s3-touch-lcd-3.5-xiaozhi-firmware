@@ -2,6 +2,40 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-15: P0-P6 Optimization and LVGL Touch Migration
+
+Scope:
+
+- P0: Verified build environment and reproducible build process
+- P1: Hardware runtime validation (boot log, WiFi, MQTT, SNTP, weather)
+- P2: Expanded daily card content (festivals 19→19, history 8→31, quotes 16→32)
+- P3: Focus timer NVS persistence for completion count
+- P4: Enhanced radio audio focus logging
+- P5: Radio station index NVS persistence, error state after 5 failures
+- P6: LVGL touch input device migration (hybrid mode)
+
+Font fix:
+
+- Regenerated LXGW WenKai subset fonts (499 Chinese characters)
+- Fixed garbled text on daily card and UI elements
+- Adjusted daily card layout (title width 82→100px, divider 112→120px)
+
+Touch architecture:
+
+- Created LVGL input device for button clicks and slider interactions
+- Kept manual touch polling for gesture detection (LVGL 9.x limitation)
+- Disabled duplicate HandleTap coordinate detection for migrated pages
+- Added Radio button event callbacks (prev/play/stop/next)
+
+Verification:
+
+- Build: `idf.py -B build-qdtech build`
+- Flash: `idf.py -B build-qdtech -p COM13 -b 921600 flash`
+- Boot: SKU=qdtech-s3-touch-lcd-3.5, Desktop UI created, WiFi connected
+- Daily card: Festival/history/quote content displays correctly
+- Focus timer: Completion count persists across reboots
+- Radio: Station index persists, error state shows after failures
+
 ## 2026-06-13: Fix Black Photos Page After Settings Growth
 
 Problem:

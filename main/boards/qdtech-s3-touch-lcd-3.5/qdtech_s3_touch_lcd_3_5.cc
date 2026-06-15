@@ -177,6 +177,10 @@ public:
         return &desktop_ui_;
     }
 
+    lv_display_t* GetLvDisplay() {
+        return display_;
+    }
+
 private:
     DesktopUI desktop_ui_;
 
@@ -449,6 +453,19 @@ private:
     void InitializeTouch() {
         touch_.Init(i2c_bus_);
 
+        // Create LVGL input device
+        if (display_ && lvgl_port_lock(0)) {
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            touch_indev_ = lv_indev_create();
+            lv_indev_set_type(touch_indev_, LV_INDEV_TYPE_POINTER);
+            lv_indev_set_read_cb(touch_indev_, TouchReadCb);
+            lv_indev_set_disp(touch_indev_, qd_display->GetLvDisplay());
+            lv_indev_set_driver_data(touch_indev_, this);
+            lvgl_port_unlock();
+            ESP_LOGI(TAG, "LVGL touch input device created");
+        }
+
+        // Keep legacy touch polling for gesture detection
         esp_timer_create_args_t timer_args = {
             .callback = [](void* arg) {
                 static_cast<QdtechS3TouchLcd35Board*>(arg)->PollTouch();
@@ -460,6 +477,26 @@ private:
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &touch_timer_));
         ESP_ERROR_CHECK(esp_timer_start_periodic(touch_timer_, TOUCH_POLL_MS * 1000));
+    }
+
+    static void TouchReadCb(lv_indev_t* indev, lv_indev_data_t* data) {
+        auto* board = static_cast<QdtechS3TouchLcd35Board*>(lv_indev_get_driver_data(indev));
+        if (!board) {
+            data->state = LV_INDEV_STATE_RELEASED;
+            return;
+        }
+
+        uint16_t x = 0;
+        uint16_t y = 0;
+        bool touched = board->touch_.ReadFirstPoint(x, y);
+
+        if (touched) {
+            data->point.x = x;
+            data->point.y = y;
+            data->state = LV_INDEV_STATE_PRESSED;
+        } else {
+            data->state = LV_INDEV_STATE_RELEASED;
+        }
     }
 
     void PollTouch() {
@@ -656,6 +693,7 @@ private:
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
+    lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
     int64_t touch_start_ms_ = 0;
     uint16_t touch_start_x_ = 0;

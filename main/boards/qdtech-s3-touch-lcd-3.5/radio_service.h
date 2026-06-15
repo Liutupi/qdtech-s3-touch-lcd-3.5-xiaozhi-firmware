@@ -50,6 +50,8 @@ private:
     void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
     void LoadFavorites();
     void SaveFavorites();
+    void LoadStationIndex();
+    void SaveStationIndex();
 
     DesktopUI* desktop_ui_ = nullptr;
     void* queue_ = nullptr;

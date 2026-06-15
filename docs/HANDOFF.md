@@ -34,14 +34,14 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-15 in the macOS workspace:
+Last verified on 2026-06-15 in the Windows workspace:
 
-- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `C:\Users\Administrator\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
-- User remote branch: `origin/main`
-- Last verified update: 2026-06-15 fixed daily card garbled text, expanded radio stations to 37, optimized radio UI
-- Build directory used for board verification: `build`
-- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+- User remote branch: `qdtech-new/main`
+- Last verified update: 2026-06-15 P0-P6 optimization, LVGL touch migration, font fix
+- Build directory used for board verification: `build-qdtech`
+- Serial port used during the last device flash: `COM13`
 
 Observed boot/runtime facts after flashing:
 
@@ -83,19 +83,23 @@ Important 2026-06-05 stability finding:
 - XiaoZhi voice core from the upstream project.
 - QDTech 3.5 inch landscape display adaptation.
 - CST9217/TDDI touch polling with tap/swipe dispatch.
+- LVGL touch input device for button clicks and slider interactions.
+- Hybrid touch mode: LVGL for buttons/sliders, manual polling for gestures.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
 - Local Calendar page with month grid, Today, Prev, and Next controls.
-- Local Focus Timer page with 25 minute focus mode, 5 minute break mode, start/pause, reset, and in-memory completion count.
+- Local Focus Timer page with 25 minute focus mode, 5 minute break mode, start/pause, reset, and NVS-persisted completion count.
 - Local Photos page replacing the previous Weather app tile, reading JPEG photos from common SD directories and playing them as a pure full-screen slideshow.
 - Time and weather service.
-- Main-page daily card with date-linked festival, history-on-this-day, and local quote fallback content.
-- Embedded LXGW WenKai LVGL subset fonts for the current daily-card Chinese text.
+- Main-page daily card with date-linked festival (19), history-on-this-day (31), and daily quote (32) content.
+- Embedded LXGW WenKai LVGL subset fonts (499 Chinese characters).
 - MP3 network radio service with 37 Chinese stations.
 - Radio station categories: National (CNR), Beijing, Shanghai, Guangdong, Zhejiang, Jiangsu, Sichuan, Hunan, Hubei, Shandong, Music, Traffic, Other.
 - Radio station favorites with NVS storage persistence.
+- Radio station index persistence (last played station remembered).
 - MCP tools for weather location and radio controls.
 - Lightweight audio focus behavior so XiaoZhi states can pause the radio.
 - Radio reconnect/fallback handling and remembered last successful station URL.
+- Radio error state display after 5 consecutive failures.
 - Main page visual enhancements:
   - Daily card breathing animation (opacity 0.92-1.0) for subtle visual depth.
   - Clock digit shadow pulse effect (opacity 10-40) for time display ceremony.
@@ -112,10 +116,23 @@ Highest priority areas are listed in `docs/NEXT_TASKS.md`.
 Short version:
 
 - Keep proving XiaoZhi voice, radio, touch, and display together on hardware after every meaningful firmware change.
-- Migrate touch toward standard LVGL `lv_indev_t` carefully.
 - Improve display flush performance without rewriting the display path all at once.
 - Move radio station configuration toward SPIFFS/SD/NVS while keeping built-in fallback stations.
 - Expand settings UI only after the stability base is proven.
+
+## Touch Architecture Note
+
+The current touch system uses a hybrid approach:
+
+- **LVGL input device** (`lv_indev_t`): Handles button clicks and slider interactions automatically.
+- **Manual touch polling** (20ms timer): Handles gesture detection (swipe navigation) because LVGL 9.x does not expose gesture sensitivity tuning APIs.
+
+This hybrid approach was adopted after discovering that:
+1. LVGL gesture detection requires 50px minimum swipe distance (too insensitive).
+2. LVGL 9.x does not provide `lv_indev_set_gesture_limit()` or similar APIs.
+3. Direct struct member access is blocked by opaque type definitions.
+
+Do not remove the manual touch polling without providing an alternative gesture detection mechanism.
 
 ## Do Not Randomly Change These Areas
 

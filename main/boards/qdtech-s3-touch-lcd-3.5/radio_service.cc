@@ -193,6 +193,7 @@ void RadioService::Start(DesktopUI* desktop_ui) {
         OnDeviceStateChanged(static_cast<int>(previous), static_cast<int>(current));
     });
     LoadFavorites();
+    LoadStationIndex();
     xTaskCreate([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
     }, "radio_service", 6144, this, 4, nullptr);
@@ -215,6 +216,21 @@ void RadioService::SaveFavorites() {
         snprintf(key, sizeof(key), "fav_%d", i);
         settings.SetInt(key, kStations[i].favorite ? 1 : 0);
     }
+}
+
+void RadioService::LoadStationIndex() {
+    Settings settings("radio_st", false);
+    int index = settings.GetInt("last", 0);
+    if (index >= 0 && index < StationCount()) {
+        station_index_ = index;
+        ESP_LOGI(TAG, "Loaded last station index=%d name=%s", station_index_, kStations[station_index_].name);
+    }
+}
+
+void RadioService::SaveStationIndex() {
+    Settings settings("radio_st", true);
+    settings.SetInt("last", station_index_);
+    ESP_LOGI(TAG, "Saved station index=%d", station_index_);
 }
 
 void RadioService::ToggleFavorite(int index) {
@@ -258,18 +274,22 @@ const char* RadioService::GetStationCategory(int index) const {
 }
 
 void RadioService::PlayPause() {
+    ESP_LOGI(TAG, "PlayPause requested play_requested=%d", play_requested_);
     PostCommand(Command::PLAY_PAUSE);
 }
 
 void RadioService::Play() {
     if (!play_requested_) {
+        ESP_LOGI(TAG, "Play requested (was stopped)");
         PostCommand(Command::PLAY_PAUSE);
     } else {
+        ESP_LOGI(TAG, "Play requested (already playing, refreshing focus)");
         PostCommand(Command::FOCUS_CHANGED);
     }
 }
 
 void RadioService::Stop() {
+    ESP_LOGI(TAG, "Stop requested");
     stop_requested_ = true;
     PostCommand(Command::STOP);
 }
@@ -347,7 +367,11 @@ void RadioService::Task() {
             int delay_ms = std::min(5000, 500 + reconnect_attempt_ * 500);
             ESP_LOGW(TAG, "radio reconnect scheduled station=%s attempt=%d delay=%dms",
                      kStations[station_index_].name, reconnect_attempt_, delay_ms);
-            SetUi("Reconnecting", "Stream ended");
+            if (reconnect_attempt_ >= 5) {
+                SetUi("Error", "Multiple failures");
+            } else {
+                SetUi("Reconnecting", "Stream ended");
+            }
             vTaskDelay(pdMS_TO_TICKS(delay_ms));
         }
     }
@@ -635,6 +659,7 @@ void RadioService::OnDeviceStateChanged(int previous_state, int current_state) {
 
 void RadioService::NextStation(int delta) {
     station_index_ = (station_index_ + delta + StationCount()) % StationCount();
+    SaveStationIndex();
 }
 
 void RadioService::SetUi(const char* state, const char* detail) {
