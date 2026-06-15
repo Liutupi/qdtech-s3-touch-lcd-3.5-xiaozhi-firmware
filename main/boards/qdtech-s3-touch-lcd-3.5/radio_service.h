@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <atomic>
+#include <vector>
 
 class DesktopUI;
 
@@ -16,6 +17,16 @@ public:
     void Prev();
     std::string GetStatusJson() const;
     std::string SelectStation(const std::string& station);
+    
+    // 新增功能
+    void ToggleFavorite(int index);
+    bool IsFavorite(int index) const;
+    std::vector<int> GetFavorites() const;
+    std::vector<int> GetByCategory(int category) const;
+    int GetCurrentIndex() const { return station_index_; }
+    int GetStationCount() const;
+    const char* GetStationName(int index) const;
+    const char* GetStationCategory(int index) const;
 
 private:
     enum class Command {
@@ -37,6 +48,8 @@ private:
     void NextStation(int delta);
     void SetUi(const char* state, const char* detail);
     void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
+    void LoadFavorites();
+    void SaveFavorites();
 
     DesktopUI* desktop_ui_ = nullptr;
     void* queue_ = nullptr;

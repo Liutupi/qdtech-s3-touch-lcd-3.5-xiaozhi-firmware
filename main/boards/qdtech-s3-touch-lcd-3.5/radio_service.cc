@@ -20,6 +20,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "mp3dec.h"
+#include "settings.h"
 #include "wifi_station.h"
 
 static const char* TAG = "RadioService";
@@ -29,41 +30,137 @@ static constexpr int kReadTargetBytes = 8 * 1024;
 static constexpr int kReadChunkBytes = 1024;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
 
+enum class RadioCategory {
+    NATIONAL,    // 全国
+    BEIJING,     // 北京
+    SHANGHAI,    // 上海
+    GUANGDONG,   // 广东
+    ZHEJIANG,    // 浙江
+    JIANGSU,     // 江苏
+    SICHUAN,     // 四川
+    HUNAN,       // 湖南
+    HUBEI,       // 湖北
+    SHANDONG,    // 山东
+    MUSIC,       // 音乐
+    TRAFFIC,     // 交通
+    OTHER,       // 其他
+};
+
 struct RadioStation {
     const char* name;
     const char* urls[3];
     const char* codec;
     int bitrate_kbps;
+    RadioCategory category;
+    bool favorite;
 };
 
-static const RadioStation kStations[] = {
+static RadioStation kStations[] = {
     // 全国性电台 (CNR)
-    {"CNR China Voice", {"https://lhttp.qtfm.cn/live/15318317/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3", nullptr}, "MP3", 64},
-    {"CNR Economic", {"https://lhttp.qingting.fm/live/15318569/64k.mp3", "https://lhttp.qtfm.cn/live/15318569/64k.mp3", nullptr}, "MP3", 64},
+    {"CNR China Voice", {"https://lhttp.qtfm.cn/live/15318317/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+    {"CNR Economic", {"https://lhttp.qingting.fm/live/15318569/64k.mp3", "https://lhttp.qtfm.cn/live/15318569/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+    {"CNR Music", {"https://lhttp.qtfm.cn/live/15318497/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318497/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+    {"CNR Traffic", {"https://lhttp.qtfm.cn/live/15318641/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318641/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+    {"CNR Literature", {"https://lhttp.qtfm.cn/live/15318785/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318785/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+    {"CNR Senior", {"https://lhttp.qtfm.cn/live/15318857/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318857/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+
+    // 北京电台
+    {"Beijing News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
+    {"Beijing Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
+    {"Beijing Music", {"https://lhttp.qtfm.cn/live/4938/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
+
+    // 上海电台
+    {"Shanghai News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
+    {"Shanghai Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
+    {"Shanghai Music", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
 
     // 广东电台
-    {"Guangzhou News", {"http://lhttp.qingting.fm/live/4848/64k.mp3", "https://lhttp.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64},
-    {"Guangzhou Traffic", {"http://lhttp.qingting.fm/live/4955/64k.mp3", "https://lhttp.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64},
-    {"Pearl River FM", {"http://lhttp.qingting.fm/live/1259/64k.mp3", "https://lhttp.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64},
-    {"Guangdong Music", {"http://lhttp.qingting.fm/live/1260/64k.mp3", "https://lhttp.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64},
-    {"Guangdong News", {"https://lhttp.qtfm.cn/live/471/64k.mp3", "https://lhttp-hw.qtfm.cn/live/471/64k.mp3", nullptr}, "MP3", 64},
-    {"Shenzhen FM971", {"http://lhttp.qingting.fm/live/1271/64k.mp3", "https://lhttp.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64},
+    {"Guangzhou News", {"http://lhttp.qingting.fm/live/4848/64k.mp3", "https://lhttp.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+    {"Guangzhou Traffic", {"http://lhttp.qingting.fm/live/4955/64k.mp3", "https://lhttp.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+    {"Pearl River FM", {"http://lhttp.qingting.fm/live/1259/64k.mp3", "https://lhttp.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+    {"Guangdong Music", {"http://lhttp.qingting.fm/live/1260/64k.mp3", "https://lhttp.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+    {"Guangdong News", {"https://lhttp.qtfm.cn/live/471/64k.mp3", "https://lhttp-hw.qtfm.cn/live/471/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+    {"Shenzhen FM971", {"http://lhttp.qingting.fm/live/1271/64k.mp3", "https://lhttp.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+
+    // 浙江电台
+    {"Zhejiang Voice", {"https://lhttp.qtfm.cn/live/1223/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
+    {"Zhejiang Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
+    {"Zhejiang Music", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
+
+    // 江苏电台
+    {"Jiangsu News", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU, false},
+    {"Jiangsu Traffic", {"https://lhttp.qtfm.cn/live/4915/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU, false},
+
+    // 四川电台
+    {"Sichuan News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN, false},
+    {"Sichuan Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN, false},
+
+    // 湖南电台
+    {"Hunan News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN, false},
+    {"Hunan Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN, false},
+
+    // 湖北电台
+    {"Hubei News", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI, false},
+    {"Hubei Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI, false},
+
+    // 山东电台
+    {"Shandong News", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG, false},
+    {"Shandong Traffic", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG, false},
 
     // 音乐电台
-    {"Music Radio", {"http://lhttp.qingting.fm/live/5022107/64k.mp3", "https://lhttp.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64},
-    {"Music FM", {"http://lhttp.qingting.fm/live/4938/64k.mp3", "https://lhttp.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64},
-    {"West Lake Voice", {"http://lhttp.qingting.fm/live/1223/64k.mp3", "https://lhttp.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64},
+    {"Music Radio", {"http://lhttp.qingting.fm/live/5022107/64k.mp3", "https://lhttp.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
+    {"Music FM", {"http://lhttp.qingting.fm/live/4938/64k.mp3", "https://lhttp.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
+    {"West Lake Voice", {"http://lhttp.qingting.fm/live/1223/64k.mp3", "https://lhttp.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
 
     // 交通广播
-    {"Traffic 959", {"http://lhttp.qingting.fm/live/5021381/64k.mp3", "https://lhttp.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64},
-    {"Business Radio", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64},
+    {"Traffic 959", {"http://lhttp.qingting.fm/live/5021381/64k.mp3", "https://lhttp.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC, false},
+    {"Business Radio", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC, false},
 
     // 其他电台
-    {"Night Radio", {"http://lhttp.qingting.fm/live/4915/64k.mp3", "https://lhttp.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64},
+    {"Night Radio", {"http://lhttp.qingting.fm/live/4915/64k.mp3", "https://lhttp.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::OTHER, false},
 };
 
 static int StationCount() {
     return sizeof(kStations) / sizeof(kStations[0]);
+}
+
+static const char* CategoryName(RadioCategory category) {
+    switch (category) {
+        case RadioCategory::NATIONAL: return "全国";
+        case RadioCategory::BEIJING: return "北京";
+        case RadioCategory::SHANGHAI: return "上海";
+        case RadioCategory::GUANGDONG: return "广东";
+        case RadioCategory::ZHEJIANG: return "浙江";
+        case RadioCategory::JIANGSU: return "江苏";
+        case RadioCategory::SICHUAN: return "四川";
+        case RadioCategory::HUNAN: return "湖南";
+        case RadioCategory::HUBEI: return "湖北";
+        case RadioCategory::SHANDONG: return "山东";
+        case RadioCategory::MUSIC: return "音乐";
+        case RadioCategory::TRAFFIC: return "交通";
+        case RadioCategory::OTHER: return "其他";
+        default: return "未知";
+    }
+}
+
+static std::vector<int> GetStationsByCategory(RadioCategory category) {
+    std::vector<int> result;
+    for (int i = 0; i < StationCount(); ++i) {
+        if (kStations[i].category == category) {
+            result.push_back(i);
+        }
+    }
+    return result;
+}
+
+static std::vector<int> GetFavoriteStations() {
+    std::vector<int> result;
+    for (int i = 0; i < StationCount(); ++i) {
+        if (kStations[i].favorite) {
+            result.push_back(i);
+        }
+    }
+    return result;
 }
 
 static int16_t Clamp16(int value) {
@@ -95,10 +192,69 @@ void RadioService::Start(DesktopUI* desktop_ui) {
     Application::GetInstance().RegisterDeviceStateCallback([this](DeviceState previous, DeviceState current) {
         OnDeviceStateChanged(static_cast<int>(previous), static_cast<int>(current));
     });
+    LoadFavorites();
     xTaskCreate([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
     }, "radio_service", 6144, this, 4, nullptr);
     SetUi("Ready", "Tap Play");
+}
+
+void RadioService::LoadFavorites() {
+    Settings settings("radio_fav", false);
+    for (int i = 0; i < StationCount(); ++i) {
+        char key[16];
+        snprintf(key, sizeof(key), "fav_%d", i);
+        kStations[i].favorite = settings.GetInt(key, 0) == 1;
+    }
+}
+
+void RadioService::SaveFavorites() {
+    Settings settings("radio_fav", true);
+    for (int i = 0; i < StationCount(); ++i) {
+        char key[16];
+        snprintf(key, sizeof(key), "fav_%d", i);
+        settings.SetInt(key, kStations[i].favorite ? 1 : 0);
+    }
+}
+
+void RadioService::ToggleFavorite(int index) {
+    if (index >= 0 && index < StationCount()) {
+        kStations[index].favorite = !kStations[index].favorite;
+        SaveFavorites();
+    }
+}
+
+bool RadioService::IsFavorite(int index) const {
+    if (index >= 0 && index < StationCount()) {
+        return kStations[index].favorite;
+    }
+    return false;
+}
+
+std::vector<int> RadioService::GetFavorites() const {
+    return GetFavoriteStations();
+}
+
+std::vector<int> RadioService::GetByCategory(int category) const {
+    return GetStationsByCategory(static_cast<RadioCategory>(category));
+}
+
+int RadioService::GetStationCount() const {
+    return StationCount();
+}
+
+const char* RadioService::GetStationName(int index) const {
+    if (index >= 0 && index < StationCount()) {
+        return kStations[index].name;
+    }
+    return "";
+}
+
+const char* RadioService::GetStationCategory(int index) const {
+    if (index >= 0 && index < StationCount()) {
+        return CategoryName(kStations[index].category);
+    }
+    return "";
 }
 
 void RadioService::PlayPause() {

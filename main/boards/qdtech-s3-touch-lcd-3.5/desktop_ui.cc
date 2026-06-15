@@ -627,25 +627,25 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
             NavigateBack();
             return;
         }
-        if (x >= 40 && x < 126 && y >= 230 && y < 280) {
+        if (x >= 24 && x < 120 && y >= 180 && y < 220) {
             if (radio_prev_) {
                 radio_prev_();
             }
             return;
         }
-        if (x >= 140 && x < 226 && y >= 230 && y < 280) {
+        if (x >= 124 && x < 220 && y >= 180 && y < 220) {
             if (radio_play_pause_) {
                 radio_play_pause_();
             }
             return;
         }
-        if (x >= 240 && x < 326 && y >= 230 && y < 280) {
+        if (x >= 224 && x < 320 && y >= 180 && y < 220) {
             if (radio_stop_) {
                 radio_stop_();
             }
             return;
         }
-        if (x >= 340 && x < 426 && y >= 230 && y < 280) {
+        if (x >= 324 && x < 420 && y >= 180 && y < 220) {
             if (radio_next_) {
                 radio_next_();
             }
@@ -1142,50 +1142,56 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_add_event_cb(radio_page_, radio_gesture_cb, LV_EVENT_GESTURE, NULL);
     add_gesture_bubble(radio_page_);
 
+    // 顶部状态栏
     lv_obj_t* brand = label_en(radio_page_, "XiaoZhi AI", &style_en);
     lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
     lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
 
     CreateStatusBar(radio_page_);
 
+    // 标题
     lv_obj_t* title = label_en(radio_page_, "Radio", &style_en);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
-    lv_obj_t* sub = label_en(radio_page_, "Network FM", &style_muted);
-    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 88, 53);
-
+    // 返回按钮
     lv_obj_t* back = CreateButton(radio_page_, "Back", navigate_back_cb);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
-    lv_obj_t* panel = CreatePanel(radio_page_, 432, 134, 24, 88);
-    radio_station_label_ = label_en(panel, "CNR China Voice", &style_gold);
+    // 当前电台信息
+    radio_station_label_ = label_en(radio_page_, "CNR China Voice", &style_gold);
     lv_obj_set_style_text_font(radio_station_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(radio_station_label_, LV_ALIGN_TOP_LEFT, 16, 14);
+    lv_obj_align(radio_station_label_, LV_ALIGN_TOP_LEFT, 24, 88);
 
-    radio_state_label_ = label_en(panel, "Ready", &style_green);
-    lv_obj_set_style_text_font(radio_state_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(radio_state_label_, LV_ALIGN_TOP_LEFT, 16, 52);
+    radio_state_label_ = label_en(radio_page_, "Ready", &style_green);
+    lv_obj_set_style_text_font(radio_state_label_, &lv_font_montserrat_16, 0);
+    lv_obj_align(radio_state_label_, LV_ALIGN_TOP_LEFT, 24, 118);
 
-    radio_meta_label_ = label_en(panel, "Tap Play to start MP3 stream", &style_muted);
-    lv_obj_set_width(radio_meta_label_, 390);
-    lv_label_set_long_mode(radio_meta_label_, LV_LABEL_LONG_DOT);
+    radio_meta_label_ = label_en(radio_page_, "MP3 64 kbps", &style_muted);
     lv_obj_set_style_text_font(radio_meta_label_, &lv_font_montserrat_14, 0);
-    lv_obj_align(radio_meta_label_, LV_ALIGN_BOTTOM_LEFT, 16, -14);
+    lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
+    // 播放控制按钮
     lv_obj_t* prev = CreateButton(radio_page_, "Prev", nullptr);
-    lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 52, 238);
+    lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 24, 180);
 
     lv_obj_t* play = CreateButton(radio_page_, "Play", nullptr);
-    lv_obj_align(play, LV_ALIGN_TOP_LEFT, 152, 238);
+    lv_obj_align(play, LV_ALIGN_TOP_LEFT, 124, 180);
 
     lv_obj_t* stop = CreateButton(radio_page_, "Stop", nullptr);
-    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 252, 238);
+    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 224, 180);
 
     lv_obj_t* next = CreateButton(radio_page_, "Next", nullptr);
-    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 352, 238);
+    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 324, 180);
 
+    // 电台数量信息
+    lv_obj_t* info = label_en(radio_page_, "37 stations available", &style_muted);
+    lv_obj_set_style_text_font(info, &lv_font_montserrat_14, 0);
+    lv_obj_align(info, LV_ALIGN_TOP_LEFT, 24, 230);
+
+    // 提示文字
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 

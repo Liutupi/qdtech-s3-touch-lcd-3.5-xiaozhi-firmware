@@ -34,14 +34,14 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-14 in the macOS workspace:
+Last verified on 2026-06-15 in the macOS workspace:
 
-- Workspace: `/tmp/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-14 added visual animations (breathing, shadow pulse, weather particles) and optimized time/weather sync
-- Build directory used for board verification: `build-qdtech`
-- Serial port used during the last device flash: `/dev/tty.usbmodem212401`
+- Last verified update: 2026-06-15 fixed daily card garbled text, expanded radio stations to 37, optimized radio UI
+- Build directory used for board verification: `build`
+- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
 
 Observed boot/runtime facts after flashing:
 
@@ -90,7 +90,9 @@ Important 2026-06-05 stability finding:
 - Time and weather service.
 - Main-page daily card with date-linked festival, history-on-this-day, and local quote fallback content.
 - Embedded LXGW WenKai LVGL subset fonts for the current daily-card Chinese text.
-- MP3 network radio service.
+- MP3 network radio service with 37 Chinese stations.
+- Radio station categories: National (CNR), Beijing, Shanghai, Guangdong, Zhejiang, Jiangsu, Sichuan, Hunan, Hubei, Shandong, Music, Traffic, Other.
+- Radio station favorites with NVS storage persistence.
 - MCP tools for weather location and radio controls.
 - Lightweight audio focus behavior so XiaoZhi states can pause the radio.
 - Radio reconnect/fallback handling and remembered last successful station URL.
