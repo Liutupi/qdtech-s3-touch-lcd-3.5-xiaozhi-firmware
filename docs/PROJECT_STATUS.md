@@ -11,6 +11,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.0 (2026-06-14): Stable release with optimized time/weather sync
 - v1.1 (2026-06-14): Visual animations and further sync optimization
 - v1.2 (2026-06-15): P0-P6 optimization, LVGL touch migration, font fix, NVS persistence
+- v1.3 (2026-06-15): Radio visual enhancement with audio spectrum bars
 
 ## Confirmed Hardware From Source
 

@@ -86,6 +86,7 @@ Important 2026-06-05 stability finding:
 - LVGL touch input device for button clicks and slider interactions.
 - Hybrid touch mode: LVGL for buttons/sliders, manual polling for gestures.
 - LVGL desktop UI with main/app/XiaoZhi/radio/settings pages.
+- Radio page with audio spectrum visualization (16 animated bars).
 - Local Calendar page with month grid, Today, Prev, and Next controls.
 - Local Focus Timer page with 25 minute focus mode, 5 minute break mode, start/pause, reset, and NVS-persisted completion count.
 - Local Photos page replacing the previous Weather app tile, reading JPEG photos from common SD directories and playing them as a pure full-screen slideshow.

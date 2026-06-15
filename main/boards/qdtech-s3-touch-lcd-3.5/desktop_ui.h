@@ -55,6 +55,10 @@ public:
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
 
+    // Radio animation (public for timer callback)
+    lv_obj_t* radio_bars_[16] = {};  // 音量动态柱
+    bool radio_playing_ = false;
+
     // Face animation
     void UpdateFaceAnimation();
 
@@ -119,6 +123,7 @@ private:
     lv_obj_t* radio_station_label_ = nullptr;
     lv_obj_t* radio_state_label_ = nullptr;
     lv_obj_t* radio_meta_label_ = nullptr;
+    lv_timer_t* radio_anim_timer_ = nullptr;
 
     // Focus timer page elements
     lv_obj_t* focus_page_ = nullptr;

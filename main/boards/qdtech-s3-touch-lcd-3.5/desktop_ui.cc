@@ -460,6 +460,29 @@ static void focus_break_cb(lv_event_t* event) {
     }
 }
 
+// 音量动态柱动画回调
+static void RadioAnimTimerCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self) return;
+
+    for (int i = 0; i < 16; i++) {
+        if (!self->radio_bars_[i]) continue;
+
+        if (self->radio_playing_) {
+            // 播放中：随机高度模拟频谱
+            uint16_t height = 10 + (esp_random() % 50);
+            lv_obj_set_height(self->radio_bars_[i], height);
+            lv_obj_align(self->radio_bars_[i], LV_ALIGN_BOTTOM_LEFT,
+                        24 + i * 28, 0);
+        } else {
+            // 停止：显示静默状态
+            lv_obj_set_height(self->radio_bars_[i], 5);
+            lv_obj_align(self->radio_bars_[i], LV_ALIGN_BOTTOM_LEFT,
+                        24 + i * 28, 0);
+        }
+    }
+}
+
 static void settings_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -1169,6 +1192,21 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_t* info = label_en(radio_page_, "37 stations available", &style_muted);
     lv_obj_set_style_text_font(info, &lv_font_montserrat_14, 0);
     lv_obj_align(info, LV_ALIGN_TOP_LEFT, 24, 230);
+
+    // 音量动态柱
+    for (int i = 0; i < 16; i++) {
+        radio_bars_[i] = lv_obj_create(radio_page_);
+        lv_obj_remove_style_all(radio_bars_[i]);
+        lv_obj_set_width(radio_bars_[i], 20);
+        lv_obj_set_height(radio_bars_[i], 5);
+        lv_obj_set_style_bg_color(radio_bars_[i], COLOR_GOLD, 0);
+        lv_obj_set_style_bg_opa(radio_bars_[i], LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(radio_bars_[i], 3, 0);
+        lv_obj_align(radio_bars_[i], LV_ALIGN_BOTTOM_LEFT, 24 + i * 28, 0);
+    }
+
+    // 启动动画定时器
+    radio_anim_timer_ = lv_timer_create(RadioAnimTimerCb, 100, this);
 
     // 提示文字
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
@@ -2230,6 +2268,8 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
     }
     if (radio_state_label_ && state) {
         lv_label_set_text(radio_state_label_, state);
+        // 更新播放状态
+        radio_playing_ = (state && (strcmp(state, "Playing") == 0 || strcmp(state, "Buffering") == 0));
     }
     if (radio_meta_label_ && meta) {
         lv_label_set_text(radio_meta_label_, meta);

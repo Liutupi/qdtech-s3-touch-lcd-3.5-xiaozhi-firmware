@@ -2,6 +2,30 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-15: Radio Visual Enhancement - Audio Spectrum Bars
+
+Scope:
+
+- Added 16 audio spectrum bars at the bottom of Radio page
+- Bars animate randomly when radio is playing (simulating audio frequency)
+- Bars show static 5px height when radio is stopped
+- Animation refresh rate: 100ms
+- Uses COLOR_GOLD for visual consistency
+
+Implementation:
+
+- Added `radio_bars_[16]` array for bar objects
+- Added `radio_playing_` state flag
+- Added `RadioAnimTimerCb` callback for animation
+- Modified `SetRadioState` to update playing state based on state string
+
+Verification:
+
+- Build: `idf.py -B build-qdtech build`
+- Flash: `idf.py -B build-qdtech -p COM13 -b 921600 flash`
+- Bars visible on Radio page
+- Animation active during playback
+
 ## 2026-06-15: P0-P6 Optimization and LVGL Touch Migration
 
 Scope:
