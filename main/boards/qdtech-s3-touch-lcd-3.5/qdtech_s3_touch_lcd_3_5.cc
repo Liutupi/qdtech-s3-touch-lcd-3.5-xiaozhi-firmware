@@ -6,6 +6,7 @@
 #include "config.h"
 #include "mcp_server.h"
 #include "desktop_ui.h"
+#include "fc_emulator_service.h"
 #include "photo_service.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
@@ -352,6 +353,7 @@ public:
         InitializeTools();
         InitializeRadio();
         InitializePhotos();
+        InitializeFcEmulator();
         GetBacklight()->RestoreBrightness();
     }
 
@@ -688,6 +690,14 @@ private:
         photo_service_.Start(desktop_ui);
     }
 
+    void InitializeFcEmulator() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        fc_emulator_service_.Start(desktop_ui);
+    }
+
     Button boot_button_;
     LcdDisplay* display_ = nullptr;
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
@@ -703,6 +713,7 @@ private:
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
     PhotoService photo_service_;
+    FcEmulatorService fc_emulator_service_;
     bool time_weather_started_ = false;
 };
 

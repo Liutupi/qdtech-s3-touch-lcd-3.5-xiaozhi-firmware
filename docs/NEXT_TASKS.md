@@ -2,6 +2,26 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
+## Current Active Task: FC/NES Emulator Repair
+
+Current state:
+
+- FC/NES app tile exists and opens a list-first ROM picker.
+- SD card mounting and ROM scanning work on the QDTech board.
+- The last hardware run found 146 supported `.nes` files.
+- Prev/Next selection and Start-to-load work.
+- Game view opens and publishes NES frames.
+- Touch buttons reach the service as `controller=0x..`.
+- The NES bus latches controller input, so the remaining issue is not the LVGL button layer.
+
+Next work:
+
+- Treat this as an emulator-core problem, not a UI button problem.
+- Prefer integrating a complete emulator core with adapters for SD ROM loading, LVGL frame publication, and the existing touch-controller state.
+- If keeping the current minimal core, first test a tiny known-good Mapper 0/NROM ROM, then fix CPU/PPU timing and missing CPU behavior until that single ROM is truly playable.
+- Remove or gate any temporary verbose input logs before final validation; keep only concise `controller latch=0x..` style diagnostics.
+- Rebuild, flash to `COM13`, and validate with serial plus hardware-visible movement before declaring FC playable.
+
 ## Priority 0: Keep The Base Reproducible
 
 - Keep `build-qdtech` as the known QDTech build directory.

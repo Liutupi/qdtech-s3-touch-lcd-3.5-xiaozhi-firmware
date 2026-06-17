@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cstdint>
 #include <ctime>
 #include <utility>
 
@@ -280,15 +281,20 @@ static void open_app_card(uint8_t index) {
             break;
         case 3:
             if (g_desktop_ui) {
-                g_desktop_ui->ShowPage(DesktopPage::CALENDAR);
+                g_desktop_ui->ShowPage(DesktopPage::FC);
             }
             break;
         case 4:
             if (g_desktop_ui) {
-                g_desktop_ui->ShowPage(DesktopPage::FOCUS);
+                g_desktop_ui->ShowPage(DesktopPage::CALENDAR);
             }
             break;
         case 5:
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::FOCUS);
+            }
+            break;
+        case 7:
             if (g_desktop_ui) {
                 g_desktop_ui->ShowPage(DesktopPage::SETTINGS);
             }
@@ -316,21 +322,27 @@ static void photo_card_cb(lv_event_t* event) {
     }
 }
 
-static void calendar_card_cb(lv_event_t* event) {
+static void fc_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(3);
     }
 }
 
-static void focus_card_cb(lv_event_t* event) {
+static void calendar_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(4);
     }
 }
 
-static void settings_card_cb(lv_event_t* event) {
+static void focus_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(5);
+    }
+}
+
+static void settings_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_app_card(7);
     }
 }
 
@@ -367,6 +379,98 @@ static void photo_gesture_cb(lv_event_t* event) {
     lv_dir_t dir = lv_indev_get_gesture_dir(indev);
     if (dir == LV_DIR_RIGHT || dir == LV_DIR_LEFT) {
         g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void fc_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui &&
+        !g_desktop_ui->IsFcPlayingView()) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static uint8_t fc_controller_from_page_point(int16_t x, int16_t y) {
+    if (y < 240) {
+        return 0;
+    }
+
+    const int16_t rel_y = y - 240;
+    uint8_t controller = 0;
+
+    if (x < 176) {
+        if (rel_y < 36) {
+            controller |= 0x10;
+        } else if (rel_y > 44) {
+            controller |= 0x20;
+        }
+        if (x < 70 && rel_y >= 18 && rel_y <= 72) {
+            controller |= 0x40;
+        } else if (x > 104 && rel_y >= 18 && rel_y <= 72) {
+            controller |= 0x80;
+        }
+    } else if (x >= 330) {
+        controller |= (x < 405) ? 0x02 : 0x01;
+    } else if (rel_y >= 36) {
+        controller |= (x < 246) ? 0x04 : 0x08;
+    }
+
+    return controller;
+}
+
+static void fc_page_touch_cb(lv_event_t* event) {
+    if (!g_desktop_ui || !g_desktop_ui->fc_controller_cb_ || !g_desktop_ui->IsFcPlayingView()) return;
+
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        g_desktop_ui->fc_controller_cb_(0);
+        return;
+    }
+    if (code != LV_EVENT_PRESSED && code != LV_EVENT_PRESSING) return;
+
+    lv_indev_t* indev = lv_indev_get_act();
+    if (!indev) return;
+
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+    g_desktop_ui->fc_controller_cb_(fc_controller_from_page_point(point.x, point.y));
+}
+
+static void fc_key_cb(lv_event_t* event) {
+    if (!g_desktop_ui || !g_desktop_ui->fc_controller_cb_ || !g_desktop_ui->IsFcPlayingView()) return;
+
+    const uint8_t mask = static_cast<uint8_t>(
+        reinterpret_cast<uintptr_t>(lv_event_get_user_data(event)));
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING) {
+        g_desktop_ui->fc_controller_cb_(mask);
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        g_desktop_ui->fc_controller_cb_(0);
+    }
+}
+
+static void fc_prev_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->fc_prev_) {
+        g_desktop_ui->fc_prev_();
+    }
+}
+
+static void fc_next_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->fc_next_) {
+        g_desktop_ui->fc_next_();
+    }
+}
+
+static void fc_start_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->fc_play_pause_) {
+        g_desktop_ui->fc_play_pause_();
+    }
+}
+
+static void fc_back_list_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->fc_stop_) {
+        g_desktop_ui->fc_stop_();
     }
 }
 
@@ -531,6 +635,7 @@ void DesktopUI::Create() {
     CreateMainPage(root);
     CreateAppsPage(root);
     CreatePhotoPage(root);
+    CreateFcPage(root);
     CreateCalendarPage(root);
     CreateRadioPage(root);
     CreateFocusPage(root);
@@ -548,11 +653,15 @@ void DesktopUI::Create() {
 
 void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_photo = current_page_ == DesktopPage::PHOTO;
+    const bool was_fc = current_page_ == DesktopPage::FC;
     current_page_ = page;
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     if (photo_page_) {
         lv_obj_add_flag(photo_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (fc_page_) {
+        lv_obj_add_flag(fc_page_, LV_OBJ_FLAG_HIDDEN);
     }
     if (calendar_page_) {
         lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
@@ -580,6 +689,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
                 lv_obj_clear_flag(photo_page_, LV_OBJ_FLAG_HIDDEN);
             }
             ESP_LOGI(TAG, "Show photo page");
+            break;
+        case DesktopPage::FC:
+            if (fc_page_) {
+                lv_obj_clear_flag(fc_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show FC page");
             break;
         case DesktopPage::CALENDAR:
             if (calendar_page_) {
@@ -616,6 +731,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool is_photo = page == DesktopPage::PHOTO;
     if (photo_active_callback_ && was_photo != is_photo) {
         photo_active_callback_(is_photo);
+    }
+    const bool is_fc = page == DesktopPage::FC;
+    if (fc_active_callback_ && was_fc != is_fc) {
+        fc_active_callback_(is_fc);
     }
 }
 
@@ -706,6 +825,10 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::PHOTO) {
+        return;
+    }
+
+    if (current_page_ == DesktopPage::FC) {
         return;
     }
 
@@ -979,12 +1102,14 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
         {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
         {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
+        {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
         {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
         {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
+        {"NET", "Network", "WiFi", COLOR_BLUE, settings_card_cb},
         {"SET", "Settings", "System", COLOR_BLUE, settings_card_cb},
     };
 
-    for (uint8_t i = 0; i < 6; ++i) {
+    for (uint8_t i = 0; i < 8; ++i) {
         lv_obj_t* tile = CreateAppTile(apps_page_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
         if (apps[i].cb) {
             lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
@@ -998,9 +1123,9 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color) {
     lv_obj_t* box = lv_obj_create(parent);
     lv_obj_add_style(box, &style_panel, 0);
-    lv_obj_set_size(box, 204, 62);
+    lv_obj_set_size(box, 204, 48);
     const int16_t x = 24 + (index % 2) * 218;
-    const int16_t y = 86 + (index / 2) * 72;
+    const int16_t y = 82 + (index / 2) * 54;
     lv_obj_align(box, LV_ALIGN_TOP_LEFT, x, y);
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
@@ -1010,16 +1135,16 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_t* cn_label = label_en(box, cn, &style_en);
     lv_obj_set_style_text_color(cn_label, color, 0);
     lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_20, 0);
-    lv_obj_align(cn_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    lv_obj_align(cn_label, LV_ALIGN_TOP_LEFT, 14, 6);
 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
-    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 70, 10);
+    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 70, 7);
 
     lv_obj_t* status_label = label_en(box, status, &style_muted);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
-    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 70, 34);
-    if (index == 3) {
+    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 70, 29);
+    if (index == 4) {
         calendar_app_status_label_ = status_label;
     }
 
@@ -1052,6 +1177,144 @@ void DesktopUI::CreatePhotoPage(lv_obj_t* root) {
     lv_obj_center(photo_image_b_);
     add_gesture_bubble(photo_image_a_);
     add_gesture_bubble(photo_image_b_);
+}
+
+// ===== FC emulator page =====
+void DesktopUI::CreateFcPage(lv_obj_t* root) {
+    fc_page_ = lv_obj_create(root);
+    lv_obj_add_style(fc_page_, &style_screen, 0);
+    lv_obj_set_size(fc_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(fc_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(fc_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(fc_page_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(fc_page_, fc_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_add_event_cb(fc_page_, fc_page_touch_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(fc_page_, fc_page_touch_cb, LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(fc_page_, fc_page_touch_cb, LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(fc_page_, fc_page_touch_cb, LV_EVENT_PRESS_LOST, NULL);
+    add_gesture_bubble(fc_page_);
+
+    fc_list_group_ = lv_obj_create(fc_page_);
+    lv_obj_remove_style_all(fc_list_group_);
+    lv_obj_set_size(fc_list_group_, 480, 320);
+    lv_obj_align(fc_list_group_, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_clear_flag(fc_list_group_, LV_OBJ_FLAG_SCROLLABLE);
+    add_gesture_bubble(fc_list_group_);
+
+    fc_game_group_ = lv_obj_create(fc_page_);
+    lv_obj_remove_style_all(fc_game_group_);
+    lv_obj_set_size(fc_game_group_, 480, 320);
+    lv_obj_align(fc_game_group_, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_clear_flag(fc_game_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(fc_game_group_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(fc_game_group_);
+
+    fc_title_label_ = label_en(fc_list_group_, "FC / NES", &style_gold);
+    lv_obj_set_style_text_font(fc_title_label_, &lv_font_montserrat_20, 0);
+    lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
+
+    fc_detail_label_ = label_en(fc_list_group_, "Scanning SD card", &style_muted);
+    lv_obj_set_style_text_font(fc_detail_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_width(fc_detail_label_, 300);
+    lv_label_set_long_mode(fc_detail_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
+
+    lv_obj_t* list_panel = CreatePanel(fc_list_group_, 432, 204, 24, 52);
+    lv_obj_set_style_bg_color(list_panel, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
+    lv_obj_set_style_border_color(list_panel, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_border_width(list_panel, 1, 0);
+    lv_obj_set_style_radius(list_panel, 6, 0);
+
+    fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
+    lv_obj_set_style_text_font(fc_list_label_, &lv_font_montserrat_16, 0);
+    lv_obj_set_width(fc_list_label_, 400);
+    lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
+
+    lv_obj_t* back = CreateButton(fc_list_group_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_LEFT, 24, 272);
+
+    lv_obj_t* prev = CreateButton(fc_list_group_, "Prev", fc_prev_cb);
+    lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 126, 272);
+
+    lv_obj_t* start = CreateButton(fc_list_group_, "Start", fc_start_cb);
+    lv_obj_set_size(start, 104, 32);
+    lv_obj_align(start, LV_ALIGN_TOP_LEFT, 224, 272);
+
+    lv_obj_t* next = CreateButton(fc_list_group_, "Next", fc_next_cb);
+    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 356, 272);
+
+    lv_obj_t* screen = CreatePanel(fc_game_group_, 480, 240, 0, 0);
+    lv_obj_set_style_bg_color(screen, LV_COLOR_MAKE(0x02, 0x03, 0x05), 0);
+    lv_obj_set_style_border_color(screen, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_border_width(screen, 0, 0);
+    lv_obj_set_style_radius(screen, 0, 0);
+
+    fc_screen_image_ = lv_image_create(screen);
+    lv_obj_center(fc_screen_image_);
+    add_gesture_bubble(fc_screen_image_);
+
+    lv_obj_t* controls = CreatePanel(fc_game_group_, 480, 80, 0, 240);
+    lv_obj_set_style_bg_color(controls, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
+    lv_obj_set_style_border_width(controls, 0, 0);
+    lv_obj_set_style_radius(controls, 0, 0);
+
+    auto make_key = [&](const char* text, int x, int y, uint8_t mask, int w = 64, int h = 44) {
+        lv_obj_t* key = lv_obj_create(fc_game_group_);
+        lv_obj_add_style(key, &style_panel, 0);
+        lv_obj_set_size(key, w, h);
+        lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
+        lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x12, 0x1a, 0x20), 0);
+        lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
+        lv_obj_set_style_border_color(key, LV_COLOR_MAKE(0x47, 0xb3, 0xff), 0);
+        lv_obj_set_style_border_width(key, 1, 0);
+        lv_obj_set_style_radius(key, 6, 0);
+        lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESSED, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
+        lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESSING, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
+        lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_RELEASED, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
+        lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESS_LOST, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
+
+        lv_obj_t* label = label_en(key, text, &style_en);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        lv_obj_center(label);
+        return key;
+    };
+
+    auto make_action = [&](const char* text, int x, int y, lv_event_cb_t cb, int w = 52, int h = 34) {
+        lv_obj_t* key = lv_obj_create(fc_game_group_);
+        lv_obj_add_style(key, &style_panel, 0);
+        lv_obj_set_size(key, w, h);
+        lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
+        lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x1c, 0x18, 0x14), 0);
+        lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
+        lv_obj_set_style_border_color(key, COLOR_GOLD, 0);
+        lv_obj_set_style_border_width(key, 1, 0);
+        lv_obj_set_style_radius(key, 6, 0);
+        lv_obj_add_event_cb(key, cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t* label = label_en(key, text, &style_gold);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        lv_obj_center(label);
+        return key;
+    };
+
+    make_key("U", 62, 242, 0x10, 58, 24);
+    make_key("L", 8, 266, 0x40, 70, 46);
+    make_key("D", 62, 292, 0x20, 58, 26);
+    make_key("R", 104, 266, 0x80, 70, 46);
+
+    make_action("LIST", 204, 246, fc_back_list_cb, 72, 28);
+    make_key("Sel", 184, 282, 0x04, 56, 34);
+    make_key("Start", 250, 282, 0x08, 76, 34);
+
+    make_key("B", 344, 254, 0x02, 58, 54);
+    make_key("A", 414, 244, 0x01, 60, 68);
+
+    SetFcMode(false);
 }
 
 // ===== Calendar page =====
@@ -2021,6 +2284,70 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
     lv_anim_set_time(&fade_out, 650);
     lv_anim_set_exec_cb(&fade_out, ObjOpaCb);
     lv_anim_start(&fade_out);
+}
+
+void DesktopUI::SetFcActiveCallback(std::function<void(bool)> callback) {
+    fc_active_callback_ = std::move(callback);
+}
+
+void DesktopUI::SetFcActions(std::function<void()> play_pause, std::function<void()> stop,
+                             std::function<void()> next, std::function<void()> prev) {
+    fc_play_pause_ = std::move(play_pause);
+    fc_stop_ = std::move(stop);
+    fc_next_ = std::move(next);
+    fc_prev_ = std::move(prev);
+}
+
+void DesktopUI::SetFcState(const char* title, const char* detail, const char* rom_list) {
+    if (fc_title_label_ && title) {
+        lv_label_set_text(fc_title_label_, title);
+    }
+    if (fc_detail_label_ && detail) {
+        lv_label_set_text(fc_detail_label_, detail);
+    }
+    if (fc_list_label_ && rom_list) {
+        lv_label_set_text(fc_list_label_, rom_list);
+    }
+}
+
+void DesktopUI::SetFcMode(bool playing) {
+    fc_playing_view_ = playing;
+    if (fc_list_group_) {
+        if (playing) {
+            lv_obj_add_flag(fc_list_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(fc_list_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (fc_game_group_) {
+        if (playing) {
+            lv_obj_clear_flag(fc_game_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(fc_game_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void DesktopUI::SetFcFrame(const lv_img_dsc_t* image) {
+    if (!fc_playing_view_ || !fc_screen_image_ || !image) {
+        return;
+    }
+    lv_image_set_src(fc_screen_image_, image);
+    int32_t scale = 256;
+    if (!(image->header.w == 256 && image->header.h == 240)) {
+        int32_t scale_x = image->header.w > 0 ? (480 * 256) / image->header.w : 256;
+        int32_t scale_y = image->header.h > 0 ? (240 * 256) / image->header.h : 256;
+        scale = LV_MIN(scale_x, scale_y);
+    }
+    if (scale <= 0) {
+        scale = 256;
+    }
+    lv_image_set_scale(fc_screen_image_, scale);
+    lv_obj_center(fc_screen_image_);
+}
+
+void DesktopUI::SetFcControllerCallback(std::function<void(uint8_t)> callback) {
+    fc_controller_cb_ = std::move(callback);
 }
 
 void DesktopUI::ApplyWeatherVisual(int weather_code) {

@@ -2,6 +2,58 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: FC/NES App Card, ROM List, and Unfinished Emulator Core
+
+Scope:
+
+- Added an `FC NES` card to the desktop Apps page.
+- Added a dedicated FC page with ROM status, ROM list text, preview/game screen, and touch actions.
+- Removed the top FC page brand/title/status text to give the game screen more usable space.
+- Added visible virtual controller buttons for Up/Down/Left/Right, A, B, Select, and Start.
+- Added controller-state serial logging as `FcEmulator: controller=0x..` for touch debugging.
+- Removed the right-side ROM information panel and Play/Stop/Prev/Next controls; FC now uses a handheld-style layout with the game screen on top and a classic controller on the bottom.
+- Changed FC behavior to list-first: opening the FC page scans the SD card and shows a ROM list; Prev/Next only move selection; Start loads the selected game.
+- Added a `LIST` button in game mode to stop emulation and return to the ROM list.
+- Blocked right-swipe page exit while the game view is active to avoid accidental exits during D-pad swipes.
+- Moved the NES PPU framebuffer from internal RAM to PSRAM after serial logs showed SDMMC mount failures with `sdmmc_read_sectors: not enough mem`.
+- Reduced FC SD mount file handles and logged internal heap before mount attempts to make future SD failures diagnosable.
+- Added `FcEmulatorService` for lazy task startup, SD card mount/reuse, `.nes` discovery, and iNES header validation.
+- Scans these SD card locations for ROMs: `/sdcard/nes`, `/sdcard/NES`, `/sdcard/FC`, `/sdcard/fc`, `/sdcard/roms`, `/sdcard/ROMS`, and `/sdcard`.
+- Reuses the existing SD mount when Photos already mounted `/sdcard`; otherwise mounts the QDTech SDMMC pins with 4-bit mode and 1-bit fallback.
+- Added a minimal NES core:
+  - 6502 CPU execution.
+  - PPU background/sprite rendering into `256x240` frames.
+  - Mapper 0/NROM and Mapper 2/UxROM PRG banking.
+  - CHR ROM and CHR RAM handling.
+  - Horizontal/vertical nametable mirroring.
+  - Touch-screen virtual controller mapping for A/B/Select/Start/Up/Down/Left/Right.
+- Optimized frame transfer by keeping the PPU framebuffer as 8-bit palette indices and converting to RGB565 only when publishing a frame to LVGL.
+- Fixed one 6502 CPU bug found during the hardware session: `TSX (0xBA)` now copies `SP` to `X` instead of corrupting `SP`.
+- Adjusted `RTI (0x40)` to restore the unused status bit.
+- Mirrored controller reads on both `0x4016` and `0x4017` while debugging input compatibility.
+
+Current limitation:
+
+- This is not yet a playable emulator. It is a hardware-visible integration milestone with a ROM list, game view, and touch controller wiring.
+- It only accepts Mapper 0 and Mapper 2 ROMs and has no APU/audio output yet.
+- CPU/PPU timing and opcode compatibility are still incomplete. Hardware logs show the game can latch controller states, but tested ROMs still show little or no visible response to input.
+- Unsupported mappers now fail explicitly instead of pretending to run as Mapper 0.
+- The next implementation step should replace this minimal core with a more complete emulator core, or continue fixing CPU/PPU compatibility against a known-good small NROM ROM on the real board.
+- A local reference checkout existed during this session at `C:\tmp\esp32-nesemu` using Nofrendo. It was not integrated because the original example reads a fixed Flash ROM and drives ILI9341 directly; integration would need a clean SD-ROM, LVGL-frame, and touch-input adapter. Check license obligations before importing it.
+
+Verification:
+
+- Build succeeded with the minimal emulator core.
+- `xiaozhi.bin` size: `0x3dd8b0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x222750` bytes, about 36%.
+- Flashed successfully to `COM13`.
+- Serial logs confirmed SD mount, scan, and 146 supported `.nes` files found on the user's SD card.
+- Serial logs confirmed list navigation, selected ROM load, and NES frame publication.
+- Serial logs confirmed virtual buttons reach the emulator service as `controller=0x..`.
+- Serial logs confirmed the NES bus latches controller states such as `0x40`, `0x20`, `0x08`, `0x02`, `0x01`.
+- User-visible result at handoff: ROM list works and games can open, but gameplay remains effectively non-responsive and not ready to call playable.
+
 ## 2026-06-15: Radio Visual Enhancement - Audio Spectrum Bars
 
 Scope:

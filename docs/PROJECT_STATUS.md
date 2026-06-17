@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-15
+Date: 2026-06-18
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -78,6 +78,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - main page
   - apps page
   - photo page
+  - FC/NES page
   - calendar page
   - focus timer page
   - XiaoZhi page
@@ -94,6 +95,14 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Cross-fades between decoded photos.
   - Photo task lazy-starts only when opening Photos.
   - Photo task stack is allocated from PSRAM first, with an internal-memory fallback and allocation diagnostics.
+- FC/NES page from MicroSD card:
+  - Apps tile `FC / NES / SD ROMs` opens a ROM list first.
+  - Reads `.nes` files from `/sdcard/nes`, `/sdcard/NES`, `/sdcard/FC`, `/sdcard/fc`, `/sdcard/roms`, `/sdcard/ROMS`, and `/sdcard`.
+  - Prev/Next move the selected ROM; Start loads the selected ROM.
+  - Game view uses a top 256x240 NES screen area and a bottom virtual controller.
+  - Game view has D-pad, A, B, Select, Start, and LIST controls.
+  - Current minimal emulator core supports only Mapper 0 and Mapper 2.
+  - This page is not yet playable; see `docs/HANDOFF.md` and `docs/CHANGELOG_QDTECH.md` for the current debugging evidence.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.
@@ -213,6 +222,9 @@ For photos:
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - PhotoService depends on `CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y`; retain this setting for the current PSRAM-backed task stack.
+- FC/NES is an unfinished integration milestone, not a usable emulator yet.
+- FC/NES can scan SD, show a list, load supported ROMs, display frames, and latch touch-controller input at the NES bus, but tested games still show little or no visible gameplay response.
+- FC/NES currently has no audio/APU and supports only Mapper 0/2.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.

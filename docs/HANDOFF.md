@@ -71,6 +71,63 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
+## Current FC/NES Emulator Handoff
+
+Last worked on 2026-06-18 in this Windows workspace:
+
+- Workspace: `D:\3.5inch_ESP32-S3\xiaozhi-esp32`
+- Branch used locally: `codex/qdtech-landscape-v176`
+- Target user remote: `qdtech-new/main`
+- Build directory: `build-qdtech`
+- Serial port: `COM13`
+
+Current user-visible FC/NES state:
+
+- Apps contains an `FC / NES / SD ROMs` tile.
+- Entering FC now shows a ROM list first; it no longer auto-loads or auto-runs a ROM.
+- Prev/Next move the selected ROM in the list.
+- Start loads the selected ROM and switches to the game view.
+- Game view is top screen plus bottom virtual controller.
+- Game view has a `LIST` button to stop and return to the ROM list.
+- Right-swipe exit is disabled while in game view to avoid accidental exits during D-pad swipes.
+- The SD card is detected. Serial logs during the last run showed `fc scan found 146 nes files`.
+- Only Mapper 0 and Mapper 2 ROMs are accepted by the current minimal core; unsupported mappers are skipped.
+
+Important FC/NES files:
+
+- `main/boards/qdtech-s3-touch-lcd-3.5/fc_emulator_service.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/fc_emulator_service.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_bus.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_bus.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_cpu.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_cpu.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_ppu.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/nes_ppu.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Current FC/NES verification evidence:
+
+- Build passed with `ninja -C build-qdtech all`.
+- Flash passed with `idf.py -B build-qdtech -p COM13 -b 921600 flash`.
+- Latest app size: `xiaozhi.bin` `0x3dd8b0`; smallest app partition `0x600000`; free `0x222750`.
+- Serial confirmed ROM selection and load, for example `NES ROM loaded: 144??~1.NES`.
+- Serial confirmed virtual buttons enter the service as `FcEmulator: controller=0x..`.
+- Serial confirmed the NES bus can latch controller states, for example `NesBus: controller latch=0x40`, `0x20`, `0x08`, `0x02`, and `0x01`.
+
+Unresolved FC/NES problem:
+
+- The emulator is still not playable. Even after controller latch logs prove input reaches the NES bus, the tested games show little or no visible gameplay response.
+- Do not keep debugging this as an LVGL button layout problem. The UI and controller path are now proven far enough; the remaining issue is emulator-core correctness/performance.
+- The current minimal CPU/PPU core is incomplete and timing-approximate. It can display frames, but compatibility is not good enough for real gameplay.
+- One CPU bug was fixed during the last session: `TSX (0xBA)` now copies `SP` to `X` instead of corrupting `SP`. `RTI (0x40)` also restores the unused status bit.
+
+Recommended next FC/NES step:
+
+- Prefer replacing the minimal core with a known-good emulator core and adapting it to this firmware's SD-ROM loading, LVGL frame publication, and touch controller state.
+- A local reference existed during the session at `C:\tmp\esp32-nesemu` using Nofrendo. It was not imported because its ESP32 example reads a fixed Flash partition ROM and writes directly to ILI9341. Integration would need a proper adapter and license review.
+- If continuing the in-repo minimal core instead, test with a tiny known-good NROM ROM first, then fix CPU/PPU timing and missing instructions before broad ROM compatibility work.
+
 Important 2026-06-05 stability finding:
 
 - A previous radio smoothing change (`834d55a`) was reverted by `76c1541` because the firmware became unstable.

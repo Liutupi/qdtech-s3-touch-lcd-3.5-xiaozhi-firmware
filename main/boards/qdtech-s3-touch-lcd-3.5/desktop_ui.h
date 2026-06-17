@@ -8,6 +8,7 @@ enum class DesktopPage {
     MAIN,
     APPS,
     PHOTO,
+    FC,
     CALENDAR,
     RADIO,
     FOCUS,
@@ -48,12 +49,25 @@ public:
     void SetPhotoState(const char* title, const char* detail);
     void SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail);
     void RequestPhotoRefresh();
+    void SetFcActiveCallback(std::function<void(bool)> callback);
+    void SetFcActions(std::function<void()> play_pause, std::function<void()> stop,
+                      std::function<void()> next, std::function<void()> prev);
+    void SetFcState(const char* title, const char* detail, const char* rom_list);
+    void SetFcMode(bool playing);
+    void SetFcFrame(const lv_img_dsc_t* image);
+    void SetFcControllerCallback(std::function<void(uint8_t)> callback);
+    bool IsFcPlayingView() const { return fc_playing_view_; }
 
     // Radio actions (public for LVGL callbacks)
     std::function<void()> radio_play_pause_;
     std::function<void()> radio_stop_;
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
+    std::function<void()> fc_play_pause_;
+    std::function<void()> fc_stop_;
+    std::function<void()> fc_next_;
+    std::function<void()> fc_prev_;
+    std::function<void(uint8_t)> fc_controller_cb_;
 
     // Radio animation (public for timer callback)
     lv_obj_t* radio_bars_[16] = {};  // 音量动态柱
@@ -67,6 +81,7 @@ private:
     lv_obj_t* main_page_ = nullptr;
     lv_obj_t* apps_page_ = nullptr;
     lv_obj_t* photo_page_ = nullptr;
+    lv_obj_t* fc_page_ = nullptr;
     lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
@@ -106,6 +121,16 @@ private:
     bool photo_show_a_ = true;
     std::function<void(bool)> photo_active_callback_;
     std::function<void()> photo_refresh_callback_;
+
+    // FC emulator page elements
+    lv_obj_t* fc_list_group_ = nullptr;
+    lv_obj_t* fc_game_group_ = nullptr;
+    lv_obj_t* fc_screen_image_ = nullptr;
+    lv_obj_t* fc_title_label_ = nullptr;
+    lv_obj_t* fc_detail_label_ = nullptr;
+    lv_obj_t* fc_list_label_ = nullptr;
+    bool fc_playing_view_ = false;
+    std::function<void(bool)> fc_active_callback_;
 
     // Calendar page elements
     lv_obj_t* calendar_title_label_ = nullptr;
@@ -179,6 +204,7 @@ private:
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
     void CreatePhotoPage(lv_obj_t* root);
+    void CreateFcPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
