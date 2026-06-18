@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-18
+Date: 2026-06-19
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -13,6 +13,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.2 (2026-06-15): P0-P6 optimization, LVGL touch migration, font fix, NVS persistence
 - v1.3 (2026-06-15): Radio visual enhancement with audio spectrum bars
 - v1.7.14 (2026-06-19): FC ROM scan cap raised to 192 and clearer ROM load diagnostics
+- v1.7.15 (2026-06-19): Calendar visual redesign, larger calendar controls, and secondary-page brand polish
 
 ## Confirmed Hardware From Source
 
@@ -78,9 +79,9 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Desktop UI pages:
   - main page
   - apps page
+  - calendar page with a left today card, right monthly grid, and enlarged Prev / Today / Next touch targets
   - photo page
   - FC/NES page
-  - calendar page
   - focus timer page
   - XiaoZhi page
   - radio page

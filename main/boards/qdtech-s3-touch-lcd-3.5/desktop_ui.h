@@ -149,6 +149,9 @@ private:
     // Calendar page elements
     lv_obj_t* calendar_title_label_ = nullptr;
     lv_obj_t* calendar_today_label_ = nullptr;
+    lv_obj_t* calendar_card_day_label_ = nullptr;
+    lv_obj_t* calendar_card_weekday_label_ = nullptr;
+    lv_obj_t* calendar_card_date_label_ = nullptr;
     lv_obj_t* calendar_day_labels_[42] = {};
     lv_obj_t* calendar_day_cells_[42] = {};
     int current_year_ = 0;

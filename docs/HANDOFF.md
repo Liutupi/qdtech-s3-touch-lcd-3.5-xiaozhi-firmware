@@ -243,9 +243,28 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-19 v1.7.14 FC ROM Scan Cap And Load Diagnostics
+## Latest Runtime Notes: 2026-06-19 v1.7.15 Calendar UI Redesign And Brand Polish
 
-- Latest release target is `v1.7.14`.
+- Latest release target is `v1.7.15`.
+- Calendar page was redesigned to follow the supplied warm brown/gold reference:
+  - left light today card with `今日`, `TODAY`, large day number, Chinese weekday, and `YYYY / MM`
+  - right dark month panel with `Month YYYY`, `Minimal monthly view`, weekday headers, rounded date pills, orange weekend pills, and gold today highlight
+  - bottom `Prev` / `Today` / `Next` controls
+- The left card's extra `温暖的一天` label was removed after user feedback.
+- The Calendar bottom controls were enlarged to 96x34 and given 12 px LVGL extended click padding. `Prev` was moved inward and upward to improve the bottom-left touch target.
+- Secondary pages no longer use `XiaoZhi AI` as the top-left brand mark. Apps, Radio, Network, and Settings now use the same `Nothing impossible` treatment as the main page. Calendar intentionally uses the reference-style layout without the secondary brand mark.
+- Final `v1.7.15` release build passed from the Windows checkout: `xiaozhi.bin` `0x3ccfc0`, smallest app partition `0x600000`, free `0x233040`.
+- Final `v1.7.15` build was flashed to `COM13`. Boot logs confirmed `App version: 1.7.15`, `Ota: Current version: 1.7.15`, WiFi, MQTT, time sync, weather update, and `Application: STATE: idle`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-app.bin`, SHA256 `f038e0950131f347f155a2b763208a8959b1801464e75c15784c16d2888b7f82`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-firmware.zip`, SHA256 `3cd1ac5602678c77d5774c090ce06b761bbd304c2f2bb8180f3b125fcfd06935`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-full.bin`, SHA256 `4cf7c0b7ac20966d9b16adce17497da9cb5d5f5a22847f98c4ce2add71e80cab`.
+- Follow-up: physically press Calendar `Prev`, `Today`, and `Next` on the panel after OTA/USB install; the code-side touch target is larger, but button feel is still hardware-authoritative.
+- Board-initiated OTA should be verified from a device running `1.7.14` or older: Settings -> Firmware -> Check -> Update -> reboot -> `1.7.15`.
+
+## Previous Runtime Notes: 2026-06-19 v1.7.14 FC ROM Scan Cap And Load Diagnostics
+
+- Release target was `v1.7.14`.
 - FC ROM scanning now keeps up to 192 `.nes` files from the first populated ROM directory instead of stopping at 64. The old `fc scan found 64 nes files` result was the firmware's protective cap, not missing SD contents.
 - FC still scans conservatively in this order: `/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, `/sdcard`.
 - Start now validates the selected ROM before entering Nofrendo and reports clearer failure reasons:

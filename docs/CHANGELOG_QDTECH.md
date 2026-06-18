@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-19: v1.7.15 Calendar UI Redesign And Brand Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.15`.
+- Replaced the old compact Calendar page with a reference-inspired two-column layout:
+  - left light "today" card with Chinese today label, large day number, weekday, and year/month
+  - right warm dark monthly grid with `Month YYYY`, weekday headers, rounded date pills, weekend orange highlighting, and today gold highlighting
+  - bottom `Prev` / `Today` / `Next` controls matching the warm brown/gold style
+- Removed the extra "温暖的一天" label from the left Calendar card after hardware feedback.
+- Enlarged the Calendar bottom controls from 82x30 to 96x34 and added 12 px LVGL extended click padding so `Prev` is easier to press near the bottom-left edge.
+- Changed the left-top secondary-page brand text from `XiaoZhi AI` to the main-screen style `Nothing impossible` on Apps, Radio, Network, and Settings. Calendar now uses the reference-style page instead of a top-left brand mark.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3ccfc0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x233040`, about 37%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.15`, `Ota: Current version: 1.7.15`, QDTech board startup, touch max points `5`, WiFi connection, MQTT connection, SNTP time sync, weather update, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.15-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.15-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.15-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-app.bin`: `f038e0950131f347f155a2b763208a8959b1801464e75c15784c16d2888b7f82`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-firmware.zip`: `3cd1ac5602678c77d5774c090ce06b761bbd304c2f2bb8180f3b125fcfd06935`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.15-full.bin`: `4cf7c0b7ac20966d9b16adce17497da9cb5d5f5a22847f98c4ce2add71e80cab`
+- Follow-up: physically press Calendar `Prev` after the release build because the code-side fix increases the touch target, but the final button feel should still be judged on the panel.
+
 ## 2026-06-19: v1.7.14 FC ROM Scan Cap And Load Diagnostics
 
 Scope:
