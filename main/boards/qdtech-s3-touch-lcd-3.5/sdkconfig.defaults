@@ -1,6 +1,15 @@
 CONFIG_BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5=y
 CONFIG_USE_WECHAT_MESSAGE_STYLE=y
+# FC emulator needs the scarce internal SRAM on this ESP32-S3 board.
+# Keep audio capture/playback, but disable local AFE wake word and noise reduction.
+# CONFIG_USE_AFE_WAKE_WORD is not set
+# CONFIG_USE_ESP_WAKE_WORD is not set
+# CONFIG_USE_AUDIO_PROCESSOR is not set
 # Photo slideshow reads user files from MicroSD; long filename support avoids
 # 8.3 alias/open failures with common camera or copied photo names.
 # CONFIG_FATFS_LFN_NONE is not set
 CONFIG_FATFS_LFN_HEAP=y
+# CONFIG_FATFS_CODEPAGE_437 is not set
+CONFIG_FATFS_CODEPAGE_936=y
+# CONFIG_FATFS_API_ENCODING_ANSI_OEM is not set
+CONFIG_FATFS_API_ENCODING_UTF_8=y

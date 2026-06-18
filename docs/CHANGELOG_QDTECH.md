@@ -2,6 +2,205 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: v1.7.9 FC Playability, ROM Names, and Firmware Release
+
+Scope:
+
+- Switched QDTech FATFS defaults from CP437/ANSI-OEM to CP936 with UTF-8 API encoding so Chinese long filenames on the MicroSD card are returned to the UI as UTF-8 instead of 8.3 aliases or garbled text.
+- Changed the FC ROM list display to show a stable 3-digit row number plus a cleaned game title: directory path is removed, `.nes` is hidden, spaces are trimmed, and UTF-8 names are truncated without splitting Chinese characters.
+- Added optional ROM alias files for numeric or messy ROM sets. The active ROM directory can contain `roms.txt`, `roms.csv`, or `games.txt`; each line may use `filename.nes=Display Name`, `filename.nes,Display Name`, or `filename.nes<Tab>Display Name`.
+- ROM aliases are loaded once during the FC list scan, then games are sorted by the displayed name. This keeps gameplay rendering unchanged and does not add work to the frame loop.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src` after regenerating the temporary `build-qdtech/sdkconfig`.
+- Generated config confirmed `CONFIG_FATFS_CODEPAGE_936=y`, `CONFIG_FATFS_CODEPAGE=936`, and `CONFIG_FATFS_API_ENCODING_UTF_8=y`.
+- `xiaozhi.bin` size: `0x3c89f0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x237610`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Hardware monitor confirmed stable boot, early SD mount, `/sdcard/FC` scan, and Chinese ROM names in FC logs such as `10.能源战士2(无限HP+无限生命)` and `100.恶魔城1无敌版`.
+- Entered Nofrendo after the directory fix; gameplay remained around `27-32` FPS during the monitor window, so the ROM-name fix did not break the smoothness-first display path.
+- Follow-up display fix: the FC list/detail labels were switched from Montserrat to the existing `font_puhui_16_4` Chinese font. The previous firmware could decode Chinese filenames correctly but still show missing glyphs on screen because Montserrat has no Chinese coverage.
+- Follow-up font build completed and was flashed to `/dev/cu.usbmodem212401`; binary size remained `0x3c89f0`, with `0x237610` bytes free in the smallest app partition. Boot was verified after flashing; final FC-page visual inspection is left to the user because the monitor session did not capture a new FC page entry after this font-only pass.
+- User visually confirmed the FC ROM list is readable after the font pass.
+- Release prep bumped `PROJECT_VER` to `1.7.9` and allowed `components/nofrendo` to be tracked even though other generated `components/` content remains ignored.
+- Final `v1.7.9` release build completed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3c89f0`, smallest app partition `0x600000`, free `0x237610`.
+- Final `v1.7.9` build was flashed to `/dev/cu.usbmodem212401`. Boot logs confirmed `App version: 1.7.9`, OTA current version `1.7.9`, early SD mount, `/sdcard/FC` scan, and readable Chinese FC list navigation through entries such as `10.能源战士2(无限HP+无限生命)`, `100.恶魔城1无敌版`, and `115.未来战士HACK`.
+
+## 2026-06-18: FC Smoothness-First Layout and Stop Stability Pass
+
+Scope:
+
+- Reworked the FC bottom controls so the D-pad uses a wider left-side region with a larger center dead zone, A/B are farther apart, and LIST/Select/Start are more regular in the middle.
+- Kept multi-touch controller combining for gameplay; direction plus A/B combinations are still supported through the manual touch path.
+- Removed per-change controller serial logging from the hot path. Heavy A/B/D-pad testing previously flooded serial output and cost frame time.
+- Changed Nofrendo quit handling so LIST/Stop requests power off the NES loop first and release Nofrendo state after the loop exits, avoiding the heap crash seen when stopping during active input polling.
+- Added conservative touch I2C failure handling: after read failures the poller backs off, and repeated failures reset the I2C bus at a low rate. This avoids continuous timeout spam and CPU loss during touch-heavy FC list navigation.
+- Tested enlarged draw widths `336x240` and `328x240`; both were rejected as defaults because they stayed around `24-26` FPS on hardware. The final default is back to `320x240` to prioritize smoothness.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x39ae30`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2651d0`, about 40%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `Touch max points: 5`, early SD mount, WiFi, MQTT, and normal idle state.
+- `336x240` and `328x240` hardware tests entered Nofrendo but held only about `24-26` FPS, with occasional display-lock pressure. They are not smoothness-safe defaults.
+- LIST/Stop was retested after the Nofrendo quit change: Nofrendo logged `nofrendo stopped result=0` and `nofrendo finished result=0` instead of crashing.
+- Rapid FC list tapping after the I2C backoff/bus-reset change no longer produced the prior continuous I2C timeout flood during the captured boot/list test.
+
+Current FC status:
+
+- The practical smoothness ceiling for the current direct-draw path is `320x240`. Larger views need a deeper display strategy, such as a dedicated game mode that pauses competing LVGL/network redraws, a faster/asynchronous display path, or a controller/display-size setting exposed to the user.
+- The latest flashed firmware is the smoothness-first `320x240` build with the improved layout and stop/touch stability fixes.
+
+## 2026-06-18: FC Multi-Touch Controls and Larger Game View
+
+Scope:
+
+- Added multi-touch reading for the QDTech touch controller and changed FC game mode to combine all active touch points into one NES controller mask.
+- Suppressed LVGL touch delivery while FC gameplay is active, so D-pad/A/B touches no longer also trigger page gestures or LVGL button events.
+- Changed LVGL touch input to read cached coordinates from the manual touch poller instead of reading the I2C touch chip independently, removing repeated I2C timeout spam seen during touch-heavy testing.
+- Widened and separated the FC virtual controller hit zones: D-pad uses a larger directional region with a center dead zone, and A/B are spaced farther apart.
+- Enlarged standard NES frames from `256x240` to `320x240` before direct drawing, centered in the top `480x240` game area.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x39abb0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x265450`, about 40%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `Touch max points: 5`, early SD mount, and `/sdcard/FC` ROM scanning.
+- Nofrendo entered gameplay on multiple ROMs without reboot; logs showed `rgb frame buffer ready 256x240 pixels=61440`.
+- Larger `320x240` direct draw held about `29-31` FPS in the final monitor window.
+- LIST stopped Nofrendo cleanly. The final monitor window did not show the repeated touch I2C timeout spam seen before the cached-touch change.
+
+Remaining FC status:
+
+- User should test real play feel, especially hold-direction plus A/B combinations.
+- If the larger view feels too slow, add a speed/display-size option or reduce the scaled draw width before deeper emulator changes.
+
+## 2026-06-18: FC SD Scan Limit and AFE Memory Relief
+
+Scope:
+
+- Disabled QDTech local AFE wake word/audio processor defaults to preserve scarce internal SRAM for FC runtime while keeping audio capture/playback available.
+- Kept SDMMC mount after LCD initialization and confirmed early SD mount succeeds on hardware.
+- Reduced FC ROM scanning work: prefer `/sdcard/FC`, stop after the first populated ROM directory, cap the ROM list at 64 files, and defer ROM header validation until Start.
+- This addresses the observed "SD contents missing" symptom, which was caused by FC scanning/runtime pressure rather than an actually missing SD mount.
+- Fixed two Nofrendo startup crashes:
+  - QDTech video adapter now returns a PSRAM-backed hardware bitmap from `lock_write()` so `vid_findmode()` has valid screen dimensions.
+  - Nofrendo now allocates a `256x240` primary buffer instead of `256x224`, matching the PPU's 240 rendered scanlines.
+
+Verification:
+
+- Clean build completed from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size after the final crash fixes: `0x39a780`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x265880`, about 40%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `fc sd card mounted width=4` and `SD card prepared early`.
+- Post-flash monitor stayed stable for several minutes without the previous AFE ringbuffer memory-exhausted reboot loop.
+- FC Start entered Nofrendo without reboot. Logs showed `rgb frame buffer ready 256x240 pixels=61440`.
+- Runtime held about `35-39` Nofrendo FPS on tested ROMs.
+- Virtual controls were visible in logs during gameplay: Start/A/B/D-pad events reached `FcEmulator: controller=0x..`.
+
+Remaining FC status:
+
+- FC no longer instantly crashes on Start. Continue testing real gameplay compatibility across ROMs and mappers.
+- One occasional display-lock warning appeared during heavy gameplay tapping, but it did not reboot the board.
+
+## 2026-06-18: FC Direct Frame Path and Controller Verification
+
+Scope:
+
+- Added a QDTech display fast path that draws RGB565 landscape rectangles directly through the existing stable rotated transfer code.
+- Wired FC gameplay frames to direct-draw the native `256x240` NES image at the top center of the `480x320` screen, instead of asking LVGL to refresh the whole screen for every game frame.
+- Kept `LV_DISPLAY_RENDER_MODE_FULL` and `timer_period_ms = 50`; the earlier LVGL partial-render experiment still remains reverted because it corrupted the rotated display output.
+- Changed FC frame publication so old/stale NES frames are not repeatedly converted and redrawn. The display is updated only when the NES core actually produces a new frame.
+- Increased the FC emulation slice to `12000` instructions or about `12ms` per service loop after touch input was moved to the direct polling path.
+
+Hardware observations:
+
+- A second hotfix build proved bottom virtual buttons now reach both the FC service and the NES bus while the game is running.
+- Captured examples included `FcEmulator: controller=0x01`, `0x02`, `0x10`, `0x20`, `0x40`, `0x80`, and `NesBus: controller latch=0x..`.
+- This proves the remaining "no reaction" symptom is no longer a basic LVGL button event/layout failure.
+- Before the stale-frame skip and larger emulation slice, `fc perf` still showed only about `3-5` produced NES frames per second on the tested ROM.
+- The final third build was flashed successfully, but a fresh post-flash in-game `fc perf` sample was not captured because no new FC interaction occurred during the last monitor window.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3df920`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2206e0` bytes, about 35%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+
+Current FC status:
+
+- Touch/controller delivery is now confirmed on hardware.
+- The display path no longer needs to use LVGL full-screen refresh for each game frame.
+- FC should still be treated as not fully playable until the final build is tested in-game and `fc perf produced_fps=...` is captured again.
+- If final `produced_fps` remains low, continue with emulator-core optimization/correctness or replace the minimal core with a known-good core.
+
+## 2026-06-18: FC Responsiveness Hotfix and Display Rollback
+
+Scope:
+
+- Added a direct touch-poll fallback for FC game mode so bottom virtual controller touches feed `FcEmulatorService::SetController()` even when LVGL button events are delayed.
+- Shortened FC controller release hold from `1500ms` to `120ms` to avoid sticky-feeling buttons.
+- Reduced the FC emulator task priority from `3` to `1` so UI/touch and XiaoZhi tasks get scheduler time first.
+- Split NES execution into shorter slices: `4500` instructions or about `6ms` per service loop, instead of a longer per-frame burst.
+- Added `fc perf produced_fps=...` runtime logging for FC frame-rate and loop diagnostics.
+
+Display note:
+
+- A test change from LVGL full-screen render mode to partial render mode caused visible screen corruption on the QDTech rotated display path.
+- That partial-render experiment was reverted immediately. Current code is back to `LV_DISPLAY_RENDER_MODE_FULL` and `timer_period_ms = 50`.
+- Do not retry LVGL partial render mode without first rewriting and hardware-testing the custom rotated `Flush()` path.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3df5a0`.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Post-rollback serial logs returned to the known full-screen flush path, for example `flush area=480x320 at 0,0`.
+
+## 2026-06-18: FC/NES Core Timing and Sprite Correctness Pass
+
+Scope:
+
+- Replaced the previous fixed `18` PPU ticks per CPU instruction estimate with a 6502 base-cycle table and `CPU cycles * 3` PPU advancement.
+- Advanced PPU time during NMI service cycles so NMI handling no longer consumes CPU cycles without corresponding PPU progress.
+- Raised the NES frame instruction guard from `5200` to `12000` while keeping the existing per-call time budget.
+- Fixed Mapper 2 bank switching to wrap selected PRG banks by the actual ROM bank count instead of masking to 16 banks.
+- Fixed sprite rendering to keep low/high CHR bitplanes separate instead of OR-ing them into one byte.
+- Fixed sprite X placement direction, OAM Y top-line offset, and sprite-0-hit detection against the original sprite index.
+- Moved background tile fetch to the beginning of each 8-pixel group so visible pixels use the tile data for the current group.
+- Changed `FcEmulatorService::Start()` to register callbacks only, so the FC task, SD mount, and ROM scan no longer start during normal boot.
+- Releasing the FC page now stops playback, clears controller state, cancels scans, and releases the ROM list from the FC task.
+
+Verification:
+
+- Direct build in the original macOS workspace path reached link but failed because the parent path contains spaces/Chinese text and an ESP-SR linker search path was split into `3.5` and `寸/...`. This was treated as an environment/path issue, not an FC source compile error.
+- Full validation build was run from a temporary no-space copy at `/private/tmp/qdtech_s3_build_src`.
+- Build completed successfully for ESP32-S3/QDTech.
+- Final `xiaozhi.bin` size after the FC lazy-start change: `0x3df3b0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x220c50` bytes, about 35%.
+
+Hardware status:
+
+- Flashed successfully from `/private/tmp/qdtech_s3_build_src` to `/dev/cu.usbmodem212401`.
+- Boot log confirmed SKU `qdtech-s3-touch-lcd-3.5`, desktop UI creation, `Touch max points: 5`, WiFi, OTA latest, MQTT, AFE load, and `Application: STATE: idle`.
+- Pre-lazy-start flash showed FC boot-time SD/ROM scan increased internal SRAM pressure and produced `esp-aes: Failed to allocate memory` during MQTT publish.
+- Final lazy-start flash no longer starts the FC task, SD mount, or ROM scan at boot; captured boot logs showed only `fc emulator service registered` before normal XiaoZhi startup.
+- Residual issue: AFE `Ringbuffer of AFE(FEED) is full` warnings still appear under the captured runtime, and internal SRAM remains tight. Treat this as a separate XiaoZhi/audio stability follow-up.
+- FC/NES should still be treated as not yet proven playable until tested on the actual QDTech board with at least one known-good Mapper 0/NROM ROM and one Mapper 2 ROM.
+
 ## 2026-06-18: FC/NES App Card, ROM List, and Unfinished Emulator Core
 
 Scope:

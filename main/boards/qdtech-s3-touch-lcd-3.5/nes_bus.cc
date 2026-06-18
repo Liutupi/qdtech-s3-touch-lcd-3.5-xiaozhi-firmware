@@ -15,17 +15,21 @@ void NesBus::Reset() {
 }
 
 void NesBus::Step() {
-    // The CPU core advances by instruction, not by individual CPU cycle.
-    // Use an average 6502 instruction length so PPU/NMI timing is not slow-motion.
-    for (int i = 0; i < 18; ++i) {
+    const uint64_t cpu_before = cpu_.cycles();
+    cpu_.Step();
+    const uint32_t cpu_cycles = static_cast<uint32_t>(cpu_.cycles() - cpu_before);
+    for (uint32_t i = 0; i < cpu_cycles * 3; ++i) {
         ppu_.Step();
     }
 
-    cpu_.Step();
-
     if (ppu_.nmi_pending()) {
         ppu_.ClearNmi();
+        const uint64_t nmi_before = cpu_.cycles();
         cpu_.Nmi();
+        const uint32_t nmi_cycles = static_cast<uint32_t>(cpu_.cycles() - nmi_before);
+        for (uint32_t i = 0; i < nmi_cycles * 3; ++i) {
+            ppu_.Step();
+        }
     }
 }
 
@@ -237,7 +241,12 @@ uint8_t NesBus::Mapper2Read(uint16_t addr) {
 
 void NesBus::Mapper2Write(uint16_t addr, uint8_t val) {
     (void)addr;
-    prg_banks_[0] = val & 0x0F;
+    const uint8_t bank_count = prg_size_ / 16384;
+    if (bank_count == 0) {
+        return;
+    }
+    prg_banks_[0] = val % bank_count;
+    prg_banks_[1] = bank_count - 1;
 }
 
 bool NesBus::FrameReady() const {

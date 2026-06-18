@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,8 +17,13 @@
 
 class FcEmulatorService {
 public:
+    using DirectFrameCallback = std::function<bool(const uint16_t* pixels, uint16_t width, uint16_t height)>;
+
     void Start(DesktopUI* desktop_ui);
+    void SetDirectFrameCallback(DirectFrameCallback callback);
     void SetActive(bool active);
+    bool PrepareSdCard();
+    void PrepareTask();
     void PlayPause();
     void Stop();
     void Next();
@@ -35,12 +41,18 @@ private:
     TaskHandle_t task_handle_ = nullptr;
     std::atomic<bool> active_{false};
     std::atomic<bool> playing_{false};
+    std::atomic<bool> scanning_{false};
     std::atomic<bool> scan_requested_{false};
+    std::atomic<bool> release_roms_requested_{false};
     bool mounted_ = false;
     sdmmc_card_t* card_ = nullptr;
     std::vector<std::string> roms_;
+    std::vector<std::pair<std::string, std::string>> rom_aliases_;
     size_t selected_index_ = 0;
     uint32_t frame_counter_ = 0;
+    uint32_t produced_frame_counter_ = 0;
+    uint32_t last_perf_frame_counter_ = 0;
+    int64_t last_perf_log_us_ = 0;
     uint32_t sd_mount_failures_ = 0;
     Frame frames_[2];
     uint8_t frame_slot_ = 0;
@@ -53,21 +65,30 @@ private:
     uint8_t last_logged_controller_state_ = 0xff;
 
     static void TaskWrapper(void* arg);
+    static int NofrendoFrameThunk(const uint16_t* pixels, uint16_t width, uint16_t height, void* user);
     void EnsureTaskStarted();
     void TaskLoop();
     bool MountSdCard();
     bool TryMountSdCard(uint8_t width, int max_freq_khz);
     bool ScanRoms();
-    void ScanRomDir(const char* dir_path);
+    size_t ScanRomDir(const char* dir_path);
+    void LoadRomAliases(const char* dir_path);
+    bool LoadRomAliasFile(const char* path);
     bool ValidateSelectedRom();
+    void RunNofrendoRom();
     bool LoadNesRom();
     bool RunNesFrame();
-    void RenderFrame(Frame& frame, bool update_pixels);
+    bool RenderFrame(Frame& frame, bool update_pixels);
     void FreeFrame(Frame& frame);
     void ClearFrames();
     void PublishState(const char* title, const char* detail);
     void PublishMode(bool playing);
-    void PublishFrame(const lv_img_dsc_t* frame);
+    bool PublishFrame(Frame& frame);
+    bool PublishLvglFrame(const lv_img_dsc_t* frame);
+    bool PublishDirectFrame(const uint16_t* pixels, uint16_t width, uint16_t height);
+    std::string RomDisplayName(const std::string& path, size_t max_chars = 22) const;
     std::string SelectedName() const;
     std::string BuildRomList() const;
+
+    DirectFrameCallback direct_frame_cb_;
 };

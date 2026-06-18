@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lvgl.h"
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 
@@ -23,6 +24,8 @@ public:
     void NavigateBack();
     void HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x, uint16_t end_y,
                             int64_t duration_ms);
+    void HandleTouchState(uint16_t x, uint16_t y, bool pressed);
+    void HandleTouchPoints(const uint16_t* xs, const uint16_t* ys, size_t count);
     void HandleSwipe(int16_t dx, int16_t dy);
     void HandleTap(uint16_t x, uint16_t y);
 
@@ -130,6 +133,7 @@ private:
     lv_obj_t* fc_detail_label_ = nullptr;
     lv_obj_t* fc_list_label_ = nullptr;
     bool fc_playing_view_ = false;
+    bool fc_list_touch_latched_ = false;
     std::function<void(bool)> fc_active_callback_;
 
     // Calendar page elements

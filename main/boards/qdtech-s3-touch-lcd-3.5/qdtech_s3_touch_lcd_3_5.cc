@@ -182,6 +182,26 @@ public:
         return display_;
     }
 
+    bool DrawLandscapeRgb565(int x, int y, int width, int height, const uint16_t* pixels,
+                             uint32_t timeout_ms = 20) {
+        if (!pixels || width <= 0 || height <= 0 || x < 0 || y < 0 ||
+            x + width > DISPLAY_WIDTH || y + height > DISPLAY_HEIGHT) {
+            return false;
+        }
+        if (!lvgl_port_lock(timeout_ms)) {
+            static int64_t last_lock_fail_log_us = 0;
+            const int64_t now_us = esp_timer_get_time();
+            if (now_us - last_lock_fail_log_us > 1000000) {
+                last_lock_fail_log_us = now_us;
+                ESP_LOGW(TAG, "direct draw skipped: lvgl busy");
+            }
+            return false;
+        }
+        DrawLandscapeRgb565Locked(x, y, width, height, pixels);
+        lvgl_port_unlock();
+        return true;
+    }
+
 private:
     DesktopUI desktop_ui_;
 
@@ -200,11 +220,25 @@ private:
     void Flush(const lv_area_t* area, const uint16_t* color_map) {
         const int64_t flush_start_us = esp_timer_get_time();
         const int x_start = area->x1;
-        const int x_end = area->x2;
         const int y_start = area->y1;
-        const int y_end = area->y2;
-        const int width = x_end - x_start + 1;
-        const int height = y_end - y_start + 1;
+        const int width = area->x2 - area->x1 + 1;
+        const int height = area->y2 - area->y1 + 1;
+
+        DrawLandscapeRgb565Locked(x_start, y_start, width, height, color_map);
+
+        lv_display_flush_ready(display_);
+        const int64_t elapsed_us = esp_timer_get_time() - flush_start_us;
+        static int64_t last_perf_log_us = 0;
+        if (elapsed_us > 30000 && flush_start_us - last_perf_log_us > 5000000) {
+            last_perf_log_us = flush_start_us;
+            ESP_LOGI(TAG, "flush area=%dx%d at %d,%d took %d us", width, height, x_start, y_start, static_cast<int>(elapsed_us));
+        }
+    }
+
+    void DrawLandscapeRgb565Locked(int x_start, int y_start, int width, int height,
+                                   const uint16_t* color_map) {
+        const int x_end = x_start + width - 1;
+        const int y_end = y_start + height - 1;
         constexpr int transfer_pixels = DISPLAY_WIDTH * DISPLAY_HEIGHT / 10;
 
         int max_width = transfer_pixels / height;
@@ -235,14 +269,6 @@ private:
             xSemaphoreTake(transfer_done_, pdMS_TO_TICKS(1000));
             x_start_tmp += trans_width;
         }
-
-        lv_display_flush_ready(display_);
-        const int64_t elapsed_us = esp_timer_get_time() - flush_start_us;
-        static int64_t last_perf_log_us = 0;
-        if (elapsed_us > 30000 && flush_start_us - last_perf_log_us > 5000000) {
-            last_perf_log_us = flush_start_us;
-            ESP_LOGI(TAG, "flush area=%dx%d at %d,%d took %d us", width, height, x_start, y_start, static_cast<int>(elapsed_us));
-        }
     }
 
     uint16_t* frame_buffer_ = nullptr;
@@ -252,7 +278,14 @@ private:
 
 class QdtechTouch {
 public:
+    struct TouchPoint {
+        uint16_t x;
+        uint16_t y;
+    };
+
     void Init(i2c_master_bus_handle_t bus) {
+        bus_ = bus;
+        initialized_ = false;
         i2c_device_config_t dev_cfg = {
             .dev_addr_length = I2C_ADDR_BIT_LEN_7,
             .device_address = TOUCH_I2C_ADDR,
@@ -290,20 +323,32 @@ public:
             max_points_ = 1;
         }
         ESP_LOGI(TAG, "Touch max points: %u", max_points_);
+        initialized_ = true;
     }
 
-    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
+    size_t ReadPoints(TouchPoint* points, size_t max_points) {
+        if (!points || max_points == 0) {
+            return 0;
+        }
+        if (esp_timer_get_time() < read_backoff_until_us_) {
+            return 0;
+        }
         uint8_t touch_info = 0;
         if (ReadReg(kTouchInfo, &touch_info, 1) != ESP_OK || !(touch_info & 0x08)) {
-            return false;
+            return 0;
         }
 
         uint8_t point_data[7 * kMaxTouchPoints] = {};
         if (ReadReg(kTouchPoint0, point_data, 7 * max_points_) != ESP_OK) {
-            return false;
+            return 0;
         }
+        read_failures_ = 0;
 
+        size_t count = 0;
         for (uint8_t i = 0; i < max_points_; i++) {
+            if (count >= max_points) {
+                break;
+            }
             const uint8_t base = i * 7;
             if (!(point_data[base] & 0x80)) {
                 continue;
@@ -312,19 +357,30 @@ public:
             const uint16_t raw_x = ((point_data[base] & 0x3F) << 8) | point_data[base + 1];
             const uint16_t raw_y = ((point_data[base + 2] & 0x3F) << 8) | point_data[base + 3];
 
-            // Current UI uses a lightweight manual touch dispatcher. A future
-            // lv_indev_t port can reuse this raw-read and landscape transform.
-            x = raw_y;
-            y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
+            uint16_t x = raw_y;
+            uint16_t y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
             if (x >= DISPLAY_WIDTH) {
                 x = DISPLAY_WIDTH - 1;
             }
             if (y >= DISPLAY_HEIGHT) {
                 y = DISPLAY_HEIGHT - 1;
             }
-            return true;
+            points[count++] = {
+                .x = x,
+                .y = y,
+            };
         }
-        return false;
+        return count;
+    }
+
+    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
+        TouchPoint point = {};
+        if (ReadPoints(&point, 1) == 0) {
+            return false;
+        }
+        x = point.x;
+        y = point.y;
+        return true;
     }
 
 private:
@@ -335,11 +391,35 @@ private:
 
     esp_err_t ReadReg(uint16_t reg, uint8_t* data, size_t len) {
         uint8_t addr[2] = {static_cast<uint8_t>(reg >> 8), static_cast<uint8_t>(reg & 0xFF)};
-        return i2c_master_transmit_receive(dev_, addr, sizeof(addr), data, len, pdMS_TO_TICKS(100));
+        esp_err_t err = i2c_master_transmit_receive(dev_, addr, sizeof(addr), data, len, pdMS_TO_TICKS(100));
+        if (err != ESP_OK) {
+            NoteReadFailure();
+        }
+        return err;
     }
 
+    void NoteReadFailure() {
+        if (!initialized_) {
+            return;
+        }
+        ++read_failures_;
+        const int64_t now_us = esp_timer_get_time();
+        read_backoff_until_us_ = now_us + 750000;
+        if (read_failures_ >= 3 && bus_ && now_us - last_bus_reset_us_ > 3000000) {
+            last_bus_reset_us_ = now_us;
+            ESP_LOGW(TAG, "touch i2c reset after repeated failures");
+            i2c_master_bus_reset(bus_);
+            read_backoff_until_us_ = now_us + 1000000;
+        }
+    }
+
+    i2c_master_bus_handle_t bus_ = nullptr;
     i2c_master_dev_handle_t dev_ = nullptr;
     uint8_t max_points_ = 1;
+    uint8_t read_failures_ = 0;
+    bool initialized_ = false;
+    int64_t read_backoff_until_us_ = 0;
+    int64_t last_bus_reset_us_ = 0;
 };
 
 class QdtechS3TouchLcd35Board : public WifiBoard {
@@ -348,6 +428,7 @@ public:
         InitializeI2c();
         InitializeSpi();
         InitializeLcdDisplay();
+        InitializeSdCard();
         InitializeTouch();
         InitializeButtons();
         InitializeTools();
@@ -400,6 +481,14 @@ private:
             },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
+    }
+
+    void InitializeSdCard() {
+        if (fc_emulator_service_.PrepareSdCard()) {
+            ESP_LOGI(TAG, "SD card prepared early");
+        } else {
+            ESP_LOGW(TAG, "SD card early prepare failed; services will retry when opened");
+        }
     }
 
     void InitializeSpi() {
@@ -481,6 +570,13 @@ private:
         ESP_ERROR_CHECK(esp_timer_start_periodic(touch_timer_, TOUCH_POLL_MS * 1000));
     }
 
+    DesktopUI* GetDesktopUI() {
+        if (!display_) {
+            return nullptr;
+        }
+        return static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+    }
+
     static void TouchReadCb(lv_indev_t* indev, lv_indev_data_t* data) {
         auto* board = static_cast<QdtechS3TouchLcd35Board*>(lv_indev_get_driver_data(indev));
         if (!board) {
@@ -488,13 +584,15 @@ private:
             return;
         }
 
-        uint16_t x = 0;
-        uint16_t y = 0;
-        bool touched = board->touch_.ReadFirstPoint(x, y);
+        auto* desktop_ui = board->GetDesktopUI();
+        if (desktop_ui && desktop_ui->IsFcPlayingView()) {
+            data->state = LV_INDEV_STATE_RELEASED;
+            return;
+        }
 
-        if (touched) {
-            data->point.x = x;
-            data->point.y = y;
+        if (board->touch_cached_down_) {
+            data->point.x = board->touch_cached_x_;
+            data->point.y = board->touch_cached_y_;
             data->state = LV_INDEV_STATE_PRESSED;
         } else {
             data->state = LV_INDEV_STATE_RELEASED;
@@ -502,10 +600,36 @@ private:
     }
 
     void PollTouch() {
-        uint16_t x = 0;
-        uint16_t y = 0;
-        const bool touched = touch_.ReadFirstPoint(x, y);
+        QdtechTouch::TouchPoint points[10] = {};
+        const size_t point_count = touch_.ReadPoints(points, 10);
+        const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
+        auto* desktop_ui = GetDesktopUI();
+
+        touch_cached_down_ = touched;
+        if (touched) {
+            touch_cached_x_ = points[0].x;
+            touch_cached_y_ = points[0].y;
+        }
+
+        if (desktop_ui && desktop_ui->IsFcPlayingView()) {
+            uint16_t xs[10] = {};
+            uint16_t ys[10] = {};
+            for (size_t i = 0; i < point_count; ++i) {
+                xs[i] = points[i].x;
+                ys[i] = points[i].y;
+            }
+            desktop_ui->HandleTouchPoints(xs, ys, point_count);
+            touch_down_ = false;
+            if (touched) {
+                touch_last_x_ = points[0].x;
+                touch_last_y_ = points[0].y;
+            }
+            return;
+        }
+
+        const uint16_t x = touched ? points[0].x : touch_last_x_;
+        const uint16_t y = touched ? points[0].y : touch_last_y_;
 
         if (touched && !touch_down_) {
             touch_down_ = true;
@@ -515,9 +639,11 @@ private:
             touch_last_x_ = x;
             touch_last_y_ = y;
             ESP_LOGI(TAG, "touch down x=%u y=%u", x, y);
+            HandleTouchState(x, y, true);
         } else if (touched && touch_down_) {
             touch_last_x_ = x;
             touch_last_y_ = y;
+            HandleTouchState(x, y, true);
         } else if (!touched && touch_down_) {
             touch_down_ = false;
             int16_t dx = (int16_t)touch_last_x_ - (int16_t)touch_start_x_;
@@ -526,7 +652,14 @@ private:
 
             ESP_LOGI(TAG, "touch release x=%u y=%u dx=%d dy=%d duration=%dms",
                      touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
+            HandleTouchState(touch_last_x_, touch_last_y_, false);
             HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
+        }
+    }
+
+    void HandleTouchState(uint16_t x, uint16_t y, bool pressed) {
+        if (display_) {
+            static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()->HandleTouchState(x, y, pressed);
         }
     }
 
@@ -694,8 +827,63 @@ private:
         if (!display_) {
             return;
         }
-        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        auto* desktop_ui = qd_display->GetDesktopUI();
+        fc_emulator_service_.SetDirectFrameCallback(
+            [this, qd_display](const uint16_t* pixels, uint16_t width, uint16_t height) {
+                return DrawFcFrame(qd_display, pixels, width, height);
+            });
         fc_emulator_service_.Start(desktop_ui);
+    }
+
+    bool DrawFcFrame(QdtechLandscapeDisplay* qd_display, const uint16_t* pixels,
+                     uint16_t width, uint16_t height) {
+        if (!qd_display || !pixels || width == 0 || height == 0 || height > 240) {
+            return false;
+        }
+
+        if (width == 256 && height == 240) {
+            constexpr uint16_t target_width = 320;
+            constexpr uint16_t target_height = 240;
+            constexpr size_t target_pixels = target_width * target_height;
+
+            if (fc_scaled_pixels_ < target_pixels) {
+                if (fc_scaled_frame_) {
+                    heap_caps_free(fc_scaled_frame_);
+                    fc_scaled_frame_ = nullptr;
+                    fc_scaled_pixels_ = 0;
+                }
+                fc_scaled_frame_ = static_cast<uint16_t*>(heap_caps_malloc(
+                    target_pixels * sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                if (!fc_scaled_frame_) {
+                    ESP_LOGW(TAG, "FC scale buffer alloc failed, draw original frame");
+                    const int fallback_x = (DISPLAY_WIDTH - width) / 2;
+                    return qd_display->DrawLandscapeRgb565(fallback_x, 0, width, height, pixels);
+                }
+                fc_scaled_pixels_ = target_pixels;
+            }
+
+            const uint32_t x_step = (static_cast<uint32_t>(width) << 16) / target_width;
+            for (uint16_t y = 0; y < target_height; ++y) {
+                const uint16_t* src = pixels + y * width;
+                uint16_t* dst = fc_scaled_frame_ + y * target_width;
+                uint32_t src_x_acc = 0;
+                for (uint16_t x = 0; x < target_width; ++x) {
+                    dst[x] = src[src_x_acc >> 16];
+                    src_x_acc += x_step;
+                }
+            }
+
+            return qd_display->DrawLandscapeRgb565((DISPLAY_WIDTH - target_width) / 2, 0,
+                                                   target_width, target_height, fc_scaled_frame_);
+        }
+
+        if (width > DISPLAY_WIDTH || height > 240) {
+            return false;
+        }
+        const int x = (DISPLAY_WIDTH - width) / 2;
+        const int y = (240 - height) / 2;
+        return qd_display->DrawLandscapeRgb565(x, y, width, height, pixels);
     }
 
     Button boot_button_;
@@ -705,6 +893,9 @@ private:
     esp_timer_handle_t touch_timer_ = nullptr;
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
+    bool touch_cached_down_ = false;
+    uint16_t touch_cached_x_ = 0;
+    uint16_t touch_cached_y_ = 0;
     int64_t touch_start_ms_ = 0;
     uint16_t touch_start_x_ = 0;
     uint16_t touch_start_y_ = 0;
@@ -714,6 +905,8 @@ private:
     RadioService radio_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
+    uint16_t* fc_scaled_frame_ = nullptr;
+    size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;
 };
 

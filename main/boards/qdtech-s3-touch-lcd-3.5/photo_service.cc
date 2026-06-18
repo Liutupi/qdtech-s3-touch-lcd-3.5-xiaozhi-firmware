@@ -208,6 +208,14 @@ bool PhotoService::MountSdCard() {
         return true;
     }
 
+    DIR* existing = opendir(kMountPoint);
+    if (existing) {
+        closedir(existing);
+        mounted_ = true;
+        ESP_LOGI(TAG, "reuse existing sdcard mount");
+        return true;
+    }
+
     ++mount_attempts_;
     last_mount_width_ = 0;
     last_mount_error_ = ESP_OK;

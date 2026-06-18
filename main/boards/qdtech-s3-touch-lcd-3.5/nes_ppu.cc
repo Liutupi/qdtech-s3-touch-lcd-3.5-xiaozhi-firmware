@@ -209,7 +209,7 @@ void NesPpu::FetchSprites() {
 
     for (int i = 0; i < 64 && sprite_count_ < 8; i++) {
         uint8_t y = oam_[i * 4];
-        int16_t diff = scanline_ - y;
+        int16_t diff = scanline_ - static_cast<int16_t>(y) - 1;
         uint8_t sprite_height = (ctrl_ & 0x20) ? 16 : 8;
 
         if (diff >= 0 && diff < sprite_height) {
@@ -241,7 +241,8 @@ void NesPpu::FetchSprites() {
                 hi = ReverseByte(hi);
             }
 
-            sprite_patterns_[sprite_count_] = lo | hi;
+            sprite_pattern_lo_[sprite_count_] = lo;
+            sprite_pattern_hi_[sprite_count_] = hi;
             sprite_count_++;
         }
     }
@@ -267,12 +268,14 @@ void NesPpu::RenderPixel() {
 
     if (mask_ & 0x10) {
         for (int i = 0; i < sprite_count_; i++) {
-            int16_t sx = sprite_x_counters_[i] - x;
+            int16_t sx = x - sprite_x_counters_[i];
             if (sx >= 0 && sx < 8) {
                 uint8_t shift = 7 - sx;
-                uint8_t pixel = (sprite_patterns_[i] >> shift) & 0x03;
+                uint8_t p0 = (sprite_pattern_lo_[i] >> shift) & 0x01;
+                uint8_t p1 = ((sprite_pattern_hi_[i] >> shift) & 0x01) << 1;
+                uint8_t pixel = p0 | p1;
                 if (pixel != 0) {
-                    if (i == 0 && (mask_ & 0x08) && color_index != 0 && x < 255) {
+                    if (sprite_indices_[i] == 0 && (mask_ & 0x08) && color_index != 0 && x < 255) {
                         status_ |= 0x40;
                     }
                     if (!(sprite_attrs_[i] & 0x20) || color_index == 0) {
@@ -296,9 +299,11 @@ void NesPpu::Step() {
     if (scanline_ < 240) {
         if (rendering) {
             if (cycle_ > 0 && cycle_ <= 256) {
+                if (((cycle_ - 1) % 8) == 0) {
+                    FetchBackground();
+                }
                 RenderPixel();
                 if (cycle_ % 8 == 0) {
-                    FetchBackground();
                     IncrementX();
                     if (cycle_ == 256) {
                         IncrementY();

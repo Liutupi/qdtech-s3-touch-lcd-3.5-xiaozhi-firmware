@@ -60,7 +60,8 @@ private:
 
     uint8_t sprite_count_ = 0;
     uint8_t sprite_indices_[8] = {};
-    uint8_t sprite_patterns_[8] = {};
+    uint8_t sprite_pattern_lo_[8] = {};
+    uint8_t sprite_pattern_hi_[8] = {};
     uint8_t sprite_attrs_[8] = {};
     uint8_t sprite_x_counters_[8] = {};
 

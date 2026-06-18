@@ -1,5 +1,7 @@
 tmp/
-components/
+components/*
+!components/nofrendo/
+!components/nofrendo/**
 managed_components/
 build/
 build-*/

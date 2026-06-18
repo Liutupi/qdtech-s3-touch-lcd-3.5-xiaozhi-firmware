@@ -23,6 +23,7 @@ LV_FONT_DECLARE(lv_font_montserrat_14);
 LV_FONT_DECLARE(lv_font_montserrat_16);
 LV_FONT_DECLARE(lv_font_montserrat_20);
 LV_FONT_DECLARE(lv_font_montserrat_48);
+LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(qd_font_lxgw_16);
 LV_FONT_DECLARE(qd_font_lxgw_20);
 
@@ -399,24 +400,40 @@ static uint8_t fc_controller_from_page_point(int16_t x, int16_t y) {
     const int16_t rel_y = y - 240;
     uint8_t controller = 0;
 
-    if (x < 176) {
-        if (rel_y < 36) {
+    if (x < 178) {
+        const int16_t dx = x - 84;
+        const int16_t dy = rel_y - 40;
+        const int16_t abs_dx = LV_ABS(dx);
+        const int16_t abs_dy = LV_ABS(dy);
+
+        if (abs_dx < 22 && abs_dy < 18) {
+            return 0;
+        }
+        if (dy < -10 && abs_dy * 3 >= abs_dx * 2) {
             controller |= 0x10;
-        } else if (rel_y > 44) {
+        }
+        if (dy > 10 && abs_dy * 3 >= abs_dx * 2) {
             controller |= 0x20;
         }
-        if (x < 70 && rel_y >= 18 && rel_y <= 72) {
+        if (dx < -14 && abs_dx * 3 >= abs_dy * 2) {
             controller |= 0x40;
-        } else if (x > 104 && rel_y >= 18 && rel_y <= 72) {
+        }
+        if (dx > 14 && abs_dx * 3 >= abs_dy * 2) {
             controller |= 0x80;
         }
-    } else if (x >= 330) {
-        controller |= (x < 405) ? 0x02 : 0x01;
-    } else if (rel_y >= 36) {
-        controller |= (x < 246) ? 0x04 : 0x08;
+    } else if (x >= 330 && x < 392 && rel_y >= 18) {
+        controller |= 0x02;
+    } else if (x >= 410 && rel_y >= 4) {
+        controller |= 0x01;
+    } else if (x >= 186 && x < 316 && rel_y >= 42) {
+        controller |= (x < 244) ? 0x04 : 0x08;
     }
 
     return controller;
+}
+
+static bool fc_list_from_page_point(int16_t x, int16_t y) {
+    return x >= 206 && x < 274 && y >= 244 && y < 274;
 }
 
 static void fc_page_touch_cb(lv_event_t* event) {
@@ -795,6 +812,41 @@ void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t 
         ESP_LOGI(TAG, "Touch release ignored dx=%d dy=%d duration=%dms",
                  dx, dy, static_cast<int>(duration_ms));
     }
+}
+
+void DesktopUI::HandleTouchState(uint16_t x, uint16_t y, bool pressed) {
+    if (current_page_ != DesktopPage::FC || !fc_playing_view_ || !fc_controller_cb_) {
+        return;
+    }
+
+    if (!pressed) {
+        fc_controller_cb_(0);
+        return;
+    }
+
+    HandleTouchPoints(&x, &y, 1);
+}
+
+void DesktopUI::HandleTouchPoints(const uint16_t* xs, const uint16_t* ys, size_t count) {
+    if (current_page_ != DesktopPage::FC || !fc_playing_view_ || !fc_controller_cb_) {
+        return;
+    }
+
+    uint8_t controller = 0;
+    bool list_hit = false;
+    for (size_t i = 0; xs && ys && i < count; ++i) {
+        list_hit = list_hit || fc_list_from_page_point(xs[i], ys[i]);
+        controller |= fc_controller_from_page_point(xs[i], ys[i]);
+    }
+    if (list_hit) {
+        if (!fc_list_touch_latched_ && fc_stop_) {
+            fc_list_touch_latched_ = true;
+            fc_stop_();
+        }
+        return;
+    }
+    fc_list_touch_latched_ = false;
+    fc_controller_cb_(controller);
 }
 
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
@@ -1214,7 +1266,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
 
     fc_detail_label_ = label_en(fc_list_group_, "Scanning SD card", &style_muted);
-    lv_obj_set_style_text_font(fc_detail_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(fc_detail_label_, &font_puhui_16_4, 0);
     lv_obj_set_width(fc_detail_label_, 300);
     lv_label_set_long_mode(fc_detail_label_, LV_LABEL_LONG_DOT);
     lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
@@ -1226,7 +1278,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_set_style_radius(list_panel, 6, 0);
 
     fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
-    lv_obj_set_style_text_font(fc_list_label_, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(fc_list_label_, &font_puhui_16_4, 0);
     lv_obj_set_width(fc_list_label_, 400);
     lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
@@ -1302,17 +1354,17 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         return key;
     };
 
-    make_key("U", 62, 242, 0x10, 58, 24);
-    make_key("L", 8, 266, 0x40, 70, 46);
-    make_key("D", 62, 292, 0x20, 58, 26);
-    make_key("R", 104, 266, 0x80, 70, 46);
+    make_key("U", 62, 242, 0x10, 44, 24);
+    make_key("L", 8, 262, 0x40, 56, 50);
+    make_key("D", 62, 294, 0x20, 44, 24);
+    make_key("R", 108, 262, 0x80, 56, 50);
 
-    make_action("LIST", 204, 246, fc_back_list_cb, 72, 28);
-    make_key("Sel", 184, 282, 0x04, 56, 34);
-    make_key("Start", 250, 282, 0x08, 76, 34);
+    make_action("LIST", 206, 244, fc_back_list_cb, 68, 30);
+    make_key("Sel", 184, 284, 0x04, 58, 32);
+    make_key("Start", 252, 284, 0x08, 72, 32);
 
-    make_key("B", 344, 254, 0x02, 58, 54);
-    make_key("A", 414, 244, 0x01, 60, 68);
+    make_key("B", 330, 258, 0x02, 62, 54);
+    make_key("A", 410, 244, 0x01, 64, 68);
 
     SetFcMode(false);
 }
@@ -2312,6 +2364,7 @@ void DesktopUI::SetFcState(const char* title, const char* detail, const char* ro
 
 void DesktopUI::SetFcMode(bool playing) {
     fc_playing_view_ = playing;
+    fc_list_touch_latched_ = false;
     if (fc_list_group_) {
         if (playing) {
             lv_obj_add_flag(fc_list_group_, LV_OBJ_FLAG_HIDDEN);

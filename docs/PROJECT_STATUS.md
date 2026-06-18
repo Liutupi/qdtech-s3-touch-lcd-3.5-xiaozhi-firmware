@@ -97,12 +97,12 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Photo task stack is allocated from PSRAM first, with an internal-memory fallback and allocation diagnostics.
 - FC/NES page from MicroSD card:
   - Apps tile `FC / NES / SD ROMs` opens a ROM list first.
-  - Reads `.nes` files from `/sdcard/nes`, `/sdcard/NES`, `/sdcard/FC`, `/sdcard/fc`, `/sdcard/roms`, `/sdcard/ROMS`, and `/sdcard`.
+  - Reads `.nes` files from `/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, then `/sdcard`; scanning stops after the first populated directory and caps the list at 64 ROMs.
+  - FATFS is configured for Chinese CP936 filenames with UTF-8 API output. Numeric ROM sets can add `roms.txt`, `roms.csv`, or `games.txt` in the active ROM directory to map filenames to friendly display names.
   - Prev/Next move the selected ROM; Start loads the selected ROM.
-  - Game view uses a top 256x240 NES screen area and a bottom virtual controller.
+  - Game view uses a top 320x240 scaled NES screen area and a bottom virtual controller.
   - Game view has D-pad, A, B, Select, Start, and LIST controls.
-  - Current minimal emulator core supports only Mapper 0 and Mapper 2.
-  - This page is not yet playable; see `docs/HANDOFF.md` and `docs/CHANGELOG_QDTECH.md` for the current debugging evidence.
+  - Nofrendo is the active emulator path; see `docs/HANDOFF.md` and `docs/CHANGELOG_QDTECH.md` for current hardware-test evidence and remaining risks.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.

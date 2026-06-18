@@ -1,6 +1,7 @@
 #include "fc_emulator_service.h"
 
 #include "config.h"
+#include "qdtech_nofrendo.h"
 
 #include <algorithm>
 #include <cctype>
@@ -10,6 +11,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <utility>
 
 #include <driver/gpio.h>
 #include <driver/sdmmc_host.h>
@@ -27,24 +29,23 @@
 namespace {
 constexpr const char* kMountPoint = "/sdcard";
 constexpr const char* kRomDirs[] = {
-    "/sdcard/nes",
-    "/sdcard/NES",
     "/sdcard/FC",
-    "/sdcard/fc",
+    "/sdcard/nes",
     "/sdcard/roms",
-    "/sdcard/ROMS",
     "/sdcard",
 };
+constexpr size_t kMaxScannedRoms = 64;
 constexpr uint16_t kNesFrameWidth = 256;
 constexpr uint16_t kNesFrameHeight = 240;
 constexpr uint16_t kFrameWidth = 360;
 constexpr uint16_t kFrameHeight = 154;
 constexpr size_t kFramePixels = kFrameWidth * kFrameHeight;
-constexpr TickType_t kButtonReleaseHold = pdMS_TO_TICKS(1500);
+constexpr TickType_t kButtonReleaseHold = pdMS_TO_TICKS(120);
 constexpr TickType_t kIdleDelay = pdMS_TO_TICKS(250);
 constexpr TickType_t kFrameDelay = pdMS_TO_TICKS(1);
-constexpr int64_t kFramePublishIntervalUs = 50000;
-constexpr int kSdFreqDefaultKhz = SDMMC_FREQ_DEFAULT;
+constexpr int64_t kLvglFramePublishIntervalUs = 50000;
+constexpr int64_t kDirectFramePublishIntervalUs = 33333;
+constexpr int kSdFreqDefaultKhz = 10000;
 constexpr int kSdFreqFallbackKhz = 10000;
 
 bool ends_with_nes_ext(const char* name) {
@@ -65,22 +66,91 @@ bool is_hidden_or_resource_file(const char* name) {
     return name[0] == '.' || (name[0] == '_' && name[1] == '.');
 }
 
-bool is_supported_nes_rom(const char* path, uint8_t* mapper_out = nullptr) {
-    FILE* file = fopen(path, "rb");
-    if (!file) {
-        return false;
+std::string file_name_from_path(const std::string& path) {
+    const size_t slash = path.find_last_of('/');
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+void strip_nes_extension(std::string& name) {
+    if (name.size() >= 4 && ends_with_nes_ext(name.c_str())) {
+        name.resize(name.size() - 4);
     }
-    uint8_t header[16] = {};
-    const size_t read = fread(header, 1, sizeof(header), file);
-    fclose(file);
-    if (read != sizeof(header) || memcmp(header, "NES\x1a", 4) != 0) {
-        return false;
+}
+
+void trim_ascii_space(std::string& text) {
+    while (!text.empty() && static_cast<unsigned char>(text.back()) <= ' ') {
+        text.pop_back();
     }
-    const uint8_t mapper = (header[6] >> 4) | (header[7] & 0xf0);
-    if (mapper_out) {
-        *mapper_out = mapper;
+    size_t start = 0;
+    while (start < text.size() && static_cast<unsigned char>(text[start]) <= ' ') {
+        ++start;
     }
-    return mapper == 0 || mapper == 2;
+    if (start > 0) {
+        text.erase(0, start);
+    }
+}
+
+size_t utf8_char_len(unsigned char c) {
+    if ((c & 0x80) == 0) return 1;
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
+std::string utf8_truncate(const std::string& text, size_t max_chars) {
+    size_t pos = 0;
+    size_t chars = 0;
+    while (pos < text.size() && chars < max_chars) {
+        const size_t len = utf8_char_len(static_cast<unsigned char>(text[pos]));
+        if (pos + len > text.size()) {
+            break;
+        }
+        pos += len;
+        ++chars;
+    }
+    if (pos >= text.size()) {
+        return text;
+    }
+    return text.substr(0, pos) + "~";
+}
+
+std::string rom_display_name(const std::string& path, size_t max_chars = 22) {
+    std::string name = file_name_from_path(path);
+    strip_nes_extension(name);
+    trim_ascii_space(name);
+    if (name.empty()) {
+        name = file_name_from_path(path);
+    }
+    return utf8_truncate(name, max_chars);
+}
+
+void strip_utf8_bom(std::string& text) {
+    if (text.size() >= 3 &&
+        static_cast<unsigned char>(text[0]) == 0xef &&
+        static_cast<unsigned char>(text[1]) == 0xbb &&
+        static_cast<unsigned char>(text[2]) == 0xbf) {
+        text.erase(0, 3);
+    }
+}
+
+void unquote_ascii(std::string& text) {
+    if (text.size() >= 2 &&
+        ((text.front() == '"' && text.back() == '"') ||
+         (text.front() == '\'' && text.back() == '\''))) {
+        text = text.substr(1, text.size() - 2);
+        trim_ascii_space(text);
+    }
+}
+
+std::string rom_alias_key(const std::string& path_or_name) {
+    std::string key = file_name_from_path(path_or_name);
+    strip_nes_extension(key);
+    trim_ascii_space(key);
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) {
+        return c < 0x80 ? static_cast<char>(std::tolower(c)) : static_cast<char>(c);
+    });
+    return key;
 }
 
 uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
@@ -111,8 +181,10 @@ void FcEmulatorService::Start(DesktopUI* desktop_ui) {
         desktop_ui_->SetFcControllerCallback([this](uint8_t controller) { SetController(controller); });
     }
     ESP_LOGI(TAG, "fc emulator service registered");
-    scan_requested_.store(true);
-    EnsureTaskStarted();
+}
+
+void FcEmulatorService::SetDirectFrameCallback(DirectFrameCallback callback) {
+    direct_frame_cb_ = std::move(callback);
 }
 
 void FcEmulatorService::SetActive(bool active) {
@@ -130,15 +202,31 @@ void FcEmulatorService::SetActive(bool active) {
             }
         } else {
             playing_.store(false);
+            qd_nofrendo_request_stop();
             controller_state_.store(0);
             controller_release_tick_.store(0);
+            scan_requested_.store(false);
+            release_roms_requested_.store(true);
             PublishMode(false);
         }
     }
 }
 
+bool FcEmulatorService::PrepareSdCard() {
+    return MountSdCard();
+}
+
+void FcEmulatorService::PrepareTask() {
+    EnsureTaskStarted();
+}
+
 void FcEmulatorService::PlayPause() {
     EnsureTaskStarted();
+    if (scanning_.load()) {
+        PublishMode(false);
+        PublishState("Scanning", "Please wait");
+        return;
+    }
     if (playing_.load()) {
         Stop();
         return;
@@ -155,13 +243,10 @@ void FcEmulatorService::PlayPause() {
         PublishState("Unsupported ROM", SelectedName().c_str());
         return;
     }
-    if (!LoadNesRom()) {
-        PublishMode(false);
-        PublishState("Load failed", "ROM format error");
-        playing_.store(false);
-        return;
-    }
     frame_counter_ = 0;
+    produced_frame_counter_ = 0;
+    last_perf_frame_counter_ = 0;
+    last_perf_log_us_ = esp_timer_get_time();
     controller_state_.store(0);
     controller_release_tick_.store(0);
     playing_.store(true);
@@ -172,6 +257,7 @@ void FcEmulatorService::PlayPause() {
 
 void FcEmulatorService::Stop() {
     playing_.store(false);
+    qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
     PublishMode(false);
@@ -182,6 +268,11 @@ void FcEmulatorService::Stop() {
 
 void FcEmulatorService::Next() {
     EnsureTaskStarted();
+    if (scanning_.load()) {
+        PublishMode(false);
+        PublishState("Scanning", "Please wait");
+        return;
+    }
     if (roms_.empty()) {
         scan_requested_.store(true);
         PublishMode(false);
@@ -189,6 +280,7 @@ void FcEmulatorService::Next() {
         return;
     }
     playing_.store(false);
+    qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
     selected_index_ = (selected_index_ + 1) % roms_.size();
@@ -199,6 +291,11 @@ void FcEmulatorService::Next() {
 
 void FcEmulatorService::Prev() {
     EnsureTaskStarted();
+    if (scanning_.load()) {
+        PublishMode(false);
+        PublishState("Scanning", "Please wait");
+        return;
+    }
     if (roms_.empty()) {
         scan_requested_.store(true);
         PublishMode(false);
@@ -206,6 +303,7 @@ void FcEmulatorService::Prev() {
         return;
     }
     playing_.store(false);
+    qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
     selected_index_ = selected_index_ == 0 ? roms_.size() - 1 : selected_index_ - 1;
@@ -220,12 +318,13 @@ void FcEmulatorService::EnsureTaskStarted() {
     }
 
     constexpr uint32_t stack_size = 6144;
+    constexpr UBaseType_t task_priority = 5;
     ESP_LOGI(TAG, "fc task create free_internal=%u largest_internal=%u",
              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
              static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
 
     BaseType_t ret = xTaskCreateWithCaps(
-        TaskWrapper, "fc_emulator", stack_size, this, 3, &task_handle_,
+        TaskWrapper, "fc_emulator", stack_size, this, task_priority, &task_handle_,
         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (ret == pdPASS) {
         ESP_LOGI(TAG, "fc task started stack=%u memory=psram", static_cast<unsigned>(stack_size));
@@ -234,10 +333,11 @@ void FcEmulatorService::EnsureTaskStarted() {
 
     ESP_LOGW(TAG, "fc task PSRAM create failed ret=%ld, trying internal memory", static_cast<long>(ret));
     task_handle_ = nullptr;
-    ret = xTaskCreate(TaskWrapper, "fc_emulator", stack_size, this, 3, &task_handle_);
-    if (ret != pdPASS) {
+    const BaseType_t freertos_ret = xTaskCreate(
+        TaskWrapper, "fc_emulator", stack_size, this, task_priority, &task_handle_);
+    if (freertos_ret != pdPASS) {
         task_handle_ = nullptr;
-        ESP_LOGE(TAG, "fc task create failed ret=%ld", static_cast<long>(ret));
+        ESP_LOGE(TAG, "fc task create failed ret=%ld", static_cast<long>(freertos_ret));
         PublishState("FC unavailable", "Not enough memory");
         return;
     }
@@ -248,12 +348,25 @@ void FcEmulatorService::TaskWrapper(void* arg) {
     static_cast<FcEmulatorService*>(arg)->TaskLoop();
 }
 
+int FcEmulatorService::NofrendoFrameThunk(const uint16_t* pixels, uint16_t width, uint16_t height, void* user) {
+    auto* self = static_cast<FcEmulatorService*>(user);
+    return self && self->PublishDirectFrame(pixels, width, height) ? 1 : 0;
+}
+
 void FcEmulatorService::TaskLoop() {
     PublishMode(false);
     PublishState("FC Emulator", "Open /nes on SD card");
 
     while (true) {
         const bool is_active = active_.load();
+        if (release_roms_requested_.exchange(false)) {
+            roms_.clear();
+            roms_.shrink_to_fit();
+            rom_aliases_.clear();
+            rom_aliases_.shrink_to_fit();
+            selected_index_ = 0;
+            ESP_LOGI(TAG, "fc rom list released");
+        }
         if (!is_active && !scan_requested_.load()) {
             vTaskDelay(kIdleDelay);
             continue;
@@ -297,31 +410,12 @@ void FcEmulatorService::TaskLoop() {
             continue;
         }
 
-        const int64_t now = esp_timer_get_time();
-        const bool should_publish =
-            last_frame_publish_us_ == 0 || now - last_frame_publish_us_ >= kFramePublishIntervalUs;
-        Frame& frame = frames_[frame_slot_];
-        RenderFrame(frame, should_publish);
-        if (should_publish && frame.dsc.data) {
-            PublishFrame(&frame.dsc);
-            last_frame_publish_us_ = now;
-            frame_slot_ = (frame_slot_ + 1) % 2;
-        }
-        ++frame_counter_;
-        vTaskDelay(kFrameDelay);
+        RunNofrendoRom();
     }
 }
 
 bool FcEmulatorService::MountSdCard() {
     if (mounted_) {
-        return true;
-    }
-
-    DIR* existing = opendir(kMountPoint);
-    if (existing) {
-        closedir(existing);
-        mounted_ = true;
-        ESP_LOGI(TAG, "reuse existing sdcard mount");
         return true;
     }
 
@@ -357,7 +451,7 @@ bool FcEmulatorService::TryMountSdCard(uint8_t width, int max_freq_khz) {
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
-        .max_files = 3,
+        .max_files = 5,
         .allocation_unit_size = 4 * 1024,
         .disk_status_check_enable = false,
         .use_one_fat = false,
@@ -380,57 +474,127 @@ bool FcEmulatorService::TryMountSdCard(uint8_t width, int max_freq_khz) {
 }
 
 bool FcEmulatorService::ScanRoms() {
+    scanning_.store(true);
     roms_.clear();
+    rom_aliases_.clear();
+    roms_.reserve(kMaxScannedRoms);
     selected_index_ = 0;
 
     for (const char* dir : kRomDirs) {
+        const size_t before = roms_.size();
         ScanRomDir(dir);
+        if (roms_.size() > before) {
+            ESP_LOGI(TAG, "fc using rom dir: %s", dir);
+            LoadRomAliases(dir);
+            break;
+        }
     }
 
     std::sort(roms_.begin(), roms_.end());
     roms_.erase(std::unique(roms_.begin(), roms_.end()), roms_.end());
+    std::sort(roms_.begin(), roms_.end(), [this](const std::string& a, const std::string& b) {
+        return RomDisplayName(a, 96) < RomDisplayName(b, 96);
+    });
     ESP_LOGI(TAG, "fc scan found %u nes files", static_cast<unsigned>(roms_.size()));
-    return !roms_.empty();
+    const bool found = !roms_.empty();
+    scanning_.store(false);
+    return found;
 }
 
-void FcEmulatorService::ScanRomDir(const char* dir_path) {
+size_t FcEmulatorService::ScanRomDir(const char* dir_path) {
     DIR* dir = opendir(dir_path);
     if (!dir) {
         ESP_LOGI(TAG, "skip rom dir: %s errno=%d %s", dir_path, errno, strerror(errno));
-        return;
+        return 0;
     }
 
     uint32_t entries = 0;
     uint32_t rom_count = 0;
     struct dirent* entry = nullptr;
-    while ((entry = readdir(dir)) != nullptr) {
+    while (roms_.size() < kMaxScannedRoms && (entry = readdir(dir)) != nullptr) {
         ++entries;
         if (is_hidden_or_resource_file(entry->d_name) || !ends_with_nes_ext(entry->d_name)) {
             continue;
         }
 
         std::string path = std::string(dir_path) + "/" + entry->d_name;
-        struct stat st = {};
-        if (stat(path.c_str(), &st) != 0 || S_ISDIR(st.st_mode) || st.st_size < 16) {
-            ESP_LOGW(TAG, "skip invalid rom candidate: %s errno=%d %s", path.c_str(), errno, strerror(errno));
-            continue;
-        }
-        uint8_t mapper = 0xff;
-        if (!is_supported_nes_rom(path.c_str(), &mapper)) {
-            if (rom_count < 5) {
-                ESP_LOGI(TAG, "skip unsupported rom: %s mapper=%u", path.c_str(), mapper);
-            }
-            continue;
-        }
         roms_.push_back(path);
         ++rom_count;
-        if (rom_count <= 5) {
-            ESP_LOGI(TAG, "rom candidate: %s size=%u", path.c_str(), static_cast<unsigned>(st.st_size));
+        if (rom_count == 1) {
+            ESP_LOGI(TAG, "first rom candidate found in %s", dir_path);
         }
     }
     closedir(dir);
-    ESP_LOGI(TAG, "rom dir scanned: %s entries=%lu nes=%lu",
-             dir_path, static_cast<unsigned long>(entries), static_cast<unsigned long>(rom_count));
+    ESP_LOGI(TAG, "rom dir scanned: %s entries=%lu nes=%lu%s",
+             dir_path, static_cast<unsigned long>(entries), static_cast<unsigned long>(rom_count),
+             roms_.size() >= kMaxScannedRoms ? " capped" : "");
+    return rom_count;
+}
+
+void FcEmulatorService::LoadRomAliases(const char* dir_path) {
+    if (!dir_path || dir_path[0] == '\0') {
+        return;
+    }
+
+    const std::string dir(dir_path);
+    const std::string files[] = {
+        dir + "/roms.txt",
+        dir + "/roms.csv",
+        dir + "/games.txt",
+    };
+    for (const auto& file : files) {
+        if (LoadRomAliasFile(file.c_str())) {
+            return;
+        }
+    }
+}
+
+bool FcEmulatorService::LoadRomAliasFile(const char* path) {
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        return false;
+    }
+
+    char line[256];
+    uint32_t line_count = 0;
+    uint32_t alias_count = 0;
+    while (alias_count < kMaxScannedRoms && fgets(line, sizeof(line), file)) {
+        ++line_count;
+        std::string row(line);
+        strip_utf8_bom(row);
+        trim_ascii_space(row);
+        if (row.empty() || row[0] == '#' || row[0] == ';') {
+            continue;
+        }
+
+        const size_t sep = row.find_first_of("\t=,");
+        if (sep == std::string::npos) {
+            continue;
+        }
+        std::string key = row.substr(0, sep);
+        std::string alias = row.substr(sep + 1);
+        trim_ascii_space(key);
+        trim_ascii_space(alias);
+        unquote_ascii(key);
+        unquote_ascii(alias);
+        key = rom_alias_key(key);
+        if (key.empty() || alias.empty()) {
+            continue;
+        }
+
+        auto existing = std::find_if(rom_aliases_.begin(), rom_aliases_.end(),
+                                     [&key](const auto& item) { return item.first == key; });
+        if (existing == rom_aliases_.end()) {
+            rom_aliases_.push_back({key, alias});
+        } else {
+            existing->second = alias;
+        }
+        ++alias_count;
+    }
+    fclose(file);
+    ESP_LOGI(TAG, "rom aliases loaded: %s lines=%lu aliases=%lu",
+             path, static_cast<unsigned long>(line_count), static_cast<unsigned long>(rom_aliases_.size()));
+    return !rom_aliases_.empty();
 }
 
 bool FcEmulatorService::ValidateSelectedRom() {
@@ -454,16 +618,37 @@ bool FcEmulatorService::ValidateSelectedRom() {
         return false;
     }
     const uint8_t mapper = (header[6] >> 4) | (header[7] & 0xf0);
-    if (mapper != 0 && mapper != 2) {
-        PublishState("Unsupported ROM", "Only mapper 0/2 now");
-        ESP_LOGW(TAG, "rom mapper unsupported mapper=%u path=%s",
-                 static_cast<unsigned>(mapper), roms_[selected_index_].c_str());
-        return false;
-    }
-
     ESP_LOGI(TAG, "rom header ok prg=%u chr=%u mapper=%u",
              header[4], header[5], static_cast<unsigned>(mapper));
     return true;
+}
+
+void FcEmulatorService::RunNofrendoRom() {
+    if (roms_.empty() || selected_index_ >= roms_.size()) {
+        playing_.store(false);
+        PublishMode(false);
+        PublishState("No ROM", "Put .nes files in /nes");
+        return;
+    }
+
+    qd_nofrendo_set_frame_callback(NofrendoFrameThunk, this);
+    qd_nofrendo_set_controller(controller_state_.load());
+    ESP_LOGI(TAG, "nofrendo run rom=%s free_internal=%u largest_internal=%u",
+             SelectedName().c_str(),
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+    const int result = qd_nofrendo_run(roms_[selected_index_].c_str());
+    qd_nofrendo_set_frame_callback(nullptr, nullptr);
+    controller_state_.store(0);
+    controller_release_tick_.store(0);
+    playing_.store(false);
+
+    ESP_LOGI(TAG, "nofrendo finished result=%d", result);
+    PublishMode(false);
+    if (active_.load()) {
+        PublishState(result == 0 ? "Select ROM" : "Load failed",
+                     result == 0 ? SelectedName().c_str() : "Nofrendo could not run ROM");
+    }
 }
 
 bool FcEmulatorService::LoadNesRom() {
@@ -517,12 +702,12 @@ bool FcEmulatorService::LoadNesRom() {
 bool FcEmulatorService::RunNesFrame() {
     if (!nes_initialized_) return false;
 
-    constexpr uint32_t kMaxInstructionsPerFrame = 5200;
-    constexpr int64_t kFrameCpuBudgetUs = 14000;
+    constexpr uint32_t kMaxInstructionsPerSlice = 12000;
+    constexpr int64_t kFrameCpuBudgetUs = 12000;
     const int64_t deadline = esp_timer_get_time() + kFrameCpuBudgetUs;
     bool produced_frame = false;
     nes_bus_.ClearFrameReady();
-    for (uint32_t i = 0; i < kMaxInstructionsPerFrame; ++i) {
+    for (uint32_t i = 0; i < kMaxInstructionsPerSlice; ++i) {
         if ((i & 0x7f) == 0 && esp_timer_get_time() >= deadline) {
             break;
         }
@@ -536,7 +721,7 @@ bool FcEmulatorService::RunNesFrame() {
     return produced_frame;
 }
 
-void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
+bool FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
     if (playing_.load() && nes_initialized_) {
         const uint32_t release_tick = controller_release_tick_.load();
         if (release_tick != 0 && xTaskGetTickCount() >= release_tick) {
@@ -545,13 +730,16 @@ void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
         }
         nes_bus_.SetController(controller_state_.load());
         const bool produced_frame = RunNesFrame();
+        if (produced_frame) {
+            ++produced_frame_counter_;
+        }
 
         const uint8_t* nes_fb = nes_bus_.FrameBuffer();
         if (!nes_fb) {
-            return;
+            return false;
         }
 
-        if (update_pixels) {
+        if (update_pixels && produced_frame) {
             constexpr size_t kNesPixels = kNesFrameWidth * kNesFrameHeight;
             if (frame.pixels && frame.pixel_count != kNesPixels) {
                 FreeFrame(frame);
@@ -563,7 +751,7 @@ void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
                 if (!frame.pixels) {
                     ESP_LOGE(TAG, "fc nes rgb frame alloc failed bytes=%u",
                              static_cast<unsigned>(frame.pixel_count * sizeof(uint16_t)));
-                    return;
+                    return false;
                 }
             }
             for (size_t i = 0; i < kNesPixels; ++i) {
@@ -594,7 +782,21 @@ void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
                      produced_frame ? 1 : 0,
                      static_cast<unsigned long>(non_black));
         }
-        return;
+        const int64_t now = esp_timer_get_time();
+        if (last_perf_log_us_ == 0) {
+            last_perf_log_us_ = now;
+        } else if (now - last_perf_log_us_ >= 1000000) {
+            const uint32_t loop_delta = frame_counter_ - last_perf_frame_counter_;
+            ESP_LOGI(TAG, "fc perf produced_fps=%lu loops=%lu free_internal=%u largest_internal=%u",
+                     static_cast<unsigned long>(produced_frame_counter_),
+                     static_cast<unsigned long>(loop_delta),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+            produced_frame_counter_ = 0;
+            last_perf_frame_counter_ = frame_counter_;
+            last_perf_log_us_ = now;
+        }
+        return update_pixels && produced_frame;
     }
 
     if (!frame.pixels) {
@@ -603,7 +805,7 @@ void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
             frame.pixel_count * sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
         if (!frame.pixels) {
             ESP_LOGE(TAG, "fc frame alloc failed bytes=%u", static_cast<unsigned>(frame.pixel_count * sizeof(uint16_t)));
-            return;
+            return false;
         }
         memset(&frame.dsc, 0, sizeof(frame.dsc));
         frame.dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -633,6 +835,7 @@ void FcEmulatorService::RenderFrame(Frame& frame, bool update_pixels) {
             frame.pixels[y * kFrameWidth + x] = color;
         }
     }
+    return update_pixels;
 }
 
 void FcEmulatorService::FreeFrame(Frame& frame) {
@@ -670,23 +873,64 @@ void FcEmulatorService::PublishMode(bool playing) {
     }
 }
 
-void FcEmulatorService::PublishFrame(const lv_img_dsc_t* frame) {
+bool FcEmulatorService::PublishFrame(Frame& frame) {
+    constexpr size_t kNesPixels = kNesFrameWidth * kNesFrameHeight;
+    if (direct_frame_cb_ && playing_.load() && frame.pixels && frame.pixel_count == kNesPixels) {
+        return direct_frame_cb_(frame.pixels, kNesFrameWidth, kNesFrameHeight);
+    }
+    return PublishLvglFrame(&frame.dsc);
+}
+
+bool FcEmulatorService::PublishLvglFrame(const lv_img_dsc_t* frame) {
     if (!desktop_ui_ || !frame || !frame->data) {
-        return;
+        return false;
     }
     if (lvgl_port_lock(50)) {
         desktop_ui_->SetFcFrame(frame);
         lvgl_port_unlock();
+        return true;
     }
+    return false;
+}
+
+bool FcEmulatorService::PublishDirectFrame(const uint16_t* pixels, uint16_t width, uint16_t height) {
+    static int64_t last_log_us = 0;
+    static uint32_t frames = 0;
+    if (!direct_frame_cb_ || !playing_.load() || !pixels || width == 0 || height == 0) {
+        return false;
+    }
+
+    ++frames;
+    const int64_t now = esp_timer_get_time();
+    if (last_log_us == 0) {
+        last_log_us = now;
+    } else if (now - last_log_us >= 1000000) {
+        ESP_LOGI(TAG, "nofrendo fps=%lu free_internal=%u largest_internal=%u",
+                 static_cast<unsigned long>(frames),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        frames = 0;
+        last_log_us = now;
+    }
+
+    return direct_frame_cb_(pixels, width, height);
+}
+
+std::string FcEmulatorService::RomDisplayName(const std::string& path, size_t max_chars) const {
+    const std::string key = rom_alias_key(path);
+    auto alias = std::find_if(rom_aliases_.begin(), rom_aliases_.end(),
+                              [&key](const auto& item) { return item.first == key; });
+    if (alias != rom_aliases_.end()) {
+        return utf8_truncate(alias->second, max_chars);
+    }
+    return rom_display_name(path, max_chars);
 }
 
 std::string FcEmulatorService::SelectedName() const {
     if (roms_.empty() || selected_index_ >= roms_.size()) {
         return "No ROM";
     }
-    const std::string& path = roms_[selected_index_];
-    const size_t slash = path.find_last_of('/');
-    return slash == std::string::npos ? path : path.substr(slash + 1);
+    return RomDisplayName(roms_[selected_index_], 24);
 }
 
 std::string FcEmulatorService::BuildRomList() const {
@@ -710,13 +954,11 @@ std::string FcEmulatorService::BuildRomList() const {
 
     for (size_t row = 0; row < count; ++row) {
         const size_t i = start + row;
-        const std::string& path = roms_[i];
-        const size_t slash = path.find_last_of('/');
-        std::string name = slash == std::string::npos ? path : path.substr(slash + 1);
-        if (name.size() > 34) {
-            name = name.substr(0, 33) + "~";
-        }
+        const std::string name = RomDisplayName(roms_[i]);
+        char row_prefix[12];
+        snprintf(row_prefix, sizeof(row_prefix), "%03u ", static_cast<unsigned>(i + 1));
         text += (i == selected_index_ ? "> " : "  ");
+        text += row_prefix;
         text += name;
         if (row + 1 < count) {
             text += "\n";
@@ -726,15 +968,7 @@ std::string FcEmulatorService::BuildRomList() const {
 }
 
 void FcEmulatorService::SetController(uint8_t controller) {
-    if (controller != 0) {
-        controller_state_.store(controller);
-        controller_release_tick_.store(0);
-        nes_bus_.SetController(controller);
-    } else if (controller_state_.load() != 0) {
-        controller_release_tick_.store(xTaskGetTickCount() + kButtonReleaseHold);
-    }
-    if (controller != last_logged_controller_state_) {
-        last_logged_controller_state_ = controller;
-        ESP_LOGI(TAG, "controller=0x%02x", controller);
-    }
+    controller_state_.store(controller);
+    controller_release_tick_.store(0);
+    qd_nofrendo_set_controller(controller);
 }
