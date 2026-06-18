@@ -12,11 +12,14 @@ class TimeWeatherService {
 public:
     void Start(DesktopUI* ui);
     bool SetLocation(const std::string& city, const std::string& latitude, const std::string& longitude);
+    void RequestRefresh(bool retry_weather);
     
 private:
     DesktopUI* desktop_ui_ = nullptr;
     TaskHandle_t task_handle_ = nullptr;
     std::atomic<bool> location_update_requested_{false};
+    std::atomic<bool> refresh_requested_{false};
+    std::atomic<bool> weather_refresh_requested_{false};
     bool sntp_started_ = false;
     bool last_weather_valid_ = false;
     char last_temperature_[16] = "-- C";

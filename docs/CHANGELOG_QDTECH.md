@@ -2,6 +2,55 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: FC Exit Time/Weather Recovery
+
+Scope:
+
+- Added an FC-exit callback from the desktop UI to the time/weather service. Leaving FC now immediately requests a time refresh and a weather retry if the last weather fetch failed.
+- Forced a full active-screen invalidation when switching pages, plus targeted main-page invalidation after time or weather labels change. This is intended to clear stale direct-drawn FC pixels and make the main page repaint immediately after exiting the emulator.
+- Fixed weather retry cadence. The service previously checked the 10-second retry counter only after a 60-second wait loop; failed weather fetches now break out and retry on the intended 10-second cadence.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3c8cf0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x237310`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed WiFi initialized normally with static RX buffers `6`, dynamic RX buffers `8`, and RX BA window `6`.
+- Time/Weather task still started with PSRAM stack allocation.
+- SNTP synchronized immediately after WiFi IP acquisition.
+- First weather fetch timed out while OTA/MQTT were also starting, then the new retry path succeeded about 14 seconds later: `weather ok 27 C Zhongshan Storm 23:21 code=95 updated=23:21`.
+- Internal SRAM stayed stable during the observed idle window after weather success, around `14-15KB` free with minimum `10187` bytes.
+
+## 2026-06-18: System Stability Pass After FC Release
+
+Scope:
+
+- Removed the QDTech boot-time FC SD-card prepare call. SD is now mounted lazily when Photos or FC actually needs it, avoiding boot-time internal SRAM pressure.
+- Added FC SD mount reuse: if Photos or another service already mounted `/sdcard`, FC now reuses that mount instead of trying a second mount.
+- Moved the Time/Weather task stack to PSRAM first, with an internal-memory fallback and diagnostic logging.
+- Started SNTP immediately after WiFi connects instead of waiting for the full XiaoZhi application/MQTT readiness path.
+- Shortened the first weather HTTP attempt from two 10-second attempts to one 5-second attempt; failed weather fetches keep cached UI state and retry later instead of tying up the task.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3c8a70`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x237590`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed no early FC SD mount during board construction; FC only mounted SD after entering the FC page.
+- WiFi initialized normally with the original low-memory WiFi settings: static RX buffers `6`, dynamic RX buffers `8`, RX BA window `6`.
+- Time/Weather logs confirmed PSRAM task stack allocation: `time weather task started stack=6144 memory=psram`.
+- SNTP started immediately after WiFi IP acquisition and synchronized time in the same boot window.
+- Internal SRAM improved substantially: after WiFi/time startup logs showed about `20KB` free internal SRAM with minimum around `17KB`, compared with earlier post-MQTT/FC pressure around `5-7KB`.
+- FC page activation remained stable after the change. Logs showed FC task created in PSRAM, SD mounted on demand, `/sdcard/FC` scanned, and `fc scan found 64 nes files`.
+
+Rejected experiment:
+
+- `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y` was tested as a deeper network-memory optimization, but it caused WiFi initialization failure on this board: `wifi:malloc buffer fail`, `Expected to init 6 rx buffer, actual is 2`, then `ESP_ERR_NO_MEM` in `esp_wifi_init()`. This option was reverted and should not be reintroduced without a separate WiFi-driver memory plan.
+
 ## 2026-06-18: v1.7.9 FC Playability, ROM Names, and Firmware Release
 
 Scope:

@@ -428,7 +428,6 @@ public:
         InitializeI2c();
         InitializeSpi();
         InitializeLcdDisplay();
-        InitializeSdCard();
         InitializeTouch();
         InitializeButtons();
         InitializeTools();
@@ -834,6 +833,9 @@ private:
                 return DrawFcFrame(qd_display, pixels, width, height);
             });
         fc_emulator_service_.Start(desktop_ui);
+        desktop_ui->SetFcExitCallback([this]() {
+            time_weather_service_.RequestRefresh(true);
+        });
     }
 
     bool DrawFcFrame(QdtechLandscapeDisplay* qd_display, const uint16_t* pixels,

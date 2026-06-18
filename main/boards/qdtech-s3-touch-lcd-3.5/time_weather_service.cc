@@ -11,11 +11,13 @@
 #include "cJSON.h"
 #include "application.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "esp_sntp.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #include "settings.h"
@@ -213,7 +215,30 @@ static void BuildDailyCardText(const tm& info, char* title, size_t title_size,
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
     if (!task_handle_) {
-        xTaskCreate(TaskWrapper, "time_weather", 6144, this, 2, &task_handle_);
+        constexpr uint32_t stack_size = 6144;
+        ESP_LOGI(TAG, "time weather task create free_internal=%u largest_internal=%u",
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        BaseType_t ret = xTaskCreateWithCaps(
+            TaskWrapper, "time_weather", stack_size, this, 2, &task_handle_,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (ret == pdPASS) {
+            ESP_LOGI(TAG, "time weather task started stack=%u memory=psram",
+                     static_cast<unsigned>(stack_size));
+            return;
+        }
+
+        ESP_LOGW(TAG, "time weather task PSRAM create failed ret=%ld, trying internal memory",
+                 static_cast<long>(ret));
+        task_handle_ = nullptr;
+        ret = xTaskCreate(TaskWrapper, "time_weather", stack_size, this, 2, &task_handle_);
+        if (ret != pdPASS) {
+            task_handle_ = nullptr;
+            ESP_LOGE(TAG, "time weather task create failed ret=%ld free_internal=%u largest_internal=%u",
+                     static_cast<long>(ret),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        }
     }
 }
 
@@ -240,13 +265,25 @@ bool TimeWeatherService::SetLocation(const std::string& city, const std::string&
     return true;
 }
 
+void TimeWeatherService::RequestRefresh(bool retry_weather) {
+    refresh_requested_.store(true);
+    if (retry_weather) {
+        weather_refresh_requested_.store(true);
+    }
+    if (task_handle_) {
+        xTaskNotifyGive(task_handle_);
+    }
+}
+
 void TimeWeatherService::TaskWrapper(void* arg) {
     static_cast<TimeWeatherService*>(arg)->Task();
 }
 
 void TimeWeatherService::Task() {
-    int weather_ticks = 3600;
-    int retry_ticks = 3600;
+    static constexpr int kWeatherRefreshSeconds = 3600;
+    static constexpr int kWeatherRetrySeconds = 10;
+    int weather_ticks = kWeatherRefreshSeconds;
+    int retry_ticks = kWeatherRetrySeconds;
     bool weather_ok = false;
     
     // 等待 WiFi 连接
@@ -254,7 +291,8 @@ void TimeWeatherService::Task() {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     ESP_LOGI(TAG, "WiFi connected, starting time weather service");
-    WaitApplicationReady();
+    StartSntp();
+    ShowCachedWeather("Weather sync");
     
     while (true) {
         // 启动SNTP
@@ -269,12 +307,12 @@ void TimeWeatherService::Task() {
         }
         
         // 获取天气
-        if (weather_ticks >= 3600) {
+        if (weather_ticks >= kWeatherRefreshSeconds) {
             ShowCachedWeather("Weather sync");
             weather_ok = FetchWeather();
             weather_ticks = 0;
             retry_ticks = 0;
-        } else if (!weather_ok && retry_ticks >= 10) {
+        } else if (!weather_ok && retry_ticks >= kWeatherRetrySeconds) {
             ShowCachedWeather("Weather retry");
             weather_ok = FetchWeather();
             retry_ticks = 0;
@@ -283,12 +321,24 @@ void TimeWeatherService::Task() {
         // 更新网络状态
         SetNetworkStatusSafe("XiaoZhi AI Ready");
         
-        // 等待60秒
+        // Wait up to 60 seconds, but wake sooner for FC exit or weather retries.
         for (int i = 0; i < 60; ++i) {
-            if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) > 0 ||
-                location_update_requested_.exchange(false)) {
-                weather_ticks = 3600;
-                retry_ticks = 3600;
+            const bool notified = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) > 0;
+            const bool location_update = location_update_requested_.exchange(false);
+            const bool refresh_update = refresh_requested_.exchange(false);
+            const bool weather_refresh = weather_refresh_requested_.exchange(false);
+            if (notified || location_update || refresh_update || weather_refresh) {
+                if (location_update) {
+                    weather_ticks = kWeatherRefreshSeconds;
+                    retry_ticks = kWeatherRetrySeconds;
+                }
+                if (refresh_update || weather_refresh) {
+                    UpdateTime();
+                    ShowCachedWeather(weather_ok ? "Weather sync" : "Weather retry");
+                    if (weather_refresh && !weather_ok) {
+                        retry_ticks = kWeatherRetrySeconds;
+                    }
+                }
                 break;
             }
             if (!WifiStation::GetInstance().IsConnected()) {
@@ -301,6 +351,9 @@ void TimeWeatherService::Task() {
             }
             ++weather_ticks;
             ++retry_ticks;
+            if (!weather_ok && retry_ticks >= kWeatherRetrySeconds) {
+                break;
+            }
         }
         UpdateTime();
     }
@@ -411,15 +464,16 @@ bool TimeWeatherService::FetchWeather() {
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
     config.url = url;
-    config.timeout_ms = 10000;
+    config.timeout_ms = 5000;
     config.event_handler = HttpEventHandler;
     config.user_data = response;
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.buffer_size = 1024;
     
+    static constexpr int kWeatherFetchAttempts = 1;
     esp_err_t err = ESP_FAIL;
     int status = 0;
-    for (int attempt = 1; attempt <= 2; ++attempt) {
+    for (int attempt = 1; attempt <= kWeatherFetchAttempts; ++attempt) {
         response[0] = 0;
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (!client) {
@@ -437,7 +491,7 @@ bool TimeWeatherService::FetchWeather() {
         }
 
         ESP_LOGW(TAG, "weather fetch failed attempt=%d err=%s status=%d", attempt, esp_err_to_name(err), status);
-        if (attempt < 2) {
+        if (attempt < kWeatherFetchAttempts) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }

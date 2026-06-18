@@ -53,6 +53,7 @@ public:
     void SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail);
     void RequestPhotoRefresh();
     void SetFcActiveCallback(std::function<void(bool)> callback);
+    void SetFcExitCallback(std::function<void()> callback);
     void SetFcActions(std::function<void()> play_pause, std::function<void()> stop,
                       std::function<void()> next, std::function<void()> prev);
     void SetFcState(const char* title, const char* detail, const char* rom_list);
@@ -135,6 +136,7 @@ private:
     bool fc_playing_view_ = false;
     bool fc_list_touch_latched_ = false;
     std::function<void(bool)> fc_active_callback_;
+    std::function<void()> fc_exit_callback_;
 
     // Calendar page elements
     lv_obj_t* calendar_title_label_ = nullptr;

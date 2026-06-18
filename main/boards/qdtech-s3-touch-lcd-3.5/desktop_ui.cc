@@ -753,6 +753,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (fc_active_callback_ && was_fc != is_fc) {
         fc_active_callback_(is_fc);
     }
+    if (was_fc && !is_fc && fc_exit_callback_) {
+        fc_exit_callback_();
+    }
+    if (lv_screen_active()) {
+        lv_obj_invalidate(lv_screen_active());
+    }
 }
 
 void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
@@ -2259,6 +2265,9 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
     if (date_changed || current_page_ == DesktopPage::CALENDAR) {
         RenderCalendar();
     }
+    if (current_page_ == DesktopPage::MAIN && main_page_) {
+        lv_obj_invalidate(main_page_);
+    }
 }
 
 void DesktopUI::SetPhotoActiveCallback(std::function<void(bool)> callback) {
@@ -2340,6 +2349,10 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
 
 void DesktopUI::SetFcActiveCallback(std::function<void(bool)> callback) {
     fc_active_callback_ = std::move(callback);
+}
+
+void DesktopUI::SetFcExitCallback(std::function<void()> callback) {
+    fc_exit_callback_ = std::move(callback);
 }
 
 void DesktopUI::SetFcActions(std::function<void()> play_pause, std::function<void()> stop,
@@ -2450,6 +2463,9 @@ void DesktopUI::SetWeather(const char* temperature, const char* summary, int wea
     lv_label_set_text(weather_temp_label_, temperature ? temperature : "-- C");
     lv_label_set_text(weather_meta_label_, summary ? summary : "Weather pending");
     ApplyWeatherVisual(weather_code);
+    if (current_page_ == DesktopPage::MAIN && main_page_) {
+        lv_obj_invalidate(main_page_);
+    }
 }
 
 void DesktopUI::SetDailyQuote(const char* quote) {

@@ -179,6 +179,15 @@ Current FC/NES verification evidence:
   - Release prep bumped `PROJECT_VER` to `1.7.9` and changed `.gitignore` so `components/nofrendo` is tracked while other generated `components/` content remains ignored. Do not drop the Nofrendo component from future commits; `FcEmulatorService` includes `qdtech_nofrendo.h`.
   - Final `v1.7.9` release build passed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3c89f0`, smallest app partition `0x600000`, free `0x237610`.
   - Final `v1.7.9` build was flashed to `/dev/cu.usbmodem212401`; monitor logs confirmed `App version: 1.7.9`, OTA current version `1.7.9`, early SD mount, FC page activation, `/sdcard/FC` scan, and readable Chinese list navigation through names such as `10.能源战士2(无限HP+无限生命)`, `100.恶魔城1无敌版`, and `115.未来战士HACK`.
+  - Follow-up system stability pass after the user reported slow time/weather sync and occasional crashes after flashing FC:
+    - Removed boot-time FC SD prepare; SD now mounts lazily when FC/Photos needs it.
+    - FC now reuses an existing `/sdcard` mount instead of trying a second mount.
+    - Time/Weather task now allocates its 6144-byte stack from PSRAM first.
+    - SNTP starts immediately after WiFi connects instead of waiting for application/MQTT readiness.
+    - Weather fetch was shortened to one 5-second initial attempt; failures keep cached UI state and retry later.
+  - Latest stability build passed and was flashed to `/dev/cu.usbmodem212401`: `xiaozhi.bin` `0x3c8a70`, smallest app partition `0x600000`, free `0x237590`.
+  - Latest stability monitor result: boot stable, WiFi initialized normally, SNTP synchronized immediately after IP acquisition, `time weather task started stack=6144 memory=psram`, free internal SRAM around `20KB` with minimum around `17KB`, FC page entered, FC task started in PSRAM, SD mounted on demand, and `/sdcard/FC` scanned 64 capped ROMs.
+  - Rejected stability experiment: enabling `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y` caused WiFi boot failure (`wifi:malloc buffer fail`, `Expected to init 6 rx buffer, actual is 2`, `ESP_ERR_NO_MEM` from `esp_wifi_init`). It was reverted. Do not re-enable it casually; it made the board reboot-loop.
 
 Unresolved FC/NES problem:
 
@@ -232,6 +241,20 @@ Important 2026-06-05 stability finding:
   - SNTP wait time reduced from 30s to 15s (500ms polling).
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
+
+## Latest Runtime Notes: 2026-06-18 FC Exit Time/Weather Recovery
+
+- FC and Photos no longer force SD-card mounting during board construction. SD is mounted lazily when a feature needs it, and FC reuses an existing `/sdcard` mount.
+- The Time/Weather task is created in PSRAM first, with an internal-memory fallback and diagnostic logging.
+- Exiting FC now notifies the Time/Weather service to refresh the clock immediately and retry weather if the last weather fetch failed.
+- Desktop page switches invalidate the active screen, and main-page time/weather label updates invalidate the main page. This is intended to clear stale FC direct-draw pixels after leaving the emulator.
+- Weather retry timing is now real 10-second retry behavior after a failed fetch. Previously the retry was delayed by the 60-second outer wait loop.
+- Latest flashed local build: `xiaozhi.bin` `0x3c8cf0`, smallest app partition `0x600000`, free `0x237310`.
+- Hardware monitor after flashing:
+  - WiFi initialized normally with static RX `6`, dynamic RX `8`, RX BA `6`.
+  - SNTP synchronized immediately after WiFi got IP.
+  - First weather fetch timed out while OTA/MQTT were starting, then retry succeeded with `weather ok 27 C Zhongshan Storm 23:21 code=95 updated=23:21`.
+  - Internal SRAM stayed around `14-15KB` free after startup, minimum `10187` bytes during the observed window.
 
 ## What Still Needs Work
 

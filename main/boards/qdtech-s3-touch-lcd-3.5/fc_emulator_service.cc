@@ -419,6 +419,14 @@ bool FcEmulatorService::MountSdCard() {
         return true;
     }
 
+    DIR* existing = opendir(kMountPoint);
+    if (existing) {
+        closedir(existing);
+        mounted_ = true;
+        ESP_LOGI(TAG, "reuse existing sdcard mount");
+        return true;
+    }
+
     if (TryMountSdCard(PHOTO_SDMMC_BUS_WIDTH, kSdFreqDefaultKhz)) {
         return true;
     }
