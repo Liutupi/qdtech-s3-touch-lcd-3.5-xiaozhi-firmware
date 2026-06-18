@@ -2,30 +2,27 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: On-Device Firmware Update
+## Current Active Task: OTA Follow-Up Verification
 
 Current state:
 
-- Firmware `v1.7.12` added a dedicated Firmware row inside `SET / Settings / System`.
-- The row reads the running app version through `esp_app_get_description()`.
-- The UI currently exposes status text only: `Update path ready`.
-- The existing upstream `Ota` class already handles version checks, firmware URLs, and `StartUpgrade()` once the OTA server reports a newer firmware.
-- Boot-time OTA check currently runs during application startup and reports `Ota: Current is the latest version`.
-- GitHub releases now publish two assets per QDTech release:
+- Firmware `v1.7.13` added the first real on-device update flow inside `SET / Settings / Firmware`.
+- The row has a `Check` / `Update` button with busy, latest, failed, no-WiFi, no-asset, and progress states.
+- The board checks GitHub Releases at `Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest`.
+- The updater compares release tags against `esp_app_get_description()->version`.
+- `Ota::StartUpgradeFromUrl()` can now write a direct app image URL to the next OTA app partition.
+- GitHub releases must now publish three assets per QDTech release:
   - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-full.bin`
   - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-firmware.zip`
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-app.bin`
 
 Next work:
 
-- Decide the update source for the on-device flow:
-  - Prefer the existing XiaoZhi OTA service if it can serve this custom QDTech build.
-  - If using GitHub release assets, add a small manifest layer with version, URL, SHA256, and minimum version.
-- Add a real touch action only after the source is known: check update, show current/new version, require confirmation, then start upgrade.
-- Reuse `Ota::CheckVersion()` and `Ota::StartUpgrade()` if the existing service path is used; avoid a parallel updater unless the release-asset source requires it.
-- Add a progress state to the Firmware row or a lightweight modal: checking, available, downloading, verifying, rebooting, failed.
-- Block or defer OTA while FC gameplay, radio playback, or XiaoZhi listening/speaking is active.
-- Keep the UI defensive: no fake update button, no destructive restart without confirmation, and no update attempt if battery/power assumptions are unclear.
-- Verify by publishing a test version newer than the installed one, then confirm download, partition write, reboot, and rollback safety.
+- Publish the next higher version with a standalone `*-app.bin`, then verify a full board-initiated OTA: check -> update -> download -> partition write -> reboot -> new version.
+- Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
+- Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.
+- Keep blocking OTA while FC gameplay, radio playback, or XiaoZhi listening/speaking is active.
+- Keep the UI defensive: no destructive restart without a clear user action, and no update attempt when WiFi is disconnected.
 
 ## Priority 0: Keep The Base Reproducible
 

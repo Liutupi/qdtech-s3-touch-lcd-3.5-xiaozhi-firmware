@@ -30,6 +30,7 @@ Important files:
 - `photo_service.cc` / `photo_service.h`: MicroSD JPEG photo slideshow service.
 - `radio_service.cc` / `radio_service.h`: MP3 network radio and audio focus behavior.
 - `time_weather_service.cc` / `time_weather_service.h`: SNTP clock, weather fetch, cached weather display.
+- `firmware_update_service.cc` / `firmware_update_service.h`: Settings-page GitHub release check and on-device OTA trigger.
 - `sdkconfig.defaults`: board type defaults for this board.
 
 ## Current Verified State
@@ -242,7 +243,42 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-18 v1.7.12 Network/System Settings Split
+## Latest Runtime Notes: 2026-06-18 v1.7.13 On-Device Firmware Update Bootstrap
+
+- Latest release target is `v1.7.13`.
+- `SET / Settings / Firmware` now has a real `Check` / `Update` button, not just reserved status text.
+- New QDTech-only files:
+  - `main/boards/qdtech-s3-touch-lcd-3.5/firmware_update_service.h`
+  - `main/boards/qdtech-s3-touch-lcd-3.5/firmware_update_service.cc`
+- The firmware update service checks the latest GitHub Release:
+  - `https://api.github.com/repos/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest`
+  - It compares the release tag against `esp_app_get_description()->version`.
+  - It looks for `qdtech-s3-touch-lcd-3.5-vX.Y.Z-app.bin` and uses that URL for OTA.
+- `Ota` now exposes `StartUpgradeFromUrl()` and the app-image download path handles GitHub redirects directly through ESP-IDF HTTP.
+- The update flow blocks unsafe starts:
+  - no WiFi -> `WiFi needed`
+  - radio/external audio active -> `Stop audio first`
+  - XiaoZhi not idle -> `Wait idle`
+- Release packaging now needs three assets:
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-full.bin` for full USB flashing.
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-firmware.zip` for manual download/archival.
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-app.bin` for on-device OTA.
+- Final `v1.7.13` release build passed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3cd140`, smallest app partition `0x600000`, free `0x232ec0`.
+- Hardware monitor after flashing:
+  - App version and OTA current version both reported `1.7.13`.
+  - ESP-IDF runtime reported `v5.5.2`.
+  - WiFi initialized normally and obtained IP `192.168.1.104`.
+  - Time synchronized successfully: `2026-06-18 17:49`.
+  - Weather completed during boot: `weather ok 27 C Zhongshan Storm 17:49 code=96 updated=17:49`.
+  - MQTT connected and the app reached `Application: STATE: idle`.
+  - Internal SRAM remained stable in the observed idle window, with `free sram` around `13KB` and minimum around `8KB`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-app.bin`, SHA256 `f0ad472babf25b0c5fcde313bc53c302396f22a13b2761c0d472c3d77819593d`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-firmware.zip`, SHA256 `a49a4290c8718a66fd6f270f701fdf7a53ed053db2cc0ffa074ead5d8785a94a`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-full.bin`, SHA256 `64d914e33bbd3d41c123b9726e0129dfa68f8bbf099ed395b0f19270b411be08`.
+- Important limitation: `v1.7.13` is the bootstrap firmware that adds the on-device updater. A full board-initiated download/write/reboot should be verified with the next higher GitHub Release. A board already running `1.7.13` should report `Latest` when the latest release is also `v1.7.13`.
+
+## Previous Runtime Notes: 2026-06-18 v1.7.12 Network/System Settings Split
 
 - Latest release target is `v1.7.12`.
 - `NET` and `SET` are no longer duplicate entry points:

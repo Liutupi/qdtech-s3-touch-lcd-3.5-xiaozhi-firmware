@@ -2,6 +2,47 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: v1.7.13 On-Device Firmware Update Bootstrap
+
+Scope:
+
+- Bumped firmware version to `1.7.13`.
+- Added a QDTech-only `FirmwareUpdateService` behind `SET / Settings / Firmware`.
+- Changed the Firmware row from passive text to a real `Check` / `Update` touch action:
+  - `Check` fetches the latest GitHub Release.
+  - A newer release with an OTA app asset changes the button to `Update`.
+  - Busy, no-WiFi, no-asset, latest, and progress states are shown in the row.
+- Used GitHub Releases as the first on-device update source:
+  - API: `https://api.github.com/repos/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest`.
+  - Required OTA asset name: `qdtech-s3-touch-lcd-3.5-vX.Y.Z-app.bin`.
+- Extended the existing `Ota` class with `StartUpgradeFromUrl()` so the board can upgrade from a direct app image URL.
+- Reworked the OTA firmware download path to use ESP-IDF HTTP directly for app-image downloads, including GitHub redirect handling.
+- Updated release packaging so `xiaozhi.bin` is included in the firmware zip and copied as a standalone app OTA binary.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3cd140`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x232ec0`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `App version: 1.7.13`, `ESP-IDF: v5.5.2`, and `Ota: Current version: 1.7.13`.
+- WiFi connected and obtained IP `192.168.1.104`.
+- Time synchronized during boot: `2026-06-18 17:49`.
+- Weather completed during boot: `weather ok 27 C Zhongshan Storm 17:49 code=96 updated=17:49`.
+- MQTT connected and the application reached `STATE: idle`.
+- Observed idle SRAM after boot stayed around `13KB` free with minimum around `8KB`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.13-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.13-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.13-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-app.bin`: `f0ad472babf25b0c5fcde313bc53c302396f22a13b2761c0d472c3d77819593d`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-firmware.zip`: `a49a4290c8718a66fd6f270f701fdf7a53ed053db2cc0ffa074ead5d8785a94a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.13-full.bin`: `64d914e33bbd3d41c123b9726e0129dfa68f8bbf099ed395b0f19270b411be08`
+
+Known follow-up:
+
+- `v1.7.13` is the bootstrap firmware that adds the on-device update UI. A full on-device write/reboot upgrade should be verified with the next higher GitHub Release, because a device already running `1.7.13` should correctly report `Latest` for `v1.7.13`.
+- Keep publishing the standalone `*-app.bin` asset for every future release; `full.bin` is for USB/full-flash use and must not be written to an OTA app partition.
+
 ## 2026-06-18: v1.7.12 Network/System Settings Split Release
 
 Scope:

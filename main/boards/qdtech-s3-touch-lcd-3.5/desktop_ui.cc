@@ -3,6 +3,7 @@
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
+#include "firmware_update_service.h"
 
 #include <cstdio>
 #include <cstring>
@@ -666,6 +667,12 @@ static void settings_volume_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_RELEASED && g_desktop_ui) {
         auto* slider = static_cast<lv_obj_t*>(lv_event_get_target(event));
         g_desktop_ui->SetSystemVolume(lv_slider_get_value(slider));
+    }
+}
+
+static void settings_firmware_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        FirmwareUpdateService::GetInstance().HandleButton();
     }
 }
 
@@ -1888,12 +1895,24 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
 
     lv_obj_t* ota_label = label_en(firmware_row, "OTA", &style_en);
     lv_obj_align(ota_label, LV_ALIGN_BOTTOM_LEFT, 14, -11);
-    settings_firmware_status_label_ = label_en(firmware_row, "Update path ready", &style_muted);
-    lv_obj_set_width(settings_firmware_status_label_, 180);
+    settings_firmware_status_label_ = label_en(firmware_row, "Tap Check", &style_muted);
+    lv_obj_set_width(settings_firmware_status_label_, 176);
     lv_label_set_long_mode(settings_firmware_status_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(settings_firmware_status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_align(settings_firmware_status_label_, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_style_text_font(settings_firmware_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(settings_firmware_status_label_, LV_ALIGN_BOTTOM_RIGHT, -14, -12);
+    lv_obj_align(settings_firmware_status_label_, LV_ALIGN_BOTTOM_LEFT, 54, -12);
+
+    settings_firmware_button_ = lv_btn_create(firmware_row);
+    lv_obj_set_size(settings_firmware_button_, 84, 30);
+    lv_obj_set_style_radius(settings_firmware_button_, 15, 0);
+    lv_obj_set_style_bg_color(settings_firmware_button_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_border_color(settings_firmware_button_, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(settings_firmware_button_, 1, 0);
+    lv_obj_add_event_cb(settings_firmware_button_, settings_firmware_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(settings_firmware_button_, LV_ALIGN_BOTTOM_RIGHT, -14, -8);
+    settings_firmware_button_label_ = label_en(settings_firmware_button_, "Check", &style_en);
+    lv_obj_set_style_text_font(settings_firmware_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_center(settings_firmware_button_label_);
 }
 
 void DesktopUI::UpdateWifiList() {
@@ -2771,6 +2790,32 @@ void DesktopUI::SetNetworkStatus(const char* status) {
     }
     if (network_detail_label_) {
         lv_label_set_text(network_detail_label_, status);
+    }
+}
+
+void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress) {
+    (void)progress;
+    if (settings_firmware_status_label_ && status) {
+        lv_label_set_text(settings_firmware_status_label_, status);
+    }
+
+    if (settings_firmware_button_) {
+        if (busy) {
+            lv_obj_add_state(settings_firmware_button_, LV_STATE_DISABLED);
+        } else {
+            lv_obj_remove_state(settings_firmware_button_, LV_STATE_DISABLED);
+        }
+        lv_obj_set_style_border_color(settings_firmware_button_,
+                                      busy ? COLOR_MUTED : (update_available ? COLOR_GOLD : COLOR_GREEN),
+                                      0);
+    }
+
+    if (settings_firmware_button_label_) {
+        const char* text = busy ? "Wait" : (update_available ? "Update" : "Check");
+        lv_label_set_text(settings_firmware_button_label_, text);
+        lv_obj_set_style_text_color(settings_firmware_button_label_,
+                                    update_available && !busy ? COLOR_GOLD : COLOR_TEXT, 0);
+        lv_obj_center(settings_firmware_button_label_);
     }
 }
 

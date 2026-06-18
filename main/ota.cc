@@ -4,6 +4,8 @@
 #include "assets/lang_config.h"
 
 #include <cJSON.h>
+#include <esp_crt_bundle.h>
+#include <esp_http_client.h>
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
@@ -14,12 +16,92 @@
 #include <esp_hmac.h>
 #endif
 
+#include <cctype>
 #include <cstring>
+#include <memory>
 #include <vector>
 #include <sstream>
 #include <algorithm>
 
 #define TAG "Ota"
+
+struct FirmwareHttpHeaders {
+    std::string location;
+};
+
+static std::string ToLowerHeaderKey(const char* key) {
+    std::string result = key ? key : "";
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return result;
+}
+
+static esp_err_t FirmwareHttpEventHandler(esp_http_client_event_t* evt) {
+    if (evt->event_id == HTTP_EVENT_ON_HEADER && evt->user_data && evt->header_key && evt->header_value) {
+        auto* headers = static_cast<FirmwareHttpHeaders*>(evt->user_data);
+        if (ToLowerHeaderKey(evt->header_key) == "location") {
+            headers->location = evt->header_value;
+        }
+    }
+    return ESP_OK;
+}
+
+static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url,
+                                                 int* status_code,
+                                                 int* content_length) {
+    std::string current_url = firmware_url;
+    for (int redirect = 0; redirect < 5; ++redirect) {
+        FirmwareHttpHeaders headers;
+        esp_http_client_config_t config = {};
+        config.url = current_url.c_str();
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+        config.timeout_ms = 30000;
+        config.event_handler = FirmwareHttpEventHandler;
+        config.user_data = &headers;
+        config.buffer_size = 1024;
+
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (!client) {
+            ESP_LOGE(TAG, "Failed to initialize firmware HTTP client");
+            return nullptr;
+        }
+
+        auto app_desc = esp_app_get_description();
+        std::string user_agent = std::string(BOARD_NAME "/") + app_desc->version;
+        esp_http_client_set_method(client, HTTP_METHOD_GET);
+        esp_http_client_set_header(client, "User-Agent", user_agent.c_str());
+
+        esp_err_t err = esp_http_client_open(client, 0);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to open firmware HTTP connection: %s", esp_err_to_name(err));
+            esp_http_client_cleanup(client);
+            return nullptr;
+        }
+
+        const int fetched_length = esp_http_client_fetch_headers(client);
+        const int fetched_status = esp_http_client_get_status_code(client);
+        if (fetched_status == 301 || fetched_status == 302 || fetched_status == 303 ||
+            fetched_status == 307 || fetched_status == 308) {
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            if (headers.location.empty()) {
+                ESP_LOGE(TAG, "Firmware redirect missing Location header");
+                return nullptr;
+            }
+            ESP_LOGI(TAG, "Firmware redirect %d -> %s", fetched_status, headers.location.c_str());
+            current_url = headers.location;
+            continue;
+        }
+
+        *status_code = fetched_status;
+        *content_length = fetched_length;
+        return client;
+    }
+
+    ESP_LOGE(TAG, "Too many firmware download redirects");
+    return nullptr;
+}
 
 
 Ota::Ota() {
@@ -265,20 +347,24 @@ void Ota::Upgrade(const std::string& firmware_url) {
     bool image_header_checked = false;
     std::string image_header;
 
-    auto http = std::unique_ptr<Http>(Board::GetInstance().CreateHttp());
-    if (!http->Open("GET", firmware_url)) {
-        ESP_LOGE(TAG, "Failed to open HTTP connection");
+    int status_code = 0;
+    int content_length = 0;
+    esp_http_client_handle_t client = OpenFirmwareHttp(firmware_url, &status_code, &content_length);
+    if (!client) {
         return;
     }
 
-    if (http->GetStatusCode() != 200) {
-        ESP_LOGE(TAG, "Failed to get firmware, status code: %d", http->GetStatusCode());
+    if (status_code != 200) {
+        ESP_LOGE(TAG, "Failed to get firmware, status code: %d", status_code);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
         return;
     }
 
-    size_t content_length = http->GetBodyLength();
-    if (content_length == 0) {
+    if (content_length <= 0) {
         ESP_LOGE(TAG, "Failed to get content length");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
         return;
     }
 
@@ -286,9 +372,11 @@ void Ota::Upgrade(const std::string& firmware_url) {
     size_t total_read = 0, recent_read = 0;
     auto last_calc_time = esp_timer_get_time();
     while (true) {
-        int ret = http->Read(buffer, sizeof(buffer));
+        int ret = esp_http_client_read(client, buffer, sizeof(buffer));
         if (ret < 0) {
             ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
             return;
         }
 
@@ -319,12 +407,16 @@ void Ota::Upgrade(const std::string& firmware_url) {
                 auto current_version = esp_app_get_description()->version;
                 if (memcmp(new_app_info.version, current_version, sizeof(new_app_info.version)) == 0) {
                     ESP_LOGE(TAG, "Firmware version is the same, skipping upgrade");
+                    esp_http_client_close(client);
+                    esp_http_client_cleanup(client);
                     return;
                 }
 
                 if (esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle)) {
                     esp_ota_abort(update_handle);
                     ESP_LOGE(TAG, "Failed to begin OTA");
+                    esp_http_client_close(client);
+                    esp_http_client_cleanup(client);
                     return;
                 }
 
@@ -336,10 +428,13 @@ void Ota::Upgrade(const std::string& firmware_url) {
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to write OTA data: %s", esp_err_to_name(err));
             esp_ota_abort(update_handle);
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
             return;
         }
     }
-    http->Close();
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
 
     esp_err_t err = esp_ota_end(update_handle);
     if (err != ESP_OK) {
@@ -365,6 +460,12 @@ void Ota::Upgrade(const std::string& firmware_url) {
 void Ota::StartUpgrade(std::function<void(int progress, size_t speed)> callback) {
     upgrade_callback_ = callback;
     Upgrade(firmware_url_);
+}
+
+void Ota::StartUpgradeFromUrl(const std::string& firmware_url,
+                              std::function<void(int progress, size_t speed)> callback) {
+    upgrade_callback_ = callback;
+    Upgrade(firmware_url);
 }
 
 std::vector<int> Ota::ParseVersion(const std::string& version) {

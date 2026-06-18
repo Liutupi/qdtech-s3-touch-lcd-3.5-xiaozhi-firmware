@@ -7,6 +7,7 @@
 #include "mcp_server.h"
 #include "desktop_ui.h"
 #include "fc_emulator_service.h"
+#include "firmware_update_service.h"
 #include "photo_service.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
@@ -434,6 +435,7 @@ public:
         InitializeRadio();
         InitializePhotos();
         InitializeFcEmulator();
+        InitializeFirmwareUpdate();
         GetBacklight()->RestoreBrightness();
     }
 
@@ -839,6 +841,14 @@ private:
         desktop_ui->SetFcExitCallback([this]() {
             time_weather_service_.RequestRefresh(true);
         });
+    }
+
+    void InitializeFirmwareUpdate() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        FirmwareUpdateService::GetInstance().Start(desktop_ui);
     }
 
     bool DrawFcFrame(QdtechLandscapeDisplay* qd_display, const uint16_t* pixels,

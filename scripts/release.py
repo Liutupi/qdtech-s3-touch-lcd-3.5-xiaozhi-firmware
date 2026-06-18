@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import zipfile
+import shutil
 
 # 切换到项目根目录
 os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,7 +39,16 @@ def zip_bin(board_type, project_version):
         os.remove(output_path)
     with zipfile.ZipFile(output_path, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
         zipf.write("build/merged-binary.bin", arcname="merged-binary.bin")
+        app_bin = "build/xiaozhi.bin"
+        if os.path.exists(app_bin):
+            zipf.write(app_bin, arcname="xiaozhi.bin")
     print(f"zip bin to {output_path} done")
+
+    app_bin = "build/xiaozhi.bin"
+    if os.path.exists(app_bin):
+        app_output_path = f"releases/{board_type}-v{project_version}-app.bin"
+        shutil.copyfile(app_bin, app_output_path)
+        print(f"copy app ota bin to {app_output_path} done")
     
 
 def release_current():
