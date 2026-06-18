@@ -242,7 +242,37 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-18 v1.7.11 Clock Visual Polish
+## Latest Runtime Notes: 2026-06-18 v1.7.12 Network/System Settings Split
+
+- Latest release target is `v1.7.12`.
+- `NET` and `SET` are no longer duplicate entry points:
+  - `NET / Network / WiFi Hub` opens a dedicated Network page.
+  - `SET / Settings / System` opens the System Settings page.
+- The Network page contains:
+  - Connection status, mirrored from `DesktopUI::SetNetworkStatus()`.
+  - Saved WiFi count.
+  - A scrollable saved WiFi list from `SsidManager::GetSsidList()`.
+  - Tap-to-set-default behavior through `SsidManager::SetDefaultSsid(index)`.
+- Destructive WiFi actions are intentionally not exposed as touch buttons yet. Use the existing MCP tools for remove/switch until the on-device confirmation flow is designed.
+- The Settings page now focuses on Display & Sound, Weather, and Firmware:
+  - Brightness and volume sliders retain the existing hardware-backed behavior.
+  - Weather location remains a status row tied to the existing XiaoZhi/MCP configuration path.
+  - Firmware row reads the running app version through `esp_app_get_description()`.
+  - OTA status text is a reserved anchor for the next real on-device firmware-update workflow.
+- Radio page spectrum bars changed from one yellow color to `RADIO_BAR_COLORS[16]`, a soft rainbow palette. Bars are dim at idle and full opacity during playback.
+- Final `v1.7.12` release build passed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3ca6a0`, smallest app partition `0x600000`, free `0x235960`.
+- Hardware monitor after flashing:
+  - App version and OTA current version both reported `1.7.12`.
+  - WiFi initialized normally and obtained IP `192.168.1.104`.
+  - Time synchronized successfully: `2026-06-18 17:16`.
+  - Weather completed during boot: `weather ok 28 C Zhongshan Storm 17:16 code=96 updated=17:16`.
+  - MQTT connected and the app reached `Application: STATE: idle`.
+  - Internal SRAM remained stable in the observed window, with `free sram` around `10-21KB` and minimum around `9KB`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.12-full.bin`, SHA256 `6ce97bb6b910420e0fd52c5b6185c8c5512e8c52f91cf7050dfbecb9276dbb65`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.12-firmware.zip`, SHA256 `b50b5510007093a9c90ba0c2accf4abf3580ed92d35d43d323e08f967102adcb`.
+
+## Previous Runtime Notes: 2026-06-18 v1.7.11 Clock Visual Polish
 
 - Latest release target is `v1.7.11`.
 - Main page layout is intentionally unchanged. Only the large clock rendering was adjusted.

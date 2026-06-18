@@ -2,25 +2,30 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: FC/NES Emulator Repair
+## Current Active Task: On-Device Firmware Update
 
 Current state:
 
-- FC/NES app tile exists and opens a list-first ROM picker.
-- SD card mounting and ROM scanning work on the QDTech board.
-- The last hardware run found 146 supported `.nes` files.
-- Prev/Next selection and Start-to-load work.
-- Game view opens and publishes NES frames.
-- Touch buttons reach the service as `controller=0x..`.
-- The NES bus latches controller input, so the remaining issue is not the LVGL button layer.
+- Firmware `v1.7.12` added a dedicated Firmware row inside `SET / Settings / System`.
+- The row reads the running app version through `esp_app_get_description()`.
+- The UI currently exposes status text only: `Update path ready`.
+- The existing upstream `Ota` class already handles version checks, firmware URLs, and `StartUpgrade()` once the OTA server reports a newer firmware.
+- Boot-time OTA check currently runs during application startup and reports `Ota: Current is the latest version`.
+- GitHub releases now publish two assets per QDTech release:
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-full.bin`
+  - `qdtech-s3-touch-lcd-3.5-vX.Y.Z-firmware.zip`
 
 Next work:
 
-- Treat this as an emulator-core problem, not a UI button problem.
-- Prefer integrating a complete emulator core with adapters for SD ROM loading, LVGL frame publication, and the existing touch-controller state.
-- If keeping the current minimal core, first test a tiny known-good Mapper 0/NROM ROM, then fix CPU/PPU timing and missing CPU behavior until that single ROM is truly playable.
-- Remove or gate any temporary verbose input logs before final validation; keep only concise `controller latch=0x..` style diagnostics.
-- Rebuild, flash to `COM13`, and validate with serial plus hardware-visible movement before declaring FC playable.
+- Decide the update source for the on-device flow:
+  - Prefer the existing XiaoZhi OTA service if it can serve this custom QDTech build.
+  - If using GitHub release assets, add a small manifest layer with version, URL, SHA256, and minimum version.
+- Add a real touch action only after the source is known: check update, show current/new version, require confirmation, then start upgrade.
+- Reuse `Ota::CheckVersion()` and `Ota::StartUpgrade()` if the existing service path is used; avoid a parallel updater unless the release-asset source requires it.
+- Add a progress state to the Firmware row or a lightweight modal: checking, available, downloading, verifying, rebooting, failed.
+- Block or defer OTA while FC gameplay, radio playback, or XiaoZhi listening/speaking is active.
+- Keep the UI defensive: no fake update button, no destructive restart without confirmation, and no update attempt if battery/power assumptions are unclear.
+- Verify by publishing a test version newer than the installed one, then confirm download, partition write, reboot, and rollback safety.
 
 ## Priority 0: Keep The Base Reproducible
 
@@ -145,13 +150,15 @@ Current state:
 
 - The Settings page is scrollable and usable on the 480x320 display.
 - Brightness and volume sliders are connected to hardware and persist changes.
-- WiFi scan results remain visible in the Settings page.
+- Network controls moved out of Settings. `NET / Network / WiFi Hub` now owns saved WiFi display and default-network selection.
+- Settings now includes a Firmware row for current version and future OTA update status.
 - Hardware values are deliberately read only when Settings opens, avoiding board-constructor re-entry during desktop creation.
 
 Next work:
 
+- Complete the on-device firmware update flow from the Firmware row.
 - Visual weather city editor backed by NVS.
 - Radio station management from file storage.
 - Startup radio preference in NVS.
-- Better WiFi settings page.
+- Add safe WiFi remove/switch UI only after designing a confirmation flow.
 - UI polish for clock/weather/radio cards.

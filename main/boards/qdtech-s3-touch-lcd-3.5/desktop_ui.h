@@ -14,6 +14,7 @@ enum class DesktopPage {
     RADIO,
     FOCUS,
     XIAOZHI,
+    NETWORK,
     SETTINGS,
 };
 
@@ -35,6 +36,7 @@ public:
     void SetDailyQuote(const char* quote);
     void SetDailyCard(const char* date, const char* title, const char* body);
     void SetNetworkStatus(const char* status);
+    void SetDefaultNetwork(size_t index);
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
     void SetRadioState(const char* station, const char* state, const char* meta);
@@ -90,6 +92,7 @@ private:
     lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
+    lv_obj_t* network_page_ = nullptr;
     lv_obj_t* settings_page_ = nullptr;
     DesktopPage current_page_ = DesktopPage::MAIN;
 
@@ -181,6 +184,13 @@ private:
     lv_obj_t* settings_volume_slider_ = nullptr;
     lv_obj_t* settings_volume_value_ = nullptr;
     lv_obj_t* settings_content_ = nullptr;
+    lv_obj_t* settings_firmware_version_label_ = nullptr;
+    lv_obj_t* settings_firmware_status_label_ = nullptr;
+
+    // Network page elements
+    lv_obj_t* network_list_container_ = nullptr;
+    lv_obj_t* network_saved_count_label_ = nullptr;
+    lv_obj_t* network_detail_label_ = nullptr;
 
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
@@ -217,6 +227,7 @@ private:
     void CreateRadioPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
+    void CreateNetworkPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
     void CreateStatusBar(lv_obj_t* parent);
     void CreateBigTime(lv_obj_t* parent);

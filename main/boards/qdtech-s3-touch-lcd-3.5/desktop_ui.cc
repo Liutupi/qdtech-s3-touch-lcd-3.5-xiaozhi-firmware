@@ -11,6 +11,7 @@
 #include <ctime>
 #include <utility>
 
+#include <esp_app_desc.h>
 #include <esp_log.h>
 #include <nvs_flash.h>
 #include <nvs.h>
@@ -41,6 +42,16 @@ static constexpr lv_color_t COLOR_GREEN = LV_COLOR_MAKE(0x82, 0xd7, 0x78);
 static constexpr lv_color_t COLOR_PURPLE = LV_COLOR_MAKE(0xaa, 0x78, 0xff);
 static constexpr lv_color_t COLOR_BLUE = LV_COLOR_MAKE(0x68, 0x9d, 0xff);
 static constexpr lv_color_t COLOR_CLOCK_DOT = LV_COLOR_MAKE(0xd7, 0xde, 0xe3);
+static constexpr lv_color_t RADIO_BAR_COLORS[16] = {
+    LV_COLOR_MAKE(0xff, 0x6b, 0x6b), LV_COLOR_MAKE(0xff, 0x8e, 0x5a),
+    LV_COLOR_MAKE(0xff, 0xb8, 0x4d), LV_COLOR_MAKE(0xf7, 0xd8, 0x5a),
+    LV_COLOR_MAKE(0xc6, 0xe6, 0x6f), LV_COLOR_MAKE(0x8d, 0xdf, 0x84),
+    LV_COLOR_MAKE(0x5f, 0xd6, 0xa4), LV_COLOR_MAKE(0x46, 0xcf, 0xc8),
+    LV_COLOR_MAKE(0x55, 0xc7, 0xf3), LV_COLOR_MAKE(0x68, 0xb2, 0xff),
+    LV_COLOR_MAKE(0x83, 0x9b, 0xff), LV_COLOR_MAKE(0x9d, 0x87, 0xf5),
+    LV_COLOR_MAKE(0xb8, 0x7a, 0xe8), LV_COLOR_MAKE(0xd7, 0x77, 0xd9),
+    LV_COLOR_MAKE(0xf0, 0x7c, 0xbe), LV_COLOR_MAKE(0xff, 0x88, 0x9a),
+};
 
 // Styles
 static lv_style_t style_screen;
@@ -299,6 +310,11 @@ static void open_app_card(uint8_t index) {
                 g_desktop_ui->ShowPage(DesktopPage::FOCUS);
             }
             break;
+        case 6:
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::NETWORK);
+            }
+            break;
         case 7:
             if (g_desktop_ui) {
                 g_desktop_ui->ShowPage(DesktopPage::SETTINGS);
@@ -342,6 +358,12 @@ static void calendar_card_cb(lv_event_t* event) {
 static void focus_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(5);
+    }
+}
+
+static void network_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_app_card(6);
     }
 }
 
@@ -596,11 +618,13 @@ static void RadioAnimTimerCb(lv_timer_t* timer) {
         if (self->radio_playing_) {
             // 播放中：随机高度模拟频谱
             uint16_t height = 10 + (esp_random() % 50);
+            lv_obj_set_style_bg_opa(self->radio_bars_[i], LV_OPA_COVER, 0);
             lv_obj_set_height(self->radio_bars_[i], height);
             lv_obj_align(self->radio_bars_[i], LV_ALIGN_BOTTOM_LEFT,
                         24 + i * 28, 0);
         } else {
             // 停止：显示静默状态
+            lv_obj_set_style_bg_opa(self->radio_bars_[i], LV_OPA_50, 0);
             lv_obj_set_height(self->radio_bars_[i], 5);
             lv_obj_align(self->radio_bars_[i], LV_ALIGN_BOTTOM_LEFT,
                         24 + i * 28, 0);
@@ -614,6 +638,21 @@ static void settings_gesture_cb(lv_event_t* event) {
     if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
         g_desktop_ui->ShowPage(DesktopPage::APPS);
     }
+}
+
+static void network_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void network_wifi_item_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED || !g_desktop_ui) return;
+    lv_obj_t* target = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    uintptr_t index = reinterpret_cast<uintptr_t>(lv_obj_get_user_data(target));
+    g_desktop_ui->SetDefaultNetwork(static_cast<size_t>(index));
 }
 
 static void settings_brightness_cb(lv_event_t* event) {
@@ -661,6 +700,7 @@ void DesktopUI::Create() {
     CreateRadioPage(root);
     CreateFocusPage(root);
     CreateXiaozhiPage(root);
+    CreateNetworkPage(root);
     CreateSettingsPage(root);
 
     // Start with main page
@@ -693,6 +733,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
+    if (network_page_) {
+        lv_obj_add_flag(network_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     if (settings_page_) {
         lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -740,11 +783,17 @@ void DesktopUI::ShowPage(DesktopPage page) {
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show xiaozhi page");
             break;
+        case DesktopPage::NETWORK:
+            if (network_page_) {
+                lv_obj_clear_flag(network_page_, LV_OBJ_FLAG_HIDDEN);
+                UpdateWifiList();
+            }
+            ESP_LOGI(TAG, "Show network page");
+            break;
         case DesktopPage::SETTINGS:
             if (settings_page_) {
                 lv_obj_clear_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
                 RefreshSettingsControls();
-                UpdateWifiList();
             }
             ESP_LOGI(TAG, "Show settings page");
             break;
@@ -1145,8 +1194,8 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
         {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
         {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi", COLOR_BLUE, settings_card_cb},
-        {"SET", "Settings", "System", COLOR_BLUE, settings_card_cb},
+        {"NET", "Network", "WiFi Hub", COLOR_BLUE, network_card_cb},
+        {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
     };
 
     for (uint8_t i = 0; i < 8; ++i) {
@@ -1502,8 +1551,8 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
         lv_obj_remove_style_all(radio_bars_[i]);
         lv_obj_set_width(radio_bars_[i], 20);
         lv_obj_set_height(radio_bars_[i], 5);
-        lv_obj_set_style_bg_color(radio_bars_[i], COLOR_GOLD, 0);
-        lv_obj_set_style_bg_opa(radio_bars_[i], LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(radio_bars_[i], RADIO_BAR_COLORS[i], 0);
+        lv_obj_set_style_bg_opa(radio_bars_[i], LV_OPA_50, 0);
         lv_obj_set_style_radius(radio_bars_[i], 3, 0);
         lv_obj_align(radio_bars_[i], LV_ALIGN_BOTTOM_LEFT, 24 + i * 28, 0);
     }
@@ -1664,6 +1713,66 @@ void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
     CreateFaceUI(xiaozhi_page_);
 }
 
+// ===== Network page =====
+void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
+    network_page_ = lv_obj_create(root);
+    lv_obj_add_style(network_page_, &style_screen, 0);
+    lv_obj_set_size(network_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(network_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(network_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(network_page_, network_gesture_cb, LV_EVENT_GESTURE, NULL);
+
+    lv_obj_t* brand = label_en(network_page_, "XiaoZhi AI", &style_en);
+    lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
+    lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    CreateStatusBar(network_page_);
+
+    lv_obj_t* title = label_en(network_page_, "Network", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(network_page_, "WiFi Center", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 110, 53);
+
+    lv_obj_t* back = CreateButton(network_page_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* status_panel = CreatePanel(network_page_, 432, 64, 24, 88);
+    lv_obj_t* status_title = label_en(status_panel, "Connection", &style_gold);
+    lv_obj_set_style_text_font(status_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(status_title, LV_ALIGN_TOP_LEFT, 14, 9);
+
+    network_detail_label_ = label_en(status_panel, "Waiting for WiFi", &style_green);
+    lv_obj_set_width(network_detail_label_, 250);
+    lv_label_set_long_mode(network_detail_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(network_detail_label_, LV_ALIGN_BOTTOM_LEFT, 14, -10);
+
+    network_saved_count_label_ = label_en(status_panel, "Saved: --", &style_muted);
+    lv_obj_set_style_text_font(network_saved_count_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(network_saved_count_label_, LV_ALIGN_RIGHT_MID, -14, 0);
+
+    lv_obj_t* list_title = label_en(network_page_, "Saved WiFi", &style_gold);
+    lv_obj_set_style_text_font(list_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(list_title, LV_ALIGN_TOP_LEFT, 28, 164);
+
+    lv_obj_t* list_panel = CreatePanel(network_page_, 432, 112, 24, 190);
+    lv_obj_add_flag(list_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scroll_dir(list_panel, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(list_panel, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_all(list_panel, 6, 0);
+    add_gesture_bubble(list_panel);
+
+    network_list_container_ = lv_obj_create(list_panel);
+    lv_obj_remove_style_all(network_list_container_);
+    lv_obj_set_size(network_list_container_, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(network_list_container_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(network_list_container_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(network_list_container_, 5, 0);
+    add_gesture_bubble(network_list_container_);
+}
+
 // ===== Settings page =====
 void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     settings_page_ = lv_obj_create(root);
@@ -1672,13 +1781,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_clear_flag(settings_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(settings_page_, settings_gesture_cb, LV_EVENT_GESTURE, NULL);
-    
-    // Brand
+
     lv_obj_t* brand = label_en(settings_page_, "XiaoZhi AI", &style_en);
     lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
     lv_obj_align(brand, LV_ALIGN_TOP_LEFT, 18, 10);
 
-    // Status bar
     CreateStatusBar(settings_page_);
 
     lv_obj_t* title = label_en(settings_page_, "Settings", &style_en);
@@ -1745,35 +1852,14 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_CREAM, LV_PART_KNOB);
     lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
 
-    lv_obj_t* network_title = label_en(settings_content_, "Network", &style_gold);
-    lv_obj_set_style_text_font(network_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(network_title, LV_ALIGN_TOP_LEFT, 4, 166);
-
-    lv_obj_t* new_list_panel = lv_obj_create(settings_content_);
-    lv_obj_add_style(new_list_panel, &style_panel, 0);
-    lv_obj_set_size(new_list_panel, 414, 108);
-    lv_obj_align(new_list_panel, LV_ALIGN_TOP_LEFT, 0, 192);
-    lv_obj_set_scroll_dir(new_list_panel, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(new_list_panel, LV_SCROLLBAR_MODE_AUTO);
-    lv_obj_set_style_pad_all(new_list_panel, 6, 0);
-    add_gesture_bubble(new_list_panel);
-
-    lv_obj_t* new_list_container = lv_obj_create(new_list_panel);
-    lv_obj_remove_style_all(new_list_container);
-    lv_obj_set_size(new_list_container, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(new_list_container, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(new_list_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(new_list_container, 5, 0);
-    add_gesture_bubble(new_list_container);
-
     lv_obj_t* weather_title = label_en(settings_content_, "Weather", &style_gold);
     lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 316);
+    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 166);
 
     lv_obj_t* weather_row = lv_obj_create(settings_content_);
     lv_obj_add_style(weather_row, &style_panel, 0);
     lv_obj_set_size(weather_row, 414, 58);
-    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 342);
+    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 192);
     lv_obj_clear_flag(weather_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* weather_label = label_en(weather_row, "Location", &style_en);
     lv_obj_align(weather_label, LV_ALIGN_TOP_LEFT, 14, 8);
@@ -1781,33 +1867,58 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(weather_value, &lv_font_montserrat_12, 0);
     lv_obj_align(weather_value, LV_ALIGN_BOTTOM_LEFT, 14, -9);
 
-    lv_obj_set_user_data(settings_page_, new_list_container);
+    lv_obj_t* firmware_title = label_en(settings_content_, "Firmware", &style_gold);
+    lv_obj_set_style_text_font(firmware_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 258);
+
+    lv_obj_t* firmware_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(firmware_row, &style_panel, 0);
+    lv_obj_set_size(firmware_row, 414, 74);
+    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 284);
+    lv_obj_clear_flag(firmware_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* version_label = label_en(firmware_row, "Version", &style_en);
+    lv_obj_align(version_label, LV_ALIGN_TOP_LEFT, 14, 9);
+
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+    settings_firmware_version_label_ = label_en(firmware_row, app_desc ? app_desc->version : "--", &style_gold);
+    lv_obj_set_width(settings_firmware_version_label_, 150);
+    lv_label_set_long_mode(settings_firmware_version_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(settings_firmware_version_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(settings_firmware_version_label_, LV_ALIGN_TOP_RIGHT, -14, 9);
+
+    lv_obj_t* ota_label = label_en(firmware_row, "OTA", &style_en);
+    lv_obj_align(ota_label, LV_ALIGN_BOTTOM_LEFT, 14, -11);
+    settings_firmware_status_label_ = label_en(firmware_row, "Update path ready", &style_muted);
+    lv_obj_set_width(settings_firmware_status_label_, 180);
+    lv_label_set_long_mode(settings_firmware_status_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(settings_firmware_status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(settings_firmware_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_firmware_status_label_, LV_ALIGN_BOTTOM_RIGHT, -14, -12);
 }
 
 void DesktopUI::UpdateWifiList() {
-    if (!settings_page_) return;
-    
-    lv_obj_t* list_container = static_cast<lv_obj_t*>(lv_obj_get_user_data(settings_page_));
-    if (!list_container) return;
-    
-    // 清空列表
-    lv_obj_clean(list_container);
-    
-    // 获取已保存的WiFi列表
+    if (!network_list_container_) return;
+
+    lv_obj_clean(network_list_container_);
+
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
-    
+
+    if (network_saved_count_label_) {
+        char count_text[24];
+        snprintf(count_text, sizeof(count_text), "Saved: %u", static_cast<unsigned>(ssid_list.size()));
+        lv_label_set_text(network_saved_count_label_, count_text);
+    }
+
     if (ssid_list.empty()) {
-        // 显示空列表提示
-        lv_obj_t* empty_label = label_en(list_container, "No saved WiFi networks", &style_muted);
+        lv_obj_t* empty_label = label_en(network_list_container_, "No saved WiFi networks", &style_muted);
         lv_obj_set_style_text_align(empty_label, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_width(empty_label, LV_PCT(100));
         return;
     }
-    
-    // 添加WiFi条目
+
     for (size_t i = 0; i < ssid_list.size(); i++) {
-        lv_obj_t* item = lv_obj_create(list_container);
+        lv_obj_t* item = lv_obj_create(network_list_container_);
         lv_obj_remove_style_all(item);
         lv_obj_set_size(item, LV_PCT(100), 40);
         lv_obj_set_style_bg_color(item, COLOR_SURFACE_2, 0);
@@ -1817,20 +1928,26 @@ void DesktopUI::UpdateWifiList() {
         lv_obj_set_style_pad_ver(item, 8, 0);
         lv_obj_set_flex_flow(item, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(item, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        
-        // WiFi名称
+        lv_obj_add_flag(item, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_user_data(item, reinterpret_cast<void*>(static_cast<uintptr_t>(i)));
+        lv_obj_add_event_cb(item, network_wifi_item_cb, LV_EVENT_CLICKED, NULL);
+        add_gesture_bubble(item);
+
         lv_obj_t* ssid_label = label_en(item, ssid_list[i].ssid.c_str(), &style_en);
+        lv_obj_set_width(ssid_label, 250);
+        lv_label_set_long_mode(ssid_label, LV_LABEL_LONG_DOT);
         lv_obj_set_flex_grow(ssid_label, 1);
-        
-        // 序号标签
+
         char index_str[16];
         snprintf(index_str, sizeof(index_str), "#%d", (int)i + 1);
         label_en(item, index_str, &style_muted);
-        
-        // 如果是第一个，显示"Default"标签
+
         if (i == 0) {
             lv_obj_t* default_label = label_en(item, "Default", &style_green);
             lv_obj_set_style_text_font(default_label, &lv_font_montserrat_12, 0);
+        } else {
+            lv_obj_t* set_label = label_en(item, "Set", &style_muted);
+            lv_obj_set_style_text_font(set_label, &lv_font_montserrat_12, 0);
         }
     }
 }
@@ -2466,6 +2583,22 @@ void DesktopUI::SetDailyCard(const char* date, const char* title, const char* bo
     }
 }
 
+void DesktopUI::SetDefaultNetwork(size_t index) {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    if (index >= ssid_list.size()) {
+        ESP_LOGW(TAG, "Default WiFi index out of range: %u", static_cast<unsigned>(index));
+        return;
+    }
+
+    ssid_manager.SetDefaultSsid(static_cast<int>(index));
+    ESP_LOGI(TAG, "Default WiFi updated: %s", ssid_list[index].ssid.c_str());
+    if (network_detail_label_) {
+        lv_label_set_text(network_detail_label_, "Default WiFi updated");
+    }
+    UpdateWifiList();
+}
+
 void DesktopUI::SetSystemBrightness(int value) {
     value = LV_CLAMP(5, value, 100);
     auto* backlight = Board::GetInstance().GetBacklight();
@@ -2507,6 +2640,11 @@ void DesktopUI::RefreshSettingsControls() {
         lv_slider_set_value(settings_volume_slider_, volume, LV_ANIM_OFF);
         snprintf(value_text, sizeof(value_text), "%d%%", volume);
         lv_label_set_text(settings_volume_value_, value_text);
+    }
+
+    if (settings_firmware_version_label_) {
+        const esp_app_desc_t* app_desc = esp_app_get_description();
+        lv_label_set_text(settings_firmware_version_label_, app_desc ? app_desc->version : "--");
     }
 }
 
@@ -2627,8 +2765,13 @@ void DesktopUI::UpdateFocusUI() {
 }
 
 void DesktopUI::SetNetworkStatus(const char* status) {
-    if (!network_status_label_ || !status) return;
-    lv_label_set_text(network_status_label_, status);
+    if (!status) return;
+    if (network_status_label_) {
+        lv_label_set_text(network_status_label_, status);
+    }
+    if (network_detail_label_) {
+        lv_label_set_text(network_detail_label_, status);
+    }
 }
 
 void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,

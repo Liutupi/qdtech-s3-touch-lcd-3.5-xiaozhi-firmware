@@ -2,6 +2,44 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: v1.7.12 Network/System Settings Split Release
+
+Scope:
+
+- Bumped firmware version to `1.7.12`.
+- Split the duplicated `NET` and `SET` app entries into two independent pages.
+- Added a dedicated `Network / WiFi Hub` page with connection status, saved WiFi count, a scrollable saved-network list, and tap-to-set-default behavior.
+- Kept destructive WiFi actions off the touch UI for now; WiFi remove/switch MCP tools remain available, and the on-device page only changes the default network.
+- Reworked `Settings / System` so it now focuses on brightness, volume, weather location, firmware version, and OTA status.
+- Added a firmware section that reads the running app version from `esp_app_get_description()` and reserves a stable OTA status area for the next on-device firmware-update pass.
+- Polished the Radio page spectrum bars from single-color yellow to a soft rainbow palette with dim idle state and full-opacity playback state.
+- Shortened small labels and added ellipsis handling for long SSIDs and firmware status text to protect the 480x320 layout.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3ca6a0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x235960`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `App version: 1.7.12` and `Ota: Current version: 1.7.12`.
+- WiFi connected and obtained IP `192.168.1.104`.
+- Time synchronized during boot: `2026-06-18 17:16`.
+- Weather completed during boot: `weather ok 28 C Zhongshan Storm 17:16 code=96 updated=17:16`.
+- MQTT connected and the application reached `STATE: idle`.
+- Internal SRAM stayed stable in the observed idle window, with `free sram` around `10-21KB` and observed minimum around `9KB`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.12-full.bin` and `qdtech-s3-touch-lcd-3.5-v1.7.12-firmware.zip`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.12-full.bin`: `6ce97bb6b910420e0fd52c5b6185c8c5512e8c52f91cf7050dfbecb9276dbb65`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.12-firmware.zip`: `b50b5510007093a9c90ba0c2accf4abf3580ed92d35d43d323e08f967102adcb`
+
+Next OTA work:
+
+- Keep the current firmware row as the UI anchor.
+- Add a real on-device "check update" action only after choosing the update source and confirmation flow.
+- Reuse the existing `Ota` implementation where possible instead of adding a parallel updater.
+- Avoid running OTA downloads concurrently with FC gameplay, radio streaming, or active XiaoZhi audio.
+
 ## 2026-06-18: v1.7.11 Clock Visual Polish Release
 
 Scope:
