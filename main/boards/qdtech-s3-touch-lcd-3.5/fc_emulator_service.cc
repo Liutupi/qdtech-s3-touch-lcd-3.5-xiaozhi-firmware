@@ -34,7 +34,8 @@ constexpr const char* kRomDirs[] = {
     "/sdcard/roms",
     "/sdcard",
 };
-constexpr size_t kMaxScannedRoms = 64;
+constexpr size_t kMaxScannedRoms = 192;
+constexpr long kMaxNofrendoRomBytes = 2 * 1024 * 1024;
 constexpr uint16_t kNesFrameWidth = 256;
 constexpr uint16_t kNesFrameHeight = 240;
 constexpr uint16_t kFrameWidth = 360;
@@ -155,6 +156,28 @@ std::string rom_alias_key(const std::string& path_or_name) {
 
 uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
     return static_cast<uint16_t>(((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3));
+}
+
+bool is_supported_nofrendo_mapper(uint8_t mapper) {
+    static constexpr uint8_t kSupportedMappers[] = {
+        0, 1, 2, 3, 4, 5, 7, 8, 9, 11, 15, 16, 18, 19,
+        21, 22, 23, 24, 25, 32, 33, 34, 40, 64, 65, 66,
+        70, 75, 78, 79, 85, 94, 99, 231,
+    };
+    for (uint8_t supported : kSupportedMappers) {
+        if (supported == mapper) {
+            return true;
+        }
+    }
+    return false;
+}
+
+uint8_t ines_mapper(const uint8_t header[16]) {
+    return static_cast<uint8_t>((header[6] >> 4) | (header[7] & 0xf0));
+}
+
+bool is_nes2_header(const uint8_t header[16]) {
+    return (header[7] & 0x0c) == 0x08;
 }
 
 static const uint16_t kNesPaletteRgb565[64] = {
@@ -617,6 +640,23 @@ bool FcEmulatorService::ValidateSelectedRom() {
         ESP_LOGW(TAG, "rom open failed: %s errno=%d %s", roms_[selected_index_].c_str(), errno, strerror(errno));
         return false;
     }
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        PublishState("Open failed", "Could not read ROM size");
+        ESP_LOGW(TAG, "rom seek failed: %s errno=%d %s", roms_[selected_index_].c_str(), errno, strerror(errno));
+        return false;
+    }
+    const long size = ftell(file);
+    if (size <= 16 || size > kMaxNofrendoRomBytes) {
+        fclose(file);
+        char detail[48];
+        snprintf(detail, sizeof(detail), "Size %ldKB > 2048KB", size > 0 ? size / 1024 : 0);
+        PublishState("ROM too large", detail);
+        ESP_LOGW(TAG, "rom size unsupported: %s size=%ld max=%ld",
+                 roms_[selected_index_].c_str(), size, kMaxNofrendoRomBytes);
+        return false;
+    }
+    rewind(file);
     uint8_t header[16] = {};
     const size_t read = fread(header, 1, sizeof(header), file);
     fclose(file);
@@ -625,9 +665,23 @@ bool FcEmulatorService::ValidateSelectedRom() {
         ESP_LOGW(TAG, "rom header invalid: %s", roms_[selected_index_].c_str());
         return false;
     }
-    const uint8_t mapper = (header[6] >> 4) | (header[7] & 0xf0);
-    ESP_LOGI(TAG, "rom header ok prg=%u chr=%u mapper=%u",
-             header[4], header[5], static_cast<unsigned>(mapper));
+    const uint8_t mapper = ines_mapper(header);
+    if (is_nes2_header(header)) {
+        PublishState("Unsupported ROM", "NES 2.0 header");
+        ESP_LOGW(TAG, "rom uses NES 2.0 header: %s mapper=%u", roms_[selected_index_].c_str(),
+                 static_cast<unsigned>(mapper));
+        return false;
+    }
+    if (!is_supported_nofrendo_mapper(mapper)) {
+        char detail[48];
+        snprintf(detail, sizeof(detail), "Mapper %u not supported", static_cast<unsigned>(mapper));
+        PublishState("Unsupported ROM", detail);
+        ESP_LOGW(TAG, "rom mapper unsupported: %s mapper=%u prg=%u chr=%u",
+                 roms_[selected_index_].c_str(), static_cast<unsigned>(mapper), header[4], header[5]);
+        return false;
+    }
+    ESP_LOGI(TAG, "rom header ok prg=%u chr=%u mapper=%u size=%ld",
+             header[4], header[5], static_cast<unsigned>(mapper), size);
     return true;
 }
 

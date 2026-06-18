@@ -12,6 +12,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.1 (2026-06-14): Visual animations and further sync optimization
 - v1.2 (2026-06-15): P0-P6 optimization, LVGL touch migration, font fix, NVS persistence
 - v1.3 (2026-06-15): Radio visual enhancement with audio spectrum bars
+- v1.7.14 (2026-06-19): FC ROM scan cap raised to 192 and clearer ROM load diagnostics
 
 ## Confirmed Hardware From Source
 
@@ -97,9 +98,10 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Photo task stack is allocated from PSRAM first, with an internal-memory fallback and allocation diagnostics.
 - FC/NES page from MicroSD card:
   - Apps tile `FC / NES / SD ROMs` opens a ROM list first.
-  - Reads `.nes` files from `/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, then `/sdcard`; scanning stops after the first populated directory and caps the list at 64 ROMs.
+  - Reads `.nes` files from `/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, then `/sdcard`; scanning stops after the first populated directory and caps the list at 192 ROMs.
   - FATFS is configured for Chinese CP936 filenames with UTF-8 API output. Numeric ROM sets can add `roms.txt`, `roms.csv`, or `games.txt` in the active ROM directory to map filenames to friendly display names.
   - Prev/Next move the selected ROM; Start loads the selected ROM.
+  - Start validates the selected ROM before entering Nofrendo and reports bad headers, NES 2.0 headers, ROMs over 2 MB, and unsupported mappers instead of failing generically.
   - Game view uses a top 320x240 scaled NES screen area and a bottom virtual controller.
   - Game view has D-pad, A, B, Select, Start, and LIST controls.
   - Nofrendo is the active emulator path; see `docs/HANDOFF.md` and `docs/CHANGELOG_QDTECH.md` for current hardware-test evidence and remaining risks.
@@ -222,10 +224,10 @@ For photos:
 - MCP tool descriptions must stay compact; large `tools/list` MQTT messages can exhaust AES/TLS memory and break XiaoZhi chat.
 - Photo slideshow currently supports JPEG files only; PNG is not enabled.
 - PhotoService depends on `CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y`; retain this setting for the current PSRAM-backed task stack.
-- FC/NES is an unfinished integration milestone, not a usable emulator yet.
-- FC/NES can scan SD, show a list, load supported ROMs, display frames, and latch touch-controller input at the NES bus, but tested games still show little or no visible gameplay response.
-- FC/NES currently has no audio/APU and supports only Mapper 0/2.
+- FC/NES is still constrained by ESP32-S3 memory and Nofrendo compatibility, even though the current path is much more usable than the early minimal core.
+- FC/NES can scan SD, show a list, load supported ROMs, display frames, and latch touch-controller input through the Nofrendo adapter.
+- FC/NES currently has no audio output. Some ROMs still fail because they are larger than the 2 MB PSRAM load guard, use NES 2.0 headers, or require mappers not listed in `components/nofrendo/nes/mmclist.c`.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.
-- No release packaging or OTA artifact process is defined in this handoff set.
+- QDTech releases should publish `full.bin`, `firmware.zip`, and standalone `app.bin` assets; the on-device updater consumes the `*-app.bin` asset from the latest GitHub Release.

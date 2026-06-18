@@ -2,6 +2,35 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-19: v1.7.14 FC ROM Scan Cap And Load Diagnostics
+
+Scope:
+
+- Bumped firmware version to `1.7.14`.
+- Raised the FC ROM list cap from 64 to 192 entries. The previous `fc scan found 64 nes files` log was caused by the firmware's protective scan cap, not by a missing SD card or missing files.
+- Kept the scan conservative: FC still uses the first populated ROM directory in priority order (`/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, `/sdcard`) instead of recursively walking the whole card.
+- Added pre-start ROM validation so unsupported files fail with a clearer status before entering Nofrendo:
+  - invalid or missing iNES header
+  - NES 2.0 header
+  - ROM file larger than the current 2 MB Nofrendo PSRAM load guard
+  - mapper not present in the tracked Nofrendo mapper list
+- Updated handoff/status docs so they no longer describe the old minimal Mapper 0/2 core as the active FC path.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `cmake --build build-qdtech`.
+- `xiaozhi.bin` size: `0x3cc8e0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x233720`, about 37%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.14`, `Ota: Current version: 1.7.14`, QDTech board startup, touch max points `5`, WiFi connection, MQTT connection, `Application: STATE: idle`, SNTP time sync, and weather update.
+- FC ROM-list verification still needs an on-device tap into the FC page to trigger scanning.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.14-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.14-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.14-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-app.bin`: `d08ce99d118d456439f43bad6acec751d36a6ae2b7967c38d040e289edea4b17`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-firmware.zip`: `b99afb216cc6e1dcf8ef294a39b80a667b367b339989f9b793a2a2448ce02a8e`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-full.bin`: `951f7cec9904d2b25781ef57774c28c4867d0c9b94fb0cc91c0bf6d03ea8b96b`
+
 ## 2026-06-18: v1.7.13 On-Device Firmware Update Bootstrap
 
 Scope:

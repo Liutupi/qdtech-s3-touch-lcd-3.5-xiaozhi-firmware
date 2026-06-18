@@ -91,8 +91,8 @@ Current user-visible FC/NES state:
 - Game view is top screen plus bottom virtual controller.
 - Game view has a `LIST` button to stop and return to the ROM list.
 - Right-swipe exit is disabled while in game view to avoid accidental exits during D-pad swipes.
-- The SD card is detected. Serial logs during the last run showed `fc scan found 146 nes files`.
-- Only Mapper 0 and Mapper 2 ROMs are accepted by the current minimal core; unsupported mappers are skipped.
+- The SD card is detected. FC scans the first populated ROM directory and now keeps up to 192 `.nes` files in the on-device list.
+- The active emulator path is the Nofrendo adapter under `components/nofrendo`. Start now pre-validates the selected ROM and reports bad iNES headers, NES 2.0 headers, ROMs over 2 MB, and mappers not supported by the tracked Nofrendo mapper list.
 
 Important FC/NES files:
 
@@ -243,7 +243,27 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-18 v1.7.13 On-Device Firmware Update Bootstrap
+## Latest Runtime Notes: 2026-06-19 v1.7.14 FC ROM Scan Cap And Load Diagnostics
+
+- Latest release target is `v1.7.14`.
+- FC ROM scanning now keeps up to 192 `.nes` files from the first populated ROM directory instead of stopping at 64. The old `fc scan found 64 nes files` result was the firmware's protective cap, not missing SD contents.
+- FC still scans conservatively in this order: `/sdcard/FC`, `/sdcard/nes`, `/sdcard/roms`, `/sdcard`.
+- Start now validates the selected ROM before entering Nofrendo and reports clearer failure reasons:
+  - invalid or missing iNES header
+  - NES 2.0 header
+  - ROM file larger than the current 2 MB Nofrendo PSRAM load guard
+  - mapper not present in `components/nofrendo/nes/mmclist.c`
+- The active emulator path remains the Nofrendo adapter under `components/nofrendo`; do not use the older in-repo minimal CPU/PPU core as the current compatibility reference.
+- Final `v1.7.14` release build passed from the Windows checkout: `xiaozhi.bin` `0x3cc8e0`, smallest app partition `0x600000`, free `0x233720`.
+- Final `v1.7.14` build was flashed to `COM13`. Boot logs confirmed `App version: 1.7.14`, `Ota: Current version: 1.7.14`, WiFi, MQTT, time sync, weather update, and `Application: STATE: idle`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-app.bin`, SHA256 `d08ce99d118d456439f43bad6acec751d36a6ae2b7967c38d040e289edea4b17`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-firmware.zip`, SHA256 `b99afb216cc6e1dcf8ef294a39b80a667b367b339989f9b793a2a2448ce02a8e`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.14-full.bin`, SHA256 `951f7cec9904d2b25781ef57774c28c4867d0c9b94fb0cc91c0bf6d03ea8b96b`.
+- FC page scan verification still needs a tap into the FC page with the user's ROM SD card inserted.
+- After the GitHub Release exists, the board-initiated OTA path should be verified from a device running `1.7.13` or older: Settings -> Firmware -> Check -> Update -> reboot -> `1.7.14`.
+
+## Previous Runtime Notes: 2026-06-18 v1.7.13 On-Device Firmware Update Bootstrap
 
 - Latest release target is `v1.7.13`.
 - `SET / Settings / Firmware` now has a real `Check` / `Update` button, not just reserved status text.
