@@ -23,6 +23,7 @@ LV_FONT_DECLARE(lv_font_montserrat_14);
 LV_FONT_DECLARE(lv_font_montserrat_16);
 LV_FONT_DECLARE(lv_font_montserrat_20);
 LV_FONT_DECLARE(lv_font_montserrat_48);
+LV_FONT_DECLARE(qd_font_clock_72);
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(qd_font_lxgw_16);
 LV_FONT_DECLARE(qd_font_lxgw_20);
@@ -39,6 +40,7 @@ static constexpr lv_color_t COLOR_GOLD = LV_COLOR_MAKE(0xff, 0xbd, 0x55);
 static constexpr lv_color_t COLOR_GREEN = LV_COLOR_MAKE(0x82, 0xd7, 0x78);
 static constexpr lv_color_t COLOR_PURPLE = LV_COLOR_MAKE(0xaa, 0x78, 0xff);
 static constexpr lv_color_t COLOR_BLUE = LV_COLOR_MAKE(0x68, 0x9d, 0xff);
+static constexpr lv_color_t COLOR_CLOCK_DOT = LV_COLOR_MAKE(0xd7, 0xde, 0xe3);
 
 // Styles
 static lv_style_t style_screen;
@@ -182,9 +184,11 @@ void DesktopUI::ObjYCb(void* obj, int32_t value) {
 
 void DesktopUI::ColonTimerCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
-    if (!self || !self->colon_label_) return;
-    lv_opa_t opa = lv_obj_get_style_opa(self->colon_label_, 0);
-    lv_obj_set_style_opa(self->colon_label_, opa < LV_OPA_50 ? LV_OPA_COVER : LV_OPA_20, 0);
+    if (!self || !self->clock_colon_dots_[0] || !self->clock_colon_dots_[1]) return;
+    lv_opa_t opa = lv_obj_get_style_opa(self->clock_colon_dots_[0], 0);
+    lv_opa_t next = opa < LV_OPA_50 ? LV_OPA_COVER : LV_OPA_40;
+    lv_obj_set_style_opa(self->clock_colon_dots_[0], next, 0);
+    lv_obj_set_style_opa(self->clock_colon_dots_[1], next, 0);
 }
 
 void DesktopUI::FaceTimerCb(lv_timer_t* timer) {
@@ -971,56 +975,29 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_clear_flag(time_group, LV_OBJ_FLAG_SCROLLABLE);
     add_gesture_bubble(time_group);
 
-    const int16_t x[4] = {0, 54, 132, 186};
-    for (uint8_t i = 0; i < 4; ++i) {
-        lv_obj_t* card = lv_obj_create(time_group);
-        lv_obj_add_style(card, &style_clock_card, 0);
-        lv_obj_set_size(card, 48, 92);
-        lv_obj_align(card, LV_ALIGN_TOP_LEFT, x[i], 52);
-        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
-        add_gesture_bubble(card);
+    clock_hour_label_ = lv_label_create(time_group);
+    lv_label_set_text(clock_hour_label_, "00");
+    lv_obj_set_size(clock_hour_label_, 108, 60);
+    lv_obj_set_style_text_font(clock_hour_label_, &qd_font_clock_72, 0);
+    lv_obj_set_style_text_color(clock_hour_label_, COLOR_CREAM, 0);
+    lv_obj_set_style_text_align(clock_hour_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, 77);
+    add_gesture_bubble(clock_hour_label_);
 
-        // Divider line
-        lv_obj_t* top = lv_obj_create(card);
-        lv_obj_remove_style_all(top);
-        lv_obj_set_size(top, 44, 1);
-        lv_obj_set_style_bg_color(top, COLOR_LINE, 0);
-        lv_obj_set_style_bg_opa(top, LV_OPA_70, 0);
-        lv_obj_align(top, LV_ALIGN_TOP_MID, 0, 45);
+    clock_minute_label_ = lv_label_create(time_group);
+    lv_label_set_text(clock_minute_label_, "00");
+    lv_obj_set_size(clock_minute_label_, 110, 60);
+    lv_obj_set_style_text_font(clock_minute_label_, &qd_font_clock_72, 0);
+    lv_obj_set_style_text_color(clock_minute_label_, COLOR_GOLD, 0);
+    lv_obj_set_style_text_align(clock_minute_label_, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, 77);
+    add_gesture_bubble(clock_minute_label_);
 
-        // Shade
-        lv_obj_t* shade = lv_obj_create(card);
-        lv_obj_remove_style_all(shade);
-        lv_obj_set_size(shade, 46, 43);
-        lv_obj_set_style_bg_color(shade, LV_COLOR_MAKE(0x16, 0x13, 0x0d), 0);
-        lv_obj_set_style_bg_opa(shade, LV_OPA_40, 0);
-        lv_obj_align(shade, LV_ALIGN_TOP_MID, 0, 1);
-
-        // Digit label
-        lv_obj_t* digit = label_en(card, "0", &style_en);
-        lv_obj_set_style_text_font(digit, &lv_font_montserrat_48, 0);
-        lv_obj_set_style_text_color(digit, i < 2 ? COLOR_CREAM : COLOR_GOLD, 0);
-        lv_obj_align(digit, LV_ALIGN_CENTER, 0, -2);
-        clock_labels_[i] = digit;
-        
-        // Shadow for pulse effect
-        lv_obj_t* shadow = lv_label_create(card);
-        lv_label_set_text(shadow, "0");
-        lv_obj_set_style_text_font(shadow, &lv_font_montserrat_48, 0);
-        lv_obj_set_style_text_color(shadow, COLOR_GOLD, 0);
-        lv_obj_set_style_text_opa(shadow, LV_OPA_20, 0);
-        lv_obj_align(shadow, LV_ALIGN_CENTER, 2, 0);
-        clock_shadow_[i] = shadow;
-    }
-
-    colon_label_ = label_en(time_group, ":", &style_en);
-    lv_obj_set_style_text_font(colon_label_, &lv_font_montserrat_48, 0);
-    lv_obj_set_style_text_color(colon_label_, COLOR_CREAM, 0);
-    lv_obj_align(colon_label_, LV_ALIGN_TOP_LEFT, 111, 54);
+    clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, 73);
+    clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, 116);
     lv_timer_create(ColonTimerCb, 500, this);
-    
-    // Clock shadow pulse animation
-    lv_timer_create(ClockShadowCb, 100, this);
 
     RenderBigTime(0, 0, false);
 }
@@ -2103,42 +2080,22 @@ void DesktopUI::RenderCalendar() {
 
 // ===== Time rendering =====
 void DesktopUI::FlipDigit(uint8_t index, uint8_t digit, bool animate) {
-    if (index >= 4 || !clock_labels_[index]) return;
-    if (clock_digits_[index] == digit && animate) return;
-
-    clock_digits_[index] = digit;
-    char text[2] = {(char)('0' + digit), 0};
-    lv_label_set_text(clock_labels_[index], text);
-    lv_obj_align(clock_labels_[index], LV_ALIGN_CENTER, 0, -2);
-
-    if (!animate) return;
-
-    lv_anim_t anim;
-    lv_anim_init(&anim);
-    lv_anim_set_var(&anim, clock_labels_[index]);
-    lv_anim_set_values(&anim, -10, -2);
-    lv_anim_set_time(&anim, 180);
-    lv_anim_set_exec_cb(&anim, ObjYCb);
-    lv_anim_start(&anim);
-
-    lv_anim_init(&anim);
-    lv_anim_set_var(&anim, clock_labels_[index]);
-    lv_anim_set_values(&anim, LV_OPA_50, LV_OPA_COVER);
-    lv_anim_set_time(&anim, 180);
-    lv_anim_set_exec_cb(&anim, ObjOpaCb);
-    lv_anim_start(&anim);
+    (void)index;
+    (void)digit;
+    (void)animate;
 }
 
 void DesktopUI::RenderBigTime(int hour, int minute, bool animate) {
-    const uint8_t digits[4] = {
-        (uint8_t)((hour / 10) % 10),
-        (uint8_t)(hour % 10),
-        (uint8_t)((minute / 10) % 10),
-        (uint8_t)(minute % 10),
-    };
-    for (uint8_t i = 0; i < 4; ++i) {
-        FlipDigit(i, digits[i], animate);
+    (void)animate;
+    if (!clock_hour_label_ || !clock_minute_label_) {
+        return;
     }
+    char hour_text[3];
+    char minute_text[3];
+    snprintf(hour_text, sizeof(hour_text), "%02d", hour);
+    snprintf(minute_text, sizeof(minute_text), "%02d", minute);
+    lv_label_set_text(clock_hour_label_, hour_text);
+    lv_label_set_text(clock_minute_label_, minute_text);
 }
 
 // ===== Face animation =====
@@ -2735,31 +2692,7 @@ void DesktopUI::DailyCardBreathCb(lv_timer_t* timer) {
 }
 
 void DesktopUI::ClockShadowCb(lv_timer_t* timer) {
-    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
-    if (!self) return;
-    
-    // Shadow pulse: opacity 10-40
-    static uint8_t shadow_dir = 0;
-    static lv_opa_t shadow_opa = 10;
-    
-    if (shadow_dir == 0) {
-        shadow_opa += 1;
-        if (shadow_opa >= 40) shadow_dir = 1;
-    } else {
-        shadow_opa -= 1;
-        if (shadow_opa <= 10) shadow_dir = 0;
-    }
-    
-    for (int i = 0; i < 4; ++i) {
-        if (self->clock_shadow_[i]) {
-            lv_obj_set_style_text_opa(self->clock_shadow_[i], shadow_opa, 0);
-            // Update shadow text to match digit
-            if (self->clock_labels_[i]) {
-                const char* txt = lv_label_get_text(self->clock_labels_[i]);
-                lv_label_set_text(self->clock_shadow_[i], txt);
-            }
-        }
-    }
+    (void)timer;
 }
 
 void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {

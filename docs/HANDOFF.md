@@ -242,7 +242,27 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-18 v1.7.10 Time/Weather Recovery
+## Latest Runtime Notes: 2026-06-18 v1.7.11 Clock Visual Polish
+
+- Latest release target is `v1.7.11`.
+- Main page layout is intentionally unchanged. Only the large clock rendering was adjusted.
+- Replaced the old four-card `lv_font_montserrat_48` digit layout with two complete labels using a small QDTech-only `qd_font_clock_72` generated from Montserrat Bold and limited to `0123456789:`.
+- The clock keeps the warmer visual direction: hour digits use `COLOR_CREAM`, minute digits use `COLOR_GOLD`, and the colon is rendered as two soft gray round dots.
+- The block/segment clock prototype was rejected on hardware because it looked blurry, visually broken, and too cold in color. Do not revive that path unless the design direction changes.
+- The accepted clock labels are vertically lowered and use a shorter label box so the large digits visually align with the two colon dots and do not crowd the date row.
+- `FlipDigit()` and `ClockShadowCb()` are now retained as no-op compatibility methods because other animation helpers still use the shared opacity/Y callbacks; the current clock path updates hour/minute labels directly in `RenderBigTime()`.
+- Final `v1.7.11` release build passed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3c9d80`, smallest app partition `0x600000`, free `0x236280`.
+- Hardware monitor after flashing:
+  - App version and OTA current version both reported `1.7.11`.
+  - WiFi initialized normally and obtained IP `192.168.1.104`.
+  - Time synchronized successfully: `2026-06-18 16:43`.
+  - Weather completed during boot: `weather ok 28 C Zhongshan Storm 16:43 code=95 updated=16:43`.
+  - Internal SRAM was stable in the observed window, around `25KB` free with minimum around `20KB`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.11-full.bin`, SHA256 `971fb48e6516bb5263db061e67e39512f245e853de22d72f049182bc5d10b710`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.11-firmware.zip`, SHA256 `49bd8e1b2c62cdb5daa8da7f8b85940b2d1d12747333514c4aca72488ab26622`.
+
+## Previous Runtime Notes: 2026-06-18 v1.7.10 Time/Weather Recovery
 
 - Latest release target is `v1.7.10`.
 - FC and Photos no longer force SD-card mounting during board construction. SD is mounted lazily when a feature needs it, and FC reuses an existing `/sdcard` mount.

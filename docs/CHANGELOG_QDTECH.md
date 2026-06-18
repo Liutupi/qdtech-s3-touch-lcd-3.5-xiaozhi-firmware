@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-18: v1.7.11 Clock Visual Polish Release
+
+Scope:
+
+- Bumped firmware version to `1.7.11`.
+- Kept the main page layout unchanged and focused only on the large time display.
+- Added `qd_font_clock_72`, a QDTech-only Montserrat Bold numeric font containing only `0123456789:` to make the time digits fuller without adding a broad font payload.
+- Replaced the old four small flip-card digit labels with two complete clock labels: cream hours and gold minutes.
+- Replaced the text colon with two soft gray round dots.
+- Lowered the hour/minute labels and shortened their label boxes so the digits align visually with the colon dots and no longer appear too high.
+- Rejected the intermediate segmented/block clock approach after hardware review because it looked blurry, broken, and visually colder than the existing warm UI.
+
+Verification:
+
+- Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
+- `xiaozhi.bin` size: `0x3c9d80`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x236280`, about 37%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Boot logs confirmed `App version: 1.7.11` and `Ota: Current version: 1.7.11`.
+- Time synchronized successfully during boot: `2026-06-18 16:43`.
+- Weather completed successfully during boot: `weather ok 28 C Zhongshan Storm 16:43 code=95 updated=16:43`.
+- Internal SRAM stayed stable in the observed idle window, around `25KB` free with minimum around `20KB`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.11-full.bin` and `qdtech-s3-touch-lcd-3.5-v1.7.11-firmware.zip`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.11-full.bin`: `971fb48e6516bb5263db061e67e39512f245e853de22d72f049182bc5d10b710`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.11-firmware.zip`: `49bd8e1b2c62cdb5daa8da7f8b85940b2d1d12747333514c4aca72488ab26622`
+
 ## 2026-06-18: v1.7.10 Time/Weather Recovery Release
 
 Scope:

@@ -94,8 +94,9 @@ private:
     DesktopPage current_page_ = DesktopPage::MAIN;
 
     // Main page elements
-    lv_obj_t* clock_labels_[4] = {};
-    lv_obj_t* colon_label_ = nullptr;
+    lv_obj_t* clock_hour_label_ = nullptr;
+    lv_obj_t* clock_minute_label_ = nullptr;
+    lv_obj_t* clock_colon_dots_[2] = {};
     lv_obj_t* date_label_ = nullptr;
     lv_obj_t* week_label_ = nullptr;
     lv_obj_t* weather_sun_ = nullptr;
@@ -117,7 +118,6 @@ private:
     
     // Animation elements
     lv_obj_t* daily_card_panel_ = nullptr;
-    lv_obj_t* clock_shadow_[4] = {};
     lv_timer_t* weather_particle_timer_ = nullptr;
 
     // Photo page elements
@@ -208,8 +208,6 @@ private:
     float pupil_target_y_ = 0;
     uint8_t blush_alpha_ = 0;
     bool blush_increasing_ = true;
-    uint8_t clock_digits_[4] = {0, 0, 0, 0};
-
     // Internal methods
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
