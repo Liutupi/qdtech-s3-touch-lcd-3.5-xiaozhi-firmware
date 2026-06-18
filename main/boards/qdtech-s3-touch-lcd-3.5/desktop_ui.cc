@@ -1206,11 +1206,10 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(apps_page_, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_set_style_bg_color(apps_page_, LV_COLOR_MAKE(0x0e, 0x08, 0x05), 0);
 
-    // Brand
     create_brand_mark(apps_page_);
 
-    // Status bar
     CreateStatusBar(apps_page_);
 
     lv_obj_t* title = label_en(apps_page_, "Apps", &style_en);
@@ -1221,6 +1220,9 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
     lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
+    lv_obj_set_style_bg_color(back, LV_COLOR_MAKE(0x24, 0x16, 0x0f), 0);
+    lv_obj_set_style_border_color(back, LV_COLOR_MAKE(0x78, 0x48, 0x26), 0);
+    lv_obj_set_style_radius(back, 16, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     // App tiles
@@ -1264,26 +1266,153 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_color(box, LV_COLOR_MAKE(0x18, 0x0f, 0x0a), 0);
+    lv_obj_set_style_border_color(box, LV_COLOR_MAKE(0x68, 0x3d, 0x22), 0);
+    lv_obj_set_style_radius(box, 6, 0);
     add_gesture_bubble(box);
 
-    lv_obj_t* cn_label = label_en(box, cn, &style_en);
-    lv_obj_set_style_text_color(cn_label, color, 0);
-    lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_20, 0);
-    lv_obj_align(cn_label, LV_ALIGN_TOP_LEFT, 14, 6);
+    lv_obj_t* icon_box = lv_obj_create(box);
+    lv_obj_remove_style_all(icon_box);
+    lv_obj_set_size(icon_box, 36, 34);
+    lv_obj_set_style_radius(icon_box, 6, 0);
+    lv_obj_set_style_bg_color(icon_box, LV_COLOR_MAKE(0x1b, 0x11, 0x0b), 0);
+    lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(icon_box, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(icon_box, 1, 0);
+    lv_obj_align(icon_box, LV_ALIGN_TOP_LEFT, 10, 7);
+    add_gesture_bubble(icon_box);
+
+    lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
+    lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_12, 0);
+    lv_obj_center(cn_label);
 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
-    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 70, 7);
+    lv_obj_set_style_text_font(en_label, &lv_font_montserrat_16, 0);
+    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 8);
 
+    lv_obj_t* dot = circle(box, 5, color, LV_OPA_COVER);
+    lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 58, 31);
     lv_obj_t* status_label = label_en(box, status, &style_muted);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
-    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 70, 29);
+    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 67, 27);
     if (index == 4) {
         calendar_app_status_label_ = status_label;
     }
 
-    lv_obj_t* arrow = label_en(box, ">", &style_muted);
-    lv_obj_align(arrow, LV_ALIGN_RIGHT_MID, -14, 0);
+    switch (index) {
+        case 0: {
+            for (int i = 0; i < 7; ++i) {
+                const int h = 8 + ((i % 3) * 5);
+                lv_obj_t* wave = bar(box, 3, h, COLOR_GOLD, LV_OPA_COVER);
+                lv_obj_align(wave, LV_ALIGN_TOP_RIGHT, -74 + i * 8, 20 - h / 2);
+            }
+            break;
+        }
+        case 1: {
+            lv_obj_t* frame = lv_obj_create(box);
+            lv_obj_remove_style_all(frame);
+            lv_obj_set_size(frame, 58, 26);
+            lv_obj_set_style_radius(frame, 3, 0);
+            lv_obj_set_style_bg_color(frame, LV_COLOR_MAKE(0x8b, 0x6c, 0x45), 0);
+            lv_obj_set_style_bg_opa(frame, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_color(frame, LV_COLOR_MAKE(0xe8, 0xc9, 0x8e), 0);
+            lv_obj_set_style_border_width(frame, 1, 0);
+            lv_obj_align(frame, LV_ALIGN_TOP_RIGHT, -14, 11);
+            add_gesture_bubble(frame);
+            lv_obj_t* mountain_a = bar(frame, 20, 3, COLOR_CREAM, LV_OPA_COVER);
+            lv_obj_set_style_transform_rotation(mountain_a, 420, 0);
+            lv_obj_align(mountain_a, LV_ALIGN_TOP_LEFT, 11, 15);
+            lv_obj_t* mountain_b = bar(frame, 24, 3, COLOR_CREAM, LV_OPA_COVER);
+            lv_obj_set_style_transform_rotation(mountain_b, -450, 0);
+            lv_obj_align(mountain_b, LV_ALIGN_TOP_LEFT, 24, 14);
+            break;
+        }
+        case 2: {
+            lv_obj_t* face = circle(box, 28, LV_COLOR_MAKE(0x20, 0x14, 0x0d), LV_OPA_COVER);
+            lv_obj_set_style_border_color(face, COLOR_GOLD, 0);
+            lv_obj_set_style_border_width(face, 2, 0);
+            lv_obj_align(face, LV_ALIGN_TOP_RIGHT, -32, 10);
+            lv_obj_t* eye_l = circle(face, 3, COLOR_GOLD, LV_OPA_COVER);
+            lv_obj_align(eye_l, LV_ALIGN_TOP_LEFT, 8, 9);
+            lv_obj_t* eye_r = circle(face, 3, COLOR_GOLD, LV_OPA_COVER);
+            lv_obj_align(eye_r, LV_ALIGN_TOP_RIGHT, -8, 9);
+            lv_obj_t* smile = label_en(face, ")", &style_gold);
+            lv_obj_set_style_text_font(smile, &lv_font_montserrat_16, 0);
+            lv_obj_set_style_transform_rotation(smile, 900, 0);
+            lv_obj_align(smile, LV_ALIGN_BOTTOM_MID, 0, -3);
+            break;
+        }
+        case 3: {
+            lv_obj_t* cart = bar(box, 42, 18, LV_COLOR_MAKE(0x8d, 0xa7, 0xb4), LV_OPA_COVER);
+            lv_obj_set_style_radius(cart, 2, 0);
+            lv_obj_set_style_border_color(cart, LV_COLOR_MAKE(0x5c, 0x3a, 0x24), 0);
+            lv_obj_set_style_border_width(cart, 2, 0);
+            lv_obj_align(cart, LV_ALIGN_TOP_RIGHT, -28, 15);
+            lv_obj_t* led = circle(box, 6, LV_COLOR_MAKE(0xc5, 0x6e, 0x4c), LV_OPA_COVER);
+            lv_obj_align(led, LV_ALIGN_TOP_RIGHT, -15, 21);
+            break;
+        }
+        case 4: {
+            lv_obj_t* day = label_en(box, "18", &style_en);
+            lv_obj_set_style_text_font(day, &lv_font_montserrat_20, 0);
+            lv_obj_align(day, LV_ALIGN_TOP_RIGHT, -36, 13);
+            for (int r = 0; r < 3; ++r) {
+                for (int c = 0; c < 3; ++c) {
+                    lv_obj_t* mark = circle(box, 3, COLOR_GOLD, LV_OPA_60);
+                    lv_obj_align(mark, LV_ALIGN_TOP_RIGHT, -16 + c * 6, 13 + r * 6);
+                }
+            }
+            break;
+        }
+        case 5: {
+            lv_obj_t* ring = circle(box, 36, LV_COLOR_MAKE(0x1c, 0x11, 0x0b), LV_OPA_COVER);
+            lv_obj_set_style_border_color(ring, LV_COLOR_MAKE(0xe0, 0x8d, 0x4d), 0);
+            lv_obj_set_style_border_width(ring, 4, 0);
+            lv_obj_align(ring, LV_ALIGN_TOP_RIGHT, -25, 6);
+            lv_obj_t* number = label_en(ring, "25", &style_en);
+            lv_obj_set_style_text_font(number, &lv_font_montserrat_12, 0);
+            lv_obj_center(number);
+            break;
+        }
+        case 6: {
+            lv_obj_t* wifi_icon = lv_obj_create(box);
+            lv_obj_remove_style_all(wifi_icon);
+            lv_obj_set_size(wifi_icon, 54, 36);
+            lv_obj_align(wifi_icon, LV_ALIGN_TOP_RIGHT, -18, 7);
+            add_gesture_bubble(wifi_icon);
+
+            auto make_wifi_arc = [&](int16_t size, int16_t x, int16_t y) {
+                lv_obj_t* arc = lv_arc_create(wifi_icon);
+                lv_obj_remove_style_all(arc);
+                lv_obj_set_size(arc, size, size);
+                lv_arc_set_angles(arc, 220, 320);
+                lv_obj_set_style_arc_width(arc, 3, LV_PART_INDICATOR);
+                lv_obj_set_style_arc_color(arc, COLOR_GREEN, LV_PART_INDICATOR);
+                lv_obj_set_style_arc_opa(arc, LV_OPA_COVER, LV_PART_INDICATOR);
+                lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+                lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_KNOB);
+                lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+                lv_obj_set_pos(arc, x, y);
+                add_gesture_bubble(arc);
+            };
+            make_wifi_arc(42, 6, 0);
+            make_wifi_arc(30, 12, 7);
+            make_wifi_arc(18, 18, 14);
+            lv_obj_t* base = circle(wifi_icon, 6, COLOR_GREEN, LV_OPA_COVER);
+            lv_obj_set_pos(base, 24, 29);
+            break;
+        }
+        case 7: {
+            for (int i = 0; i < 3; ++i) {
+                lv_obj_t* line = bar(box, 54, 2, COLOR_CREAM, LV_OPA_COVER);
+                lv_obj_align(line, LV_ALIGN_TOP_RIGHT, -16, 13 + i * 11);
+                lv_obj_t* knob = circle(box, 6, COLOR_GOLD, LV_OPA_COVER);
+                lv_obj_align(knob, LV_ALIGN_TOP_RIGHT, -36 + (i % 2) * 18, 11 + i * 11);
+            }
+            break;
+        }
+    }
     return box;
 }
 

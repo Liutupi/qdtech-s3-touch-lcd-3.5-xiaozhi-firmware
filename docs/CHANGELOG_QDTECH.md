@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-19: v1.7.16 Apps Page Visual Polish And WiFi Icon Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.16`.
+- Reworked the secondary Apps page toward the supplied dark brown reference style:
+  - dark warm background
+  - main-screen `Nothing impossible` brand mark in the upper-left
+  - warm brown pill-style `Back` button
+  - two-column horizontal app cards with small outlined app-code badges, status dots, and right-side decorative glyphs
+- Fixed the Network card WiFi glyph after hardware feedback that the dot was visually off-center. The icon now uses one fixed 54x36 transparent container, with all three arcs and the dot positioned on the same center axis.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3cd5e0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x232a20`, about 37%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.16`, `Ota: Current version: 1.7.16`, QDTech board startup, touch max points `5`, WiFi connection, MQTT connection, UI clock update, weather update, and `Application: STATE: idle`.
+- Runtime logs did not include a final post-flash touch gesture capture; the Apps page change should still be judged visually on the LCD.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.16-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.16-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.16-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-app.bin`: `ebd91e9d87b0dbf6825a0f82b743243cc16e650da3a2983f0aa75d41da702605`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-firmware.zip`: `cf0197d470f996a690a2e3f264181a9e8a283e2e209223ca40f6f8a073887565`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-full.bin`: `4fc5797309c24f868675002c632e33118f50966a812af8fbb6a4fd904207e1a1`
+- Follow-up: visually inspect the Apps page Network card on the physical panel; the code now centers the glyph mathematically, but the final look should still be judged from the LCD.
+
 ## 2026-06-19: v1.7.15 Calendar UI Redesign And Brand Polish
 
 Scope:

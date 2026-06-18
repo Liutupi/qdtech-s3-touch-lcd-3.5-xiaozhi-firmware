@@ -14,6 +14,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.3 (2026-06-15): Radio visual enhancement with audio spectrum bars
 - v1.7.14 (2026-06-19): FC ROM scan cap raised to 192 and clearer ROM load diagnostics
 - v1.7.15 (2026-06-19): Calendar visual redesign, larger calendar controls, and secondary-page brand polish
+- v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 
 ## Confirmed Hardware From Source
 
@@ -78,7 +79,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Photos exits to Apps with either horizontal swipe.
 - Desktop UI pages:
   - main page
-  - apps page
+  - apps page with the reference-style dark two-column app center, main-screen `Nothing impossible` brand mark, and centered Network WiFi glyph
   - calendar page with a left today card, right monthly grid, and enlarged Prev / Today / Next touch targets
   - photo page
   - FC/NES page

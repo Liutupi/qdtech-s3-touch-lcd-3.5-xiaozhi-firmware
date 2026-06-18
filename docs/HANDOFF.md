@@ -243,9 +243,28 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-19 v1.7.15 Calendar UI Redesign And Brand Polish
+## Latest Runtime Notes: 2026-06-19 v1.7.16 Apps Page Visual Polish And WiFi Icon Fix
 
-- Latest release target is `v1.7.15`.
+- Latest release target is `v1.7.16`.
+- Apps page was restyled to follow the supplied dark brown app-center reference:
+  - black/brown background
+  - main-screen `Nothing impossible` brand mark at the upper-left
+  - two-column horizontal app cards with outlined app-code badges and status dots
+  - warm brown card borders and a matching pill-style `Back` button
+  - right-side decorative glyphs for Radio, Photos, XiaoZhi, NES, Calendar, Focus, Network, and Settings
+- Network card WiFi glyph was corrected after hardware feedback that the dot was off-center. The new glyph is drawn inside one fixed 54x36 transparent container so the three arcs and bottom dot share a single center axis.
+- Final `v1.7.16` release build passed from the Windows checkout: `xiaozhi.bin` `0x3cd5e0`, smallest app partition `0x600000`, free `0x232a20`.
+- Final `v1.7.16` build was flashed to `COM13`. Boot logs confirmed `App version: 1.7.16`, `Ota: Current version: 1.7.16`, WiFi, MQTT, UI clock update, weather update, and `Application: STATE: idle`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-app.bin`, SHA256 `ebd91e9d87b0dbf6825a0f82b743243cc16e650da3a2983f0aa75d41da702605`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-firmware.zip`, SHA256 `cf0197d470f996a690a2e3f264181a9e8a283e2e209223ca40f6f8a073887565`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.16-full.bin`, SHA256 `4fc5797309c24f868675002c632e33118f50966a812af8fbb6a4fd904207e1a1`.
+- Follow-up: inspect the Apps page on the LCD and confirm the Network WiFi glyph reads centered; the final visual judgment is hardware-authoritative.
+- Board-initiated OTA should be verified from a device running `1.7.15` or older: Settings -> Firmware -> Check -> Update -> reboot -> `1.7.16`.
+
+## Previous Runtime Notes: 2026-06-19 v1.7.15 Calendar UI Redesign And Brand Polish
+
+- Release target was `v1.7.15`.
 - Calendar page was redesigned to follow the supplied warm brown/gold reference:
   - left light today card with `今日`, `TODAY`, large day number, Chinese weekday, and `YYYY / MM`
   - right dark month panel with `Month YYYY`, `Minimal monthly view`, weekday headers, rounded date pills, orange weekend pills, and gold today highlight
