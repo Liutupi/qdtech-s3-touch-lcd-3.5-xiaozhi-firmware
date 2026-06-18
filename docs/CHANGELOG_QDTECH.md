@@ -2,10 +2,11 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
-## 2026-06-18: FC Exit Time/Weather Recovery
+## 2026-06-18: v1.7.10 Time/Weather Recovery Release
 
 Scope:
 
+- Bumped firmware version to `1.7.10` for the time/weather recovery release.
 - Added an FC-exit callback from the desktop UI to the time/weather service. Leaving FC now immediately requests a time refresh and a weather retry if the last weather fetch failed.
 - Added a general main-page callback. Returning to the main page from any secondary page now requests an immediate clock refresh, not only the FC path.
 - Increased background clock refresh cadence to 5 seconds while avoiding unnecessary redraws when the displayed minute has not changed.
@@ -29,6 +30,7 @@ Verification:
 - Weather completed quickly over HTTP during the boot window: `weather ok 28 C Zhongshan Storm 15:51 code=95 updated=15:51`, roughly 15 seconds after boot and before MQTT fully settled.
 - Clock logs advanced normally from `15:51` to `15:52`, confirming the main-page clock continued refreshing after the initial sync.
 - Internal SRAM stayed stable during the observed idle window after weather success, around `13-14KB` free with minimum around `10051` bytes.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.10-full.bin` and `qdtech-s3-touch-lcd-3.5-v1.7.10-firmware.zip`.
 
 ## 2026-06-18: System Stability Pass After FC Release
 

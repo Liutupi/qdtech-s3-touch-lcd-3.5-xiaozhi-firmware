@@ -242,8 +242,9 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-18 FC Exit Time/Weather Recovery
+## Latest Runtime Notes: 2026-06-18 v1.7.10 Time/Weather Recovery
 
+- Latest release target is `v1.7.10`.
 - FC and Photos no longer force SD-card mounting during board construction. SD is mounted lazily when a feature needs it, and FC reuses an existing `/sdcard` mount.
 - The Time/Weather task is created in PSRAM first, with an internal-memory fallback and diagnostic logging.
 - Exiting FC now notifies the Time/Weather service to refresh the clock immediately and retry weather if the last weather fetch failed.
@@ -262,6 +263,7 @@ Important 2026-06-05 stability finding:
   - Weather completed quickly over HTTP during boot: `weather ok 28 C Zhongshan Storm 15:51 code=95 updated=15:51`.
   - Main clock advanced normally from `15:51` to `15:52` in the monitor session.
   - Internal SRAM stayed around `13-14KB` free after startup, minimum around `10051` bytes during the observed window.
+- Release assets should follow the existing two-asset pattern: `qdtech-s3-touch-lcd-3.5-v1.7.10-full.bin` and `qdtech-s3-touch-lcd-3.5-v1.7.10-firmware.zip`.
 
 ## What Still Needs Work
 
