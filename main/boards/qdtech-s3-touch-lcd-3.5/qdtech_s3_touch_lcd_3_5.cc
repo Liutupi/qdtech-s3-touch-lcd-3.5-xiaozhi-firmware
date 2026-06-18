@@ -833,6 +833,9 @@ private:
                 return DrawFcFrame(qd_display, pixels, width, height);
             });
         fc_emulator_service_.Start(desktop_ui);
+        desktop_ui->SetMainPageCallback([this]() {
+            time_weather_service_.RequestRefresh(false);
+        });
         desktop_ui->SetFcExitCallback([this]() {
             time_weather_service_.RequestRefresh(true);
         });

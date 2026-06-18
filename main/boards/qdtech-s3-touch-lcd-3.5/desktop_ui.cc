@@ -669,6 +669,7 @@ void DesktopUI::Create() {
 }
 
 void DesktopUI::ShowPage(DesktopPage page) {
+    const bool was_main = current_page_ == DesktopPage::MAIN;
     const bool was_photo = current_page_ == DesktopPage::PHOTO;
     const bool was_fc = current_page_ == DesktopPage::FC;
     current_page_ = page;
@@ -755,6 +756,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     }
     if (was_fc && !is_fc && fc_exit_callback_) {
         fc_exit_callback_();
+    }
+    const bool is_main = page == DesktopPage::MAIN;
+    if (is_main && !was_main && main_page_callback_) {
+        main_page_callback_();
     }
     if (lv_screen_active()) {
         lv_obj_invalidate(lv_screen_active());
@@ -2237,7 +2242,18 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
     snprintf(date_text, sizeof(date_text), "%02d / %02d     |", month, day);
     snprintf(time_text, sizeof(time_text), "%02d:%02d", hour, minute);
 
+    const bool minute_changed = hour != current_hour_ || minute != current_minute_;
     const bool date_changed = year != current_year_ || month != current_month_ || day != current_day_;
+    const bool force_main_clock = current_page_ == DesktopPage::MAIN;
+    if (!minute_changed && !date_changed && !force_main_clock) {
+        return;
+    }
+    if (minute_changed || date_changed) {
+        ESP_LOGI(TAG, "UI time set %04d-%02d-%02d %02d:%02d %s",
+                 year, month, day, hour, minute, weekday ? weekday : "---");
+    }
+    current_hour_ = hour;
+    current_minute_ = minute;
     current_year_ = year;
     current_month_ = month;
     current_day_ = day;
@@ -2247,27 +2263,35 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
         calendar_follow_today_ = true;
     }
 
-    RenderBigTime(hour, minute, true);
-    lv_label_set_text(date_label_, date_text);
-    lv_label_set_text(week_label_, weekday ? weekday : "---");
-    if (calendar_app_status_label_) {
+    if (minute_changed || force_main_clock) {
+        RenderBigTime(hour, minute, false);
+        for (size_t i = 0; i < sizeof(status_bar_time_labels_) / sizeof(status_bar_time_labels_[0]); ++i) {
+            if (status_bar_time_labels_[i]) {
+                lv_label_set_text(status_bar_time_labels_[i], time_text);
+            }
+        }
+    }
+
+    if (date_changed) {
+        lv_label_set_text(date_label_, date_text);
+        lv_label_set_text(week_label_, weekday ? weekday : "---");
+    }
+    if (date_changed && calendar_app_status_label_) {
         char app_status[24];
         snprintf(app_status, sizeof(app_status), "%04d/%02d/%02d", year, month, day);
         lv_label_set_text(calendar_app_status_label_, app_status);
     }
 
-    for (size_t i = 0; i < sizeof(status_bar_time_labels_) / sizeof(status_bar_time_labels_[0]); ++i) {
-        if (status_bar_time_labels_[i]) {
-            lv_label_set_text(status_bar_time_labels_[i], time_text);
-        }
-    }
-
-    if (date_changed || current_page_ == DesktopPage::CALENDAR) {
+    if (date_changed) {
         RenderCalendar();
     }
     if (current_page_ == DesktopPage::MAIN && main_page_) {
         lv_obj_invalidate(main_page_);
     }
+}
+
+void DesktopUI::SetMainPageCallback(std::function<void()> callback) {
+    main_page_callback_ = std::move(callback);
 }
 
 void DesktopUI::SetPhotoActiveCallback(std::function<void(bool)> callback) {

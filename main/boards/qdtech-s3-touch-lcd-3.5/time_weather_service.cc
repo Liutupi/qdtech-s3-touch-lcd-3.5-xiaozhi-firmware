@@ -282,8 +282,10 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 void TimeWeatherService::Task() {
     static constexpr int kWeatherRefreshSeconds = 3600;
     static constexpr int kWeatherRetrySeconds = 10;
+    static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
     int retry_ticks = kWeatherRetrySeconds;
+    int clock_ticks = kClockRefreshSeconds;
     bool weather_ok = false;
     
     // 等待 WiFi 连接
@@ -317,6 +319,7 @@ void TimeWeatherService::Task() {
             weather_ok = FetchWeather();
             retry_ticks = 0;
         }
+        clock_ticks = 0;
         
         // 更新网络状态
         SetNetworkStatusSafe("XiaoZhi AI Ready");
@@ -351,6 +354,11 @@ void TimeWeatherService::Task() {
             }
             ++weather_ticks;
             ++retry_ticks;
+            ++clock_ticks;
+            if (clock_ticks >= kClockRefreshSeconds) {
+                UpdateTime();
+                clock_ticks = 0;
+            }
             if (!weather_ok && retry_ticks >= kWeatherRetrySeconds) {
                 break;
             }
@@ -386,6 +394,7 @@ void TimeWeatherService::StartSntp() {
 #if CONFIG_LWIP_SNTP_MAX_SERVERS > 1
     esp_sntp_setservername(1, "pool.ntp.org");
 #endif
+    esp_sntp_set_sync_interval(5 * 60 * 1000);
     esp_sntp_init();
     ESP_LOGI(TAG, "SNTP started");
 }
@@ -396,7 +405,12 @@ bool TimeWeatherService::WaitTimeReady() {
     for (int i = 0; i < 15; ++i) {
         time(&now);
         localtime_r(&now, &timeinfo);
-        if (timeinfo.tm_year >= (2024 - 1900)) {
+        const auto sync_status = esp_sntp_get_sync_status();
+        if (sync_status == SNTP_SYNC_STATUS_COMPLETED ||
+            sync_status == SNTP_SYNC_STATUS_IN_PROGRESS) {
+            sntp_synced_once_ = true;
+        }
+        if (sntp_synced_once_ && timeinfo.tm_year >= (2024 - 1900)) {
             return true;
         }
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -415,6 +429,14 @@ void TimeWeatherService::UpdateTime() {
     localtime_r(&now, &info);
     if (info.tm_year < (2024 - 1900)) {
         return;
+    }
+    static int last_logged_minute = -1;
+    if (info.tm_min != last_logged_minute) {
+        last_logged_minute = info.tm_min;
+        ESP_LOGI(TAG, "clock source %04d-%02d-%02d %02d:%02d:%02d wday=%d synced=%d",
+                 info.tm_year + 1900, info.tm_mon + 1, info.tm_mday,
+                 info.tm_hour, info.tm_min, info.tm_sec, info.tm_wday,
+                 sntp_synced_once_ ? 1 : 0);
     }
     
     if (lvgl_port_lock(100)) {
@@ -458,19 +480,18 @@ bool TimeWeatherService::FetchWeather() {
     
     char url[256];
     snprintf(url, sizeof(url),
-             "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
+             "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
              location.latitude, location.longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
     config.url = url;
-    config.timeout_ms = 5000;
+    config.timeout_ms = 3000;
     config.event_handler = HttpEventHandler;
     config.user_data = response;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
     config.buffer_size = 1024;
     
-    static constexpr int kWeatherFetchAttempts = 1;
+    static constexpr int kWeatherFetchAttempts = 2;
     esp_err_t err = ESP_FAIL;
     int status = 0;
     for (int attempt = 1; attempt <= kWeatherFetchAttempts; ++attempt) {
@@ -492,7 +513,7 @@ bool TimeWeatherService::FetchWeather() {
 
         ESP_LOGW(TAG, "weather fetch failed attempt=%d err=%s status=%d", attempt, esp_err_to_name(err), status);
         if (attempt < kWeatherFetchAttempts) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(500));
         }
     }
 

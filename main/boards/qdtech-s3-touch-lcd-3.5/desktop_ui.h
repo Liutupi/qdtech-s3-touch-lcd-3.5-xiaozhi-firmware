@@ -47,6 +47,7 @@ public:
     void SetFocusMode(bool work_mode);
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
+    void SetMainPageCallback(std::function<void()> callback);
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
     void SetPhotoState(const char* title, const char* detail);
@@ -110,6 +111,9 @@ private:
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
     lv_obj_t* calendar_app_status_label_ = nullptr;
+    std::function<void()> main_page_callback_;
+    int current_hour_ = -1;
+    int current_minute_ = -1;
     
     // Animation elements
     lv_obj_t* daily_card_panel_ = nullptr;

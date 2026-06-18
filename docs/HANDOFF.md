@@ -247,14 +247,21 @@ Important 2026-06-05 stability finding:
 - FC and Photos no longer force SD-card mounting during board construction. SD is mounted lazily when a feature needs it, and FC reuses an existing `/sdcard` mount.
 - The Time/Weather task is created in PSRAM first, with an internal-memory fallback and diagnostic logging.
 - Exiting FC now notifies the Time/Weather service to refresh the clock immediately and retry weather if the last weather fetch failed.
+- Returning from any secondary page to the main page now notifies the Time/Weather service to refresh the clock immediately.
+- The Time/Weather loop refreshes the clock every 5 seconds, but `DesktopUI::SetTime()` skips redraws when the displayed minute and date are unchanged.
+- Time is accepted for display only after SNTP reports a real sync at least once, so stale valid-looking local time is less likely to be shown as corrected time.
+- While the main page is visible, `DesktopUI::SetTime()` rewrites the big clock digits every 5 seconds even when the minute is unchanged. This is deliberate to self-repair stale LVGL label state.
+- OTA server-time parsing no longer adds `timezone_offset` before `settimeofday()`. That offset caused a later +8 hour jump after OTA/MQTT startup; the system clock should stay UTC and `TZ=CST-8` handles display time.
+- Weather uses Open-Meteo over HTTP instead of HTTPS, with a 3-second timeout and one quick retry, to avoid TLS contention with OTA/MQTT during boot.
 - Desktop page switches invalidate the active screen, and main-page time/weather label updates invalidate the main page. This is intended to clear stale FC direct-draw pixels after leaving the emulator.
 - Weather retry timing is now real 10-second retry behavior after a failed fetch. Previously the retry was delayed by the 60-second outer wait loop.
-- Latest flashed local build: `xiaozhi.bin` `0x3c8cf0`, smallest app partition `0x600000`, free `0x237310`.
+- Latest flashed local build: `xiaozhi.bin` `0x3c8f30`, smallest app partition `0x600000`, free `0x2370d0`.
 - Hardware monitor after flashing:
   - WiFi initialized normally with static RX `6`, dynamic RX `8`, RX BA `6`.
-  - SNTP synchronized immediately after WiFi got IP.
-  - First weather fetch timed out while OTA/MQTT were starting, then retry succeeded with `weather ok 27 C Zhongshan Storm 23:21 code=95 updated=23:21`.
-  - Internal SRAM stayed around `14-15KB` free after startup, minimum `10187` bytes during the observed window.
+  - Time stayed on the correct local hour after OTA/MQTT startup; the prior +8 hour jump did not recur.
+  - Weather completed quickly over HTTP during boot: `weather ok 28 C Zhongshan Storm 15:51 code=95 updated=15:51`.
+  - Main clock advanced normally from `15:51` to `15:52` in the monitor session.
+  - Internal SRAM stayed around `13-14KB` free after startup, minimum around `10051` bytes during the observed window.
 
 ## What Still Needs Work
 

@@ -7,21 +7,28 @@ This changelog tracks QDTech-specific firmware maintenance. It is not a replacem
 Scope:
 
 - Added an FC-exit callback from the desktop UI to the time/weather service. Leaving FC now immediately requests a time refresh and a weather retry if the last weather fetch failed.
+- Added a general main-page callback. Returning to the main page from any secondary page now requests an immediate clock refresh, not only the FC path.
+- Increased background clock refresh cadence to 5 seconds while avoiding unnecessary redraws when the displayed minute has not changed.
+- Time is now treated as trustworthy only after SNTP reports a real sync at least once, avoiding stale but valid-looking local time being displayed as corrected time.
+- While the main page is visible, the big clock digits are rewritten every 5 seconds even if the minute is unchanged, so stale LVGL label state can self-repair quickly.
+- Fixed OTA server-time handling so `timezone_offset` is not added before `settimeofday()`. System time remains UTC and the display layer applies `TZ=CST-8`, avoiding the later +8 hour jump after OTA/MQTT startup.
+- Switched Open-Meteo weather fetch from HTTPS to HTTP with a shorter timeout and a quick second attempt. Weather data is public, and avoiding TLS reduces startup contention with OTA/MQTT TLS handshakes.
 - Forced a full active-screen invalidation when switching pages, plus targeted main-page invalidation after time or weather labels change. This is intended to clear stale direct-drawn FC pixels and make the main page repaint immediately after exiting the emulator.
 - Fixed weather retry cadence. The service previously checked the 10-second retry counter only after a 60-second wait loop; failed weather fetches now break out and retry on the intended 10-second cadence.
 
 Verification:
 
 - Build completed successfully from `/private/tmp/qdtech_s3_build_src`.
-- `xiaozhi.bin` size: `0x3c8cf0`.
+- `xiaozhi.bin` size: `0x3c8f30`.
 - Smallest app partition: `0x600000`.
-- Free app partition space: `0x237310`, about 37%.
+- Free app partition space: `0x2370d0`, about 37%.
 - Flashed successfully to `/dev/cu.usbmodem212401`.
 - Boot logs confirmed WiFi initialized normally with static RX buffers `6`, dynamic RX buffers `8`, and RX BA window `6`.
 - Time/Weather task still started with PSRAM stack allocation.
-- SNTP synchronized immediately after WiFi IP acquisition.
-- First weather fetch timed out while OTA/MQTT were also starting, then the new retry path succeeded about 14 seconds later: `weather ok 27 C Zhongshan Storm 23:21 code=95 updated=23:21`.
-- Internal SRAM stayed stable during the observed idle window after weather success, around `14-15KB` free with minimum `10187` bytes.
+- Time display stayed on the correct local time after OTA/MQTT startup. The earlier +8 hour jump did not recur after removing `timezone_offset` from OTA `settimeofday()`.
+- Weather completed quickly over HTTP during the boot window: `weather ok 28 C Zhongshan Storm 15:51 code=95 updated=15:51`, roughly 15 seconds after boot and before MQTT fully settled.
+- Clock logs advanced normally from `15:51` to `15:52`, confirming the main-page clock continued refreshing after the initial sync.
+- Internal SRAM stayed stable during the observed idle window after weather success, around `13-14KB` free with minimum around `10051` bytes.
 
 ## 2026-06-18: System Stability Pass After FC Release
 

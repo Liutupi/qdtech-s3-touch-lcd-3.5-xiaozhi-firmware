@@ -21,6 +21,7 @@ private:
     std::atomic<bool> refresh_requested_{false};
     std::atomic<bool> weather_refresh_requested_{false};
     bool sntp_started_ = false;
+    bool sntp_synced_once_ = false;
     bool last_weather_valid_ = false;
     char last_temperature_[16] = "-- C";
     char last_summary_[96] = "Weather pending";
