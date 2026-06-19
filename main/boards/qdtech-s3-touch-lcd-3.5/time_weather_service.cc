@@ -74,6 +74,14 @@ struct FestivalEntry {
     const char* text;
 };
 
+struct DatedFestivalEntry {
+    uint16_t year;
+    uint8_t month;
+    uint8_t day;
+    const char* title;
+    const char* text;
+};
+
 struct HistoryEntry {
     uint8_t month;
     uint8_t day;
@@ -101,6 +109,65 @@ static const FestivalEntry FESTIVALS[] = {
     {12, 24, "平安夜", "愿今夜平安，岁岁年年。"},
     {12, 25, "圣诞节", "愿冬夜有暖，心中有光。"},
     {12, 31, "跨年夜", "旧岁已展千重锦，新年再进百尺竿。"},
+};
+
+static const DatedFestivalEntry LUNAR_FESTIVALS[] = {
+    {2024, 2, 10, "春节", "新春开岁，愿你万事顺意。"},
+    {2024, 2, 24, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2024, 6, 10, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2024, 8, 10, "七夕", "星河有约，温柔常在。"},
+    {2024, 9, 17, "中秋节", "月满人团圆，清辉照归途。"},
+    {2024, 10, 11, "重阳节", "登高望远，岁岁安康。"},
+    {2025, 1, 7, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2025, 1, 28, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2025, 1, 29, "春节", "新春开岁，愿你万事顺意。"},
+    {2025, 2, 12, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2025, 5, 31, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2025, 8, 29, "七夕", "星河有约，温柔常在。"},
+    {2025, 10, 6, "中秋节", "月满人团圆，清辉照归途。"},
+    {2025, 10, 29, "重阳节", "登高望远，岁岁安康。"},
+    {2026, 1, 26, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2026, 2, 16, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2026, 2, 17, "春节", "新春开岁，愿你万事顺意。"},
+    {2026, 3, 3, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2026, 6, 19, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2026, 8, 19, "七夕", "星河有约，温柔常在。"},
+    {2026, 9, 25, "中秋节", "月满人团圆，清辉照归途。"},
+    {2026, 10, 18, "重阳节", "登高望远，岁岁安康。"},
+    {2027, 1, 15, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2027, 2, 5, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2027, 2, 6, "春节", "新春开岁，愿你万事顺意。"},
+    {2027, 2, 20, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2027, 6, 9, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2027, 8, 8, "七夕", "星河有约，温柔常在。"},
+    {2027, 9, 15, "中秋节", "月满人团圆，清辉照归途。"},
+    {2027, 10, 8, "重阳节", "登高望远，岁岁安康。"},
+    {2028, 1, 4, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2028, 1, 25, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2028, 1, 26, "春节", "新春开岁，愿你万事顺意。"},
+    {2028, 2, 9, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2028, 5, 28, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2028, 8, 26, "七夕", "星河有约，温柔常在。"},
+    {2028, 10, 3, "中秋节", "月满人团圆，清辉照归途。"},
+    {2028, 10, 26, "重阳节", "登高望远，岁岁安康。"},
+    {2029, 1, 22, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2029, 2, 12, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2029, 2, 13, "春节", "新春开岁，愿你万事顺意。"},
+    {2029, 2, 27, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2029, 6, 16, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2029, 8, 16, "七夕", "星河有约，温柔常在。"},
+    {2029, 9, 22, "中秋节", "月满人团圆，清辉照归途。"},
+    {2029, 10, 16, "重阳节", "登高望远，岁岁安康。"},
+    {2030, 1, 11, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2030, 2, 2, "除夕", "旧岁至此团圆，新年就在门前。"},
+    {2030, 2, 3, "春节", "新春开岁，愿你万事顺意。"},
+    {2030, 2, 17, "元宵节", "灯火映团圆，心里有暖光。"},
+    {2030, 6, 5, "端午节", "粽叶飘香，愿你安康顺遂。"},
+    {2030, 8, 5, "七夕", "星河有约，温柔常在。"},
+    {2030, 9, 12, "中秋节", "月满人团圆，清辉照归途。"},
+    {2030, 10, 5, "重阳节", "登高望远，岁岁安康。"},
+    {2031, 1, 1, "腊八节", "一碗腊八粥，暖过岁寒时。"},
+    {2031, 1, 22, "除夕", "旧岁至此团圆，新年就在门前。"},
 };
 
 static const HistoryEntry HISTORY_TODAY[] = {
@@ -181,6 +248,15 @@ static const FestivalEntry* FindFestival(int month, int day) {
     return nullptr;
 }
 
+static const DatedFestivalEntry* FindLunarFestival(int year, int month, int day) {
+    for (const auto& entry : LUNAR_FESTIVALS) {
+        if (entry.year == year && entry.month == month && entry.day == day) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
 static const HistoryEntry* FindHistoryToday(int month, int day) {
     for (const auto& entry : HISTORY_TODAY) {
         if (entry.month == month && entry.day == day) {
@@ -190,26 +266,52 @@ static const HistoryEntry* FindHistoryToday(int month, int day) {
     return nullptr;
 }
 
-static void BuildDailyCardText(const tm& info, char* title, size_t title_size,
-                               char* body, size_t body_size) {
+enum class DailyCardKind {
+    Festival,
+    History,
+    Quote,
+};
+
+static const char* DailyCardKindName(DailyCardKind kind) {
+    switch (kind) {
+        case DailyCardKind::Festival:
+            return "festival";
+        case DailyCardKind::History:
+            return "history";
+        case DailyCardKind::Quote:
+            return "quote";
+    }
+    return "quote";
+}
+
+static DailyCardKind BuildDailyCardText(const tm& info, char* title, size_t title_size,
+                                        char* body, size_t body_size) {
     const int month = info.tm_mon + 1;
     const int day = info.tm_mday;
+    const int year = info.tm_year + 1900;
+
+    if (const DatedFestivalEntry* festival = FindLunarFestival(year, month, day)) {
+        snprintf(title, title_size, "%s", festival->title);
+        snprintf(body, body_size, "%s", festival->text);
+        return DailyCardKind::Festival;
+    }
 
     if (const FestivalEntry* festival = FindFestival(month, day)) {
         snprintf(title, title_size, "%s", festival->title);
         snprintf(body, body_size, "%s", festival->text);
-        return;
+        return DailyCardKind::Festival;
     }
 
     if (const HistoryEntry* history = FindHistoryToday(month, day)) {
         snprintf(title, title_size, "%s", "历史上的今天");
         snprintf(body, body_size, "%s · %s", history->year, history->text);
-        return;
+        return DailyCardKind::History;
     }
 
     const size_t quote_count = sizeof(DAILY_QUOTES) / sizeof(DAILY_QUOTES[0]);
     snprintf(title, title_size, "%s", "今日一句");
     snprintf(body, body_size, "%s", DAILY_QUOTES[info.tm_yday % quote_count]);
+    return DailyCardKind::Quote;
 }
 
 void TimeWeatherService::Start(DesktopUI* ui) {
@@ -445,16 +547,17 @@ void TimeWeatherService::UpdateTime() {
         lvgl_port_unlock();
     }
     
-    // 每日金句
-    if (info.tm_yday != last_quote_yday_) {
-        last_quote_yday_ = info.tm_yday;
+    // Daily card priority: lunar/fixed festival, then history-on-this-day, then quote fallback.
+    const int daily_card_date = (info.tm_year + 1900) * 10000 + (info.tm_mon + 1) * 100 + info.tm_mday;
+    if (daily_card_date != last_daily_card_date_) {
+        last_daily_card_date_ = daily_card_date;
         char daily_date[16];
         char daily_title[48];
         char daily_body[128];
         snprintf(daily_date, sizeof(daily_date), "%02d/%02d", info.tm_mon + 1, info.tm_mday);
-        BuildDailyCardText(info, daily_title, sizeof(daily_title), daily_body, sizeof(daily_body));
-        ESP_LOGI(TAG, "Daily card updated for %04d-%02d-%02d", info.tm_year + 1900,
-                 info.tm_mon + 1, info.tm_mday);
+        DailyCardKind daily_kind = BuildDailyCardText(info, daily_title, sizeof(daily_title), daily_body, sizeof(daily_body));
+        ESP_LOGI(TAG, "Daily card updated for %04d-%02d-%02d kind=%s", info.tm_year + 1900,
+                 info.tm_mon + 1, info.tm_mday, DailyCardKindName(daily_kind));
         SetDailyCardSafe(daily_date, daily_title, daily_body);
     }
 }

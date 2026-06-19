@@ -15,6 +15,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.14 (2026-06-19): FC ROM scan cap raised to 192 and clearer ROM load diagnostics
 - v1.7.15 (2026-06-19): Calendar visual redesign, larger calendar controls, and secondary-page brand polish
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
+- v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
 
 ## Confirmed Hardware From Source
 
@@ -110,10 +111,11 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
 - Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.
-- Main-page daily card uses embedded LXGW WenKai subset fonts and rotates date-linked local content:
-  - fixed Gregorian festival first
+- Main-page daily card rotates date-linked local content:
+  - lunar and fixed Gregorian festival first
   - history-on-this-day second
   - daily quote fallback third
+  - compact built-in 2024-2030 lunar festival date table for Spring Festival, Lantern Festival, Dragon Boat Festival, Qixi, Mid-Autumn Festival, Double Ninth Festival, Laba Festival, and Chinese New Year's Eve
 - Focus Timer page:
   - Apps tile `FOC / Focus / 25 min` replaces the previous QTE/Quote chat tile.
   - Opens a local 25 minute focus / 5 minute break timer instead of starting XiaoZhi chat.

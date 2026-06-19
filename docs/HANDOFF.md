@@ -243,7 +243,24 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-19 v1.7.16 Apps Page Visual Polish And WiFi Icon Fix
+## Latest Runtime Notes: 2026-06-19 v1.7.17 Daily Card Lunar Festival Support
+
+- Latest release target is `v1.7.17`.
+- Main-page daily card now treats lunar festivals as first-class festival matches before history-on-this-day and daily quote fallback.
+- Added a compact built-in 2024-2030 lunar festival date table for Spring Festival, Lantern Festival, Dragon Boat Festival, Qixi, Mid-Autumn Festival, Double Ninth Festival, Laba Festival, and Chinese New Year's Eve.
+- The immediate user-facing bug is fixed: `2026-06-19` now matches `端午节` and shows `粽叶飘香，愿你安康顺遂。` instead of the daily quote.
+- The daily-card update guard now uses full `YYYYMMDD` instead of day-of-year, so time sync and year changes cannot leave stale daily-card text behind.
+- Daily-card title/body labels now use the already-linked `font_puhui_16_4` Chinese font for broader glyph coverage without adding the much larger `font_puhui_20_4` to the binary.
+- Final `v1.7.17` release build passed from the Windows checkout: `xiaozhi.bin` `0x3cdac0`, smallest app partition `0x600000`, free `0x232540`.
+- Final `v1.7.17` build was flashed to `COM13`. Boot logs confirmed `App version: 1.7.17`, `Ota: Current version: 1.7.17`, WiFi, MQTT, SNTP time sync, weather update, `Daily card updated for 2026-06-19 kind=festival`, and `Application: STATE: idle`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-app.bin`, SHA256 `6c7a63de0863de6de4cfa5cbed2aef369ab3afe55a049026cdc2c7adfa6842ad`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-firmware.zip`, SHA256 `3271900dd7adbd3a7a7df6950332ddb3051db7914298f64db940c3f631fb68d1`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-full.bin`, SHA256 `10f04be0887a09b377ca61b007f97d590d7cb584d7b7422da88340dcbf5a6af0`.
+- Follow-up: visually confirm the daily card on the LCD reads `端午节`; runtime logs already prove the festival branch wins.
+- Board-initiated OTA should be verified from a device running `1.7.16` or older: Settings -> Firmware -> Check -> Update -> reboot -> `1.7.17`.
+
+## Previous Runtime Notes: 2026-06-19 v1.7.16 Apps Page Visual Polish And WiFi Icon Fix
 
 - Latest release target is `v1.7.16`.
 - Apps page was restyled to follow the supplied dark brown app-center reference:

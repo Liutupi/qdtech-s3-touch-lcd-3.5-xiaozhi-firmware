@@ -27,7 +27,7 @@ private:
     char last_summary_[96] = "Weather pending";
     char last_update_[24] = "never";
     int last_weather_code_ = -1;
-    int last_quote_yday_ = -1;
+    int last_daily_card_date_ = -1;
     
     static void TaskWrapper(void* arg);
     void Task();

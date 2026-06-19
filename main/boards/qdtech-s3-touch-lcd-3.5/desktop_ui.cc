@@ -1167,32 +1167,32 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     daily_card_panel_ = CreatePanel(parent, 438, 94, 20, 214);
 
     daily_card_date_label_ = label_en(daily_card_panel_, "--/--", &style_gold);
-    lv_obj_set_width(daily_card_date_label_, 82);
+    lv_obj_set_width(daily_card_date_label_, 92);
     lv_obj_set_style_text_align(daily_card_date_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(daily_card_date_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
 
     daily_card_title_label_ = label_en(daily_card_panel_, "今日", &style_muted);
-    lv_obj_set_width(daily_card_title_label_, 100);
+    lv_obj_set_width(daily_card_title_label_, 108);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_16, 0);
+    lv_obj_set_style_text_font(daily_card_title_label_, &font_puhui_16_4, 0);
     lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
-    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 120, 16);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 132, 16);
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, 278);
+    lv_obj_set_width(quote_label_, 266);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 140, 14);
+    lv_obj_set_style_text_font(quote_label_, &font_puhui_16_4, 0);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 152, 14);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, 278);
+    lv_obj_set_width(network_status_label_, 266);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 140, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 152, -7);
     
     // Daily card breathing animation
     lv_timer_create(DailyCardBreathCb, 50, this);

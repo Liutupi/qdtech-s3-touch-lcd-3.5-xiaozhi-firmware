@@ -2,6 +2,33 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-19: v1.7.17 Daily Card Lunar Festival Support
+
+Scope:
+
+- Bumped firmware version to `1.7.17`.
+- Added a compact built-in lunar festival date table for 2024-2030, covering Spring Festival, Lantern Festival, Dragon Boat Festival, Qixi, Mid-Autumn Festival, Double Ninth Festival, Laba Festival, and Chinese New Year's Eve.
+- Fixed the 2026-06-19 daily card so it resolves to `端午节` instead of falling through to the daily quote.
+- Kept the daily-card priority as festival first, then history-on-this-day, then daily quote fallback; festival now includes lunar and fixed Gregorian festivals.
+- Changed the main-page daily-card Chinese title/body labels to the already-linked `font_puhui_16_4` font so new lunar festival text such as `端午节` and `粽叶飘香` can render without regenerating the LXGW subset or pulling in the much larger 20 px Puhui font.
+- Replaced the update guard from day-of-year to full `YYYYMMDD`, avoiding stale daily-card content across time sync or year changes.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3cdac0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x232540`, about 37%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.17`, `Ota: Current version: 1.7.17`, QDTech board startup, WiFi connection, MQTT connection, SNTP time sync, weather update, and `Application: STATE: idle`.
+- Runtime logs confirmed `Daily card updated for 2026-06-19 kind=festival`, proving the Dragon Boat Festival path now wins over the quote fallback.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.17-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.17-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.17-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-app.bin`: `6c7a63de0863de6de4cfa5cbed2aef369ab3afe55a049026cdc2c7adfa6842ad`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-firmware.zip`: `3271900dd7adbd3a7a7df6950332ddb3051db7914298f64db940c3f631fb68d1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.17-full.bin`: `10f04be0887a09b377ca61b007f97d590d7cb584d7b7422da88340dcbf5a6af0`
+- Follow-up: visually confirm the daily card on the physical panel reads `端午节` and does not show missing glyph boxes.
+
 ## 2026-06-19: v1.7.16 Apps Page Visual Polish And WiFi Icon Fix
 
 Scope:

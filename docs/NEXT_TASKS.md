@@ -7,7 +7,7 @@ This list is intentionally ordered. Future work should start at the top unless t
 Current state:
 
 - Firmware `v1.7.13` added the first real on-device update flow inside `SET / Settings / Firmware`.
-- Firmware `v1.7.16` is the latest higher-version release after that bootstrap. It includes the Apps page reference-style visual polish, the centered Network WiFi icon fix, and publishes the required standalone `*-app.bin` asset.
+- Firmware `v1.7.17` is the latest higher-version release after that bootstrap. It includes main-page daily-card lunar festival support, including the 2026 Dragon Boat Festival fix, and publishes the required standalone `*-app.bin` asset.
 - The row has a `Check` / `Update` button with busy, latest, failed, no-WiFi, no-asset, and progress states.
 - The board checks GitHub Releases at `Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest`.
 - The updater compares release tags against `esp_app_get_description()->version`.
@@ -19,7 +19,7 @@ Current state:
 
 Next work:
 
-- Verify a full board-initiated OTA from `1.7.15` or older to `1.7.16`: check -> update -> download -> partition write -> reboot -> new version.
+- Verify a full board-initiated OTA from `1.7.16` or older to `1.7.17`: check -> update -> download -> partition write -> reboot -> new version.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
 - Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.
 - Keep blocking OTA while FC gameplay, radio playback, or XiaoZhi listening/speaking is active.
@@ -52,14 +52,14 @@ Next work:
 Current state:
 
 - Main-page daily card is date-linked and local/offline.
-- Content priority is festival, then history-on-this-day, then daily quote.
-- Current Chinese rendering uses generated LXGW WenKai 16 px and 20 px subset fonts.
+- Content priority is lunar/fixed festival, then history-on-this-day, then daily quote.
+- Current daily-card Chinese rendering uses the already-linked `font_puhui_16_4` font so added lunar festival text can display without regenerating LXGW subsets.
 
 Next work:
 
 - Expand the festival and history tables gradually.
-- Decide whether lunar festivals should be calculated locally or loaded from a data file.
-- Regenerate `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c` whenever new Chinese glyphs are introduced.
+- Extend the compact built-in lunar festival date table beyond 2030 if the firmware is expected to run unchanged after that range.
+- Regenerate `qd_font_lxgw_16.c` and `qd_font_lxgw_20.c` whenever new Chinese glyphs are introduced outside the daily-card Puhui-font path.
 - Keep body text short enough for the 438x94 main-page card.
 
 ## Priority 3: Focus Timer Hardening
