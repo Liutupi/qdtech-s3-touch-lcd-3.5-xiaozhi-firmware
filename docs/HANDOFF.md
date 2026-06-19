@@ -82,6 +82,35 @@ Last worked on 2026-06-18 in this Windows workspace:
 - Build directory: `build-qdtech`
 - Serial port: `COM13`
 
+Latest 2026-06-19 macOS hardware pass for `v1.7.19`:
+
+- Workspace: `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Build staging directory used to avoid workspace build churn: `/private/tmp/qdtech_s3_build_src`
+- Serial port: `/dev/cu.usbmodem212401`
+- Release target is `v1.7.19`; this bump is intentional so the on-device GitHub Release updater sees the build as newer than `v1.7.18`.
+- Current flashed candidate is the "playability-first" rollback build, not the failed PSRAM static SRAM/VRAM experiment.
+- Kept FC fixes:
+  - FC task priority lowered from `5` to `1`.
+  - FC audio callback path reuses `audio_output_buffer_` and emits low-rate audio/internal-SRAM diagnostics.
+  - Nofrendo SRAM allocation keeps the 16 KB padding guard and safe nulling in `rom_free()`.
+  - Entering the FC page calls `Application::SetExternalAudioActive(true)`, suspending XiaoZhi protocol/MQTT work. Staying on the FC page after LIST keeps background protocol suspended so selecting another ROM does not compete with reconnects. Leaving the FC page resumes protocol work.
+  - OTA retry alerts/sounds and weather HTTP fetches are suppressed while FC/external audio mode is active.
+- Hardware evidence from the final candidate:
+  - Final `v1.7.19` build reported `xiaozhi.bin` size `0x3cf380`, smallest app partition `0x600000`, free `0x230c80`.
+  - Monitor logs confirmed `App version: 1.7.19` and `Ota: Current version: 1.7.19`.
+  - Boot and apps navigation were normal after flashing.
+  - When MQTT was connected, entering FC suspended the protocol and internal SRAM recovered from about `7 KB` to about `15 KB`.
+  - SD mounted and `/sdcard/FC` scanned successfully with `fc scan found 192 nes files`.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`, SHA256 `da477d4d9c7b9ce98aa5f88f9a61b26d4c31b5cff79704aae4bd183435530e0c`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`, SHA256 `bcc5bf4d01dfe1bce56e0f335b5b9cfc200e6729f086ecd4cb3a6f33fecea4b6`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`, SHA256 `0aade4d670afa8e6651dd94469c6550492bf3409cb8f8374a1821bc502519720`.
+- Known remaining FC problem:
+  - LIST/Stop after gameplay can still crash on some ROMs. A captured panic showed `StoreProhibited` inside TLSF free, with the backtrace reaching `rom_free()` at `components/nofrendo/nes/nes_rom.c` while freeing SRAM after `main_eject()`.
+  - An attempted fix that moved SRAM/VRAM to large static PSRAM buffers (`64 KB` SRAM / `32 KB` VRAM) made gameplay worse: the user reported a complete freeze soon after entering gameplay. That experiment was reverted before `v1.7.19`. Do not reintroduce it as-is.
+- Recommended next FC step:
+  - Keep `v1.7.19` as the usable baseline. For the LIST/Stop issue, test one small nofrendo cleanup change at a time with hardware logs. Prefer a ROM-specific or mapper-specific guard, or a safer nofrendo quit sequence, over moving active mapper memory to PSRAM.
+
 Current user-visible FC/NES state:
 
 - Apps contains an `FC / NES / SD ROMs` tile.
@@ -258,6 +287,16 @@ Important 2026-06-05 stability finding:
   - `qdtech-s3-touch-lcd-3.5-v1.7.18-app.bin`, SHA256 `f63c8383a2bbccaa0fbb852b1723329d7d390cee361ca3baa71e4515d021955e`.
   - `qdtech-s3-touch-lcd-3.5-v1.7.18-firmware.zip`, SHA256 `aad007cfb27cafac979e542e5a98a60bd46a4ef7d7aff160e6c73d7f260fe404`.
   - `qdtech-s3-touch-lcd-3.5-v1.7.18-full.bin`, SHA256 `2f447b012b14390adc85b6b9e75611eff55553417720646ab3c1e956cb0f1b75`.
+
+2026-06-19 macOS follow-up after the user reported frequent freezes when entering FC:
+
+- Pulled `origin/main` to `a234e01` / `v1.7.18` before changing code.
+- High-probability freeze cause: the new FC audio path allocated a temporary `std::vector<int16_t>` on every Nofrendo audio tick while the board still has very tight internal SRAM margins.
+- `FcEmulatorService` now reuses one service-owned audio output buffer instead of constructing a fresh vector for every audio callback.
+- FC task priority was reduced from `5` back to `1` so the emulator yields more naturally to UI/touch/audio system tasks while entering and running games.
+- Added a low-rate `fc audio frames=...` log with internal SRAM/largest-block diagnostics every two seconds during gameplay.
+- Validation build passed from `/private/tmp/qdtech_s3_build_src` with explicit `esp32s3` target: `xiaozhi.bin` `0x3cec40`, smallest app partition `0x600000`, free `0x2313c0`.
+- Hardware flash/runtime test is still needed. On the board, start a ROM and check for `nofrendo fps=...`, `NofrendoQD: audio frames=...`, and `FcEmulator: fc audio frames=...` while confirming FC no longer hangs on entry.
 
 ## Previous Runtime Notes: 2026-06-19 v1.7.17 Daily Card Lunar Festival Support
 

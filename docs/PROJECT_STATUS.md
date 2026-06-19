@@ -17,6 +17,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 - v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
 - v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
+- v1.7.19 (2026-06-19): FC playability stabilization, protocol suspension while FC is active, and rollback of unstable PSRAM SRAM/VRAM experiment
 
 ## Confirmed Hardware From Source
 
@@ -231,7 +232,8 @@ For photos:
 - PhotoService depends on `CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y`; retain this setting for the current PSRAM-backed task stack.
 - FC/NES is still constrained by ESP32-S3 memory and Nofrendo compatibility, even though the current path is much more usable than the early minimal core.
 - FC/NES can scan SD, show a list, load supported ROMs, display frames, and latch touch-controller input through the Nofrendo adapter.
-- FC/NES currently has no audio output. Some ROMs still fail because they are larger than the 2 MB PSRAM load guard, use NES 2.0 headers, or require mappers not listed in `components/nofrendo/nes/mmclist.c`.
+- FC/NES audio output is routed through the ES8311 path as of v1.7.18. v1.7.19 reduces audio-buffer churn and suspends XiaoZhi protocol/weather work while the FC page is active, which keeps internal SRAM high enough for gameplay. Some ROMs still fail because they are larger than the 2 MB PSRAM load guard, use NES 2.0 headers, or require mappers not listed in `components/nofrendo/nes/mmclist.c`.
+- FC/NES still has a known LIST/Stop edge case on some ROMs: a hardware crash was captured in Nofrendo `rom_free()` while freeing SRAM after gameplay. The attempted fix that moved SRAM/VRAM to large static PSRAM buffers was reverted because it caused worse gameplay freezes.
 - FATFS long filename support is enabled in the QDTech board defaults; if an old `build-qdtech/sdkconfig` is reused, reconfigure or clean the build directory.
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.

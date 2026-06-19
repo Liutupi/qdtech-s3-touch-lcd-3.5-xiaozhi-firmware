@@ -18,17 +18,28 @@ MqttProtocol::MqttProtocol() {
 
 MqttProtocol::~MqttProtocol() {
     ESP_LOGI(TAG, "MqttProtocol deinit");
-    if (udp_ != nullptr) {
-        delete udp_;
-    }
-    if (mqtt_ != nullptr) {
-        delete mqtt_;
-    }
+    Stop();
     vEventGroupDelete(event_group_handle_);
 }
 
 bool MqttProtocol::Start() {
     return StartMqttClient(false);
+}
+
+void MqttProtocol::Stop() {
+    std::lock_guard<std::mutex> lock(channel_mutex_);
+    if (udp_ != nullptr) {
+        delete udp_;
+        udp_ = nullptr;
+    }
+    if (mqtt_ != nullptr) {
+        mqtt_->Disconnect();
+        delete mqtt_;
+        mqtt_ = nullptr;
+    }
+    session_id_.clear();
+    error_occurred_ = false;
+    xEventGroupClearBits(event_group_handle_, MQTT_PROTOCOL_SERVER_HELLO_EVENT);
 }
 
 bool MqttProtocol::StartMqttClient(bool report_error) {

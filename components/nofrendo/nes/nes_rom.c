@@ -81,6 +81,7 @@ typedef struct inesheader_s
 
 #define  SRAM_BANK_LENGTH  0x0400
 #define  VRAM_BANK_LENGTH  0x2000
+#define  SRAM_ALLOC_LENGTH 0x4000
 
 /* Save battery-backed RAM */
 static void rom_savesram(rominfo_t *rominfo)
@@ -131,16 +132,25 @@ static void rom_loadsram(rominfo_t *rominfo)
 /* Allocate space for SRAM */
 static int rom_allocsram(rominfo_t *rominfo)
 {
+   int logical_length;
+   int alloc_length;
+
    /* Load up SRAM */
-   rominfo->sram = malloc(SRAM_BANK_LENGTH * rominfo->sram_banks);
+   logical_length = SRAM_BANK_LENGTH * rominfo->sram_banks;
+   alloc_length = logical_length > SRAM_ALLOC_LENGTH ? logical_length : SRAM_ALLOC_LENGTH;
+   rominfo->sram = malloc(alloc_length);
    if (NULL == rominfo->sram)
    {
       gui_sendmsg(GUI_RED, "Could not allocate space for battery RAM");
       return -1;
    }
 
-   /* make damn sure SRAM is clear */
-   memset(rominfo->sram, 0, SRAM_BANK_LENGTH * rominfo->sram_banks);
+   /*
+   ** QDTech ESP32-S3: keep the NES-visible SRAM size at 8KB, but reserve
+   ** extra padding so mapper or ROM edge cases do not corrupt heap metadata
+   ** immediately after SRAM and crash during LIST/quit cleanup.
+   */
+   memset(rominfo->sram, 0, alloc_length);
    return 0;
 }
 
@@ -503,15 +513,22 @@ void rom_free(rominfo_t **rominfo)
    rom_savesram(*rominfo);
 
    if ((*rominfo)->sram)
+   {
       free((*rominfo)->sram);
+      (*rominfo)->sram = NULL;
+   }
    /*
    ** QDTech ESP32-S3 port keeps PRG/CHR pointers inside one ROM buffer owned
    ** by qdtech_osd.c. Do not free those interior pointers here.
    */
    if ((*rominfo)->vram)
+   {
       free((*rominfo)->vram);
+      (*rominfo)->vram = NULL;
+   }
 
    free(*rominfo);
+   *rominfo = NULL;
 
    gui_sendmsg(GUI_GREEN, "ROM freed");
 }

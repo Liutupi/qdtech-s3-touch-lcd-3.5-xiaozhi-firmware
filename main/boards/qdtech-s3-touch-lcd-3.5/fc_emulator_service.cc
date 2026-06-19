@@ -225,6 +225,7 @@ void FcEmulatorService::SetActive(bool active) {
     if (previous != active) {
         ESP_LOGI(TAG, "fc page %s", active ? "active" : "inactive");
         if (active) {
+            Application::GetInstance().SetExternalAudioActive(true);
             EnsureTaskStarted();
             playing_.store(false);
             PublishMode(false);
@@ -241,6 +242,7 @@ void FcEmulatorService::SetActive(bool active) {
             scan_requested_.store(false);
             release_roms_requested_.store(true);
             PublishMode(false);
+            Application::GetInstance().SetExternalAudioActive(false);
         }
     }
 }
@@ -351,7 +353,7 @@ void FcEmulatorService::EnsureTaskStarted() {
     }
 
     constexpr uint32_t stack_size = 6144;
-    constexpr UBaseType_t task_priority = 5;
+    constexpr UBaseType_t task_priority = 1;
     ESP_LOGI(TAG, "fc task create free_internal=%u largest_internal=%u",
              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
              static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
@@ -713,7 +715,8 @@ void FcEmulatorService::RunNofrendoRom() {
     qd_nofrendo_set_frame_callback(NofrendoFrameThunk, this);
     qd_nofrendo_set_audio_callback(NofrendoAudioThunk, this);
     qd_nofrendo_set_controller(controller_state_.load());
-    Application::GetInstance().SetExternalAudioActive(true);
+    audio_frame_counter_ = 0;
+    last_audio_log_us_ = 0;
     ESP_LOGI(TAG, "nofrendo run rom=%s free_internal=%u largest_internal=%u",
              SelectedName().c_str(),
              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
@@ -721,10 +724,10 @@ void FcEmulatorService::RunNofrendoRom() {
     const int result = qd_nofrendo_run(roms_[selected_index_].c_str());
     qd_nofrendo_set_frame_callback(nullptr, nullptr);
     qd_nofrendo_set_audio_callback(nullptr, nullptr);
-    Application::GetInstance().SetExternalAudioActive(false);
     controller_state_.store(0);
     controller_release_tick_.store(0);
     playing_.store(false);
+    audio_output_buffer_.clear();
 
     ESP_LOGI(TAG, "nofrendo finished result=%d", result);
     PublishMode(false);
@@ -1011,22 +1014,22 @@ void FcEmulatorService::WriteNofrendoAudio(const int16_t* samples, int sample_co
     }
 
     const int out_rate = codec->output_sample_rate();
-    std::vector<int16_t> output;
     if (sample_rate == out_rate) {
-        output.assign(samples, samples + sample_count);
+        audio_output_buffer_.resize(sample_count);
+        std::copy(samples, samples + sample_count, audio_output_buffer_.begin());
     } else {
         const int out_count = std::max(1, sample_count * out_rate / sample_rate);
-        output.resize(out_count);
+        audio_output_buffer_.resize(out_count);
         for (int i = 0; i < out_count; ++i) {
             const int64_t src_pos_q16 = static_cast<int64_t>(i) * sample_rate * 65536 / out_rate;
             const int src_index = static_cast<int>(src_pos_q16 >> 16);
             const int frac = static_cast<int>(src_pos_q16 & 0xffff);
             if (src_index >= sample_count - 1) {
-                output[i] = samples[sample_count - 1];
+                audio_output_buffer_[i] = samples[sample_count - 1];
             } else {
                 const int a = samples[src_index];
                 const int b = samples[src_index + 1];
-                output[i] = clamp16((a * (65536 - frac) + b * frac) >> 16);
+                audio_output_buffer_[i] = clamp16((a * (65536 - frac) + b * frac) >> 16);
             }
         }
     }
@@ -1034,7 +1037,22 @@ void FcEmulatorService::WriteNofrendoAudio(const int16_t* samples, int sample_co
     if (!codec->output_enabled()) {
         codec->EnableOutput(true);
     }
-    codec->OutputData(output);
+    codec->OutputData(audio_output_buffer_);
+
+    ++audio_frame_counter_;
+    const int64_t now = esp_timer_get_time();
+    if (last_audio_log_us_ == 0) {
+        last_audio_log_us_ = now;
+    } else if (now - last_audio_log_us_ >= 2000000) {
+        ESP_LOGI(TAG, "fc audio frames=%lu samples=%u rate=%d->%d free_internal=%u largest_internal=%u",
+                 static_cast<unsigned long>(audio_frame_counter_),
+                 static_cast<unsigned>(audio_output_buffer_.size()),
+                 sample_rate, out_rate,
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        audio_frame_counter_ = 0;
+        last_audio_log_us_ = now;
+    }
 }
 
 std::string FcEmulatorService::RomDisplayName(const std::string& path, size_t max_chars) const {

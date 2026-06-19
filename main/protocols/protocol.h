@@ -62,6 +62,7 @@ public:
     void OnNetworkError(std::function<void(const std::string& message)> callback);
 
     virtual bool Start() = 0;
+    virtual void Stop() = 0;
     virtual bool OpenAudioChannel() = 0;
     virtual void CloseAudioChannel() = 0;
     virtual bool IsAudioChannelOpened() const = 0;
@@ -93,4 +94,3 @@ protected:
 };
 
 #endif // PROTOCOL_H
-

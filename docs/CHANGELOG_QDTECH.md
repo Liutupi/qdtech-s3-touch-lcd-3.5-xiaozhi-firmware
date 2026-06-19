@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-19: v1.7.19 FC Playability Stabilization
+
+Scope:
+
+- Bumped firmware version to `1.7.19` so the on-device GitHub Release updater can see this FC stability build as newer than `1.7.18`.
+- Kept the Nofrendo APU audio output added in `v1.7.18`, but reduced FC runtime contention with XiaoZhi background networking.
+- FC task priority remains lowered to `1`.
+- FC audio output now reuses a service-owned resample buffer and logs low-rate audio/internal-SRAM diagnostics instead of allocating a temporary vector every audio tick.
+- Entering the FC page marks external audio active and suspends the XiaoZhi protocol. Remaining on the FC page after pressing LIST keeps the protocol suspended so selecting another ROM is not competing with MQTT reconnects. Leaving the FC page resumes the protocol.
+- OTA retry alerts/sounds and weather HTTP fetches are suppressed while external audio/FC mode is active.
+- Nofrendo SRAM keeps the conservative 16 KB padded allocation and safe nulling on free. The attempted 64 KB SRAM / 32 KB VRAM static PSRAM reuse experiment was explicitly reverted because hardware testing showed worse "freezes soon after entering gameplay".
+
+Verification:
+
+- Built and flashed successfully from `/private/tmp/qdtech_s3_build_src` to `/dev/cu.usbmodem212401` at 921600 baud.
+- Final `v1.7.19` build reported `xiaozhi.bin` size `0x3cf380`, smallest app partition `0x600000`, free `0x230c80`.
+- Monitor logs confirmed `App version: 1.7.19` and `Ota: Current version: 1.7.19`.
+- Reverted "play immediately freezes" PSRAM static-buffer experiment before this release candidate.
+- Monitor logs after the final flash showed normal QDTech boot, WiFi, weather, MQTT, apps navigation, FC page activation, protocol suspension, SD mount, `/sdcard/FC` scan, and `fc scan found 192 nes files`.
+- Entering FC after MQTT connected raised internal SRAM from about `7 KB` to about `15 KB` after protocol suspension.
+- Known remaining FC issue: pressing LIST/Stop after gameplay can still expose Nofrendo heap corruption on some ROMs. A previous crash was captured in `rom_free()` while freeing SRAM after gameplay. Do not reintroduce the PSRAM static SRAM/VRAM experiment; it made gameplay less stable.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`: `da477d4d9c7b9ce98aa5f88f9a61b26d4c31b5cff79704aae4bd183435530e0c`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`: `bcc5bf4d01dfe1bce56e0f335b5b9cfc200e6729f086ecd4cb3a6f33fecea4b6`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`: `0aade4d670afa8e6651dd94469c6550492bf3409cb8f8374a1821bc502519720`
 
 ## 2026-06-19: v1.7.18 FC Emulator Audio Output
 

@@ -57,6 +57,9 @@ private:
     Frame frames_[2];
     uint8_t frame_slot_ = 0;
     int64_t last_frame_publish_us_ = 0;
+    std::vector<int16_t> audio_output_buffer_;
+    uint32_t audio_frame_counter_ = 0;
+    int64_t last_audio_log_us_ = 0;
 
     NesBus nes_bus_;
     bool nes_initialized_ = false;

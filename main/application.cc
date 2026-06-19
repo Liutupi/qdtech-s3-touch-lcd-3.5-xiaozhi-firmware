@@ -106,6 +106,10 @@ void Application::CheckNewVersion(Ota& ota) {
     int retry_delay = 10; // 初始重试延迟为10秒
 
     while (true) {
+        if (external_audio_active_.load(std::memory_order_relaxed)) {
+            ESP_LOGW(TAG, "Skip version check retry while external audio is active");
+            return;
+        }
         SetDeviceState(kDeviceStateActivating);
         auto display = Board::GetInstance().GetDisplay();
         display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
@@ -117,6 +121,10 @@ void Application::CheckNewVersion(Ota& ota) {
                 return;
             }
 
+            if (external_audio_active_.load(std::memory_order_relaxed)) {
+                ESP_LOGW(TAG, "Suppress version check alert while external audio is active");
+                return;
+            }
             char buffer[128];
             snprintf(buffer, sizeof(buffer), Lang::Strings::CHECK_NEW_VERSION_FAILED, retry_delay, ota.GetCheckVersionUrl().c_str());
             Alert(Lang::Strings::ERROR, buffer, "sad", Lang::Sounds::P3_EXCLAMATION);
@@ -124,6 +132,10 @@ void Application::CheckNewVersion(Ota& ota) {
             ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", retry_delay, retry_count, MAX_RETRY);
             for (int i = 0; i < retry_delay; i++) {
                 vTaskDelay(pdMS_TO_TICKS(1000));
+                if (external_audio_active_.load(std::memory_order_relaxed)) {
+                    ESP_LOGW(TAG, "Cancel version check retry while external audio is active");
+                    return;
+                }
                 if (device_state_ == kDeviceStateIdle) {
                     break;
                 }
@@ -240,6 +252,10 @@ void Application::ShowActivationCode(const std::string& code, const std::string&
 
 void Application::Alert(const char* status, const char* message, const char* emotion, const std::string_view& sound) {
     ESP_LOGW(TAG, "Alert %s: %s [%s]", status, message, emotion);
+    if (external_audio_active_.load(std::memory_order_relaxed)) {
+        ESP_LOGW(TAG, "Suppress alert while external audio is active");
+        return;
+    }
     auto display = Board::GetInstance().GetDisplay();
     display->SetStatus(status);
     display->SetEmotion(emotion);
@@ -260,6 +276,11 @@ void Application::DismissAlert() {
 }
 
 void Application::PlaySound(const std::string_view& sound) {
+    if (external_audio_active_.load(std::memory_order_relaxed)) {
+        ESP_LOGW(TAG, "Suppress sound while external audio is active");
+        return;
+    }
+
     // Wait for the previous sound to finish
     {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -596,6 +617,15 @@ void Application::Start() {
             ESP_LOGW(TAG, "Unknown message type: %s", type->valuestring);
         }
     });
+    bool deferred_protocol_start = false;
+    while (external_audio_active_.load(std::memory_order_relaxed)) {
+        if (!deferred_protocol_start) {
+            ESP_LOGW(TAG, "Defer protocol start while external audio is active");
+            SetDeviceState(kDeviceStateIdle);
+            deferred_protocol_start = true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
     bool protocol_started = protocol_->Start();
 
     audio_debugger_ = std::make_unique<AudioDebugger>();
@@ -853,10 +883,32 @@ void Application::OnAudioOutput() {
 }
 
 void Application::SetExternalAudioActive(bool active) {
-    external_audio_active_.store(active, std::memory_order_relaxed);
+    const bool was_active = external_audio_active_.exchange(active, std::memory_order_relaxed);
     if (active) {
         std::lock_guard<std::mutex> lock(mutex_);
         last_output_time_ = std::chrono::steady_clock::now();
+    }
+    if (active && !was_active && protocol_) {
+        ESP_LOGW(TAG, "Suspend protocol while external audio is active");
+        protocol_->Stop();
+        protocol_suspended_for_external_audio_.store(true, std::memory_order_relaxed);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            audio_decode_queue_.clear();
+            audio_send_queue_.clear();
+        }
+        audio_decode_cv_.notify_all();
+    } else if (!active && was_active &&
+               protocol_suspended_for_external_audio_.exchange(false, std::memory_order_relaxed) &&
+               protocol_ && background_task_) {
+        background_task_->Schedule([this]() {
+            if (external_audio_active_.load(std::memory_order_relaxed)) {
+                protocol_suspended_for_external_audio_.store(true, std::memory_order_relaxed);
+                return;
+            }
+            ESP_LOGW(TAG, "Resume protocol after external audio stopped");
+            protocol_->Start();
+        });
     }
 }
 

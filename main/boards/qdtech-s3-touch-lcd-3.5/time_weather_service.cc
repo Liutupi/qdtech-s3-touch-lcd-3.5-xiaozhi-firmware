@@ -578,6 +578,11 @@ static esp_err_t HttpEventHandler(esp_http_client_event_t* evt) {
 }
 
 bool TimeWeatherService::FetchWeather() {
+    if (Application::GetInstance().IsExternalAudioActive()) {
+        ESP_LOGW(TAG, "Skip weather fetch while external audio is active");
+        return false;
+    }
+
     WeatherLocation location = {};
     LoadWeatherLocation(&location);
     

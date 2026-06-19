@@ -28,6 +28,13 @@ bool WebsocketProtocol::Start() {
     return true;
 }
 
+void WebsocketProtocol::Stop() {
+    CloseAudioChannel();
+    session_id_.clear();
+    error_occurred_ = false;
+    xEventGroupClearBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT);
+}
+
 bool WebsocketProtocol::SendAudio(const AudioStreamPacket& packet) {
     if (websocket_ == nullptr) {
         return false;

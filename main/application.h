@@ -110,6 +110,7 @@ private:
     bool voice_detected_ = false;
     bool busy_decoding_audio_ = false;
     std::atomic<bool> external_audio_active_{false};
+    std::atomic<bool> protocol_suspended_for_external_audio_{false};
     int clock_ticks_ = 0;
     TaskHandle_t check_new_version_task_handle_ = nullptr;
 
