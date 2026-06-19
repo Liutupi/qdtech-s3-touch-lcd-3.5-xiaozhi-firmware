@@ -16,6 +16,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.15 (2026-06-19): Calendar visual redesign, larger calendar controls, and secondary-page brand polish
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 - v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
+- v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
 
 ## Confirmed Hardware From Source
 

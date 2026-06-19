@@ -243,7 +243,23 @@ Important 2026-06-05 stability finding:
   - Weather API timeout reduced from 20s to 10s.
   - Weather retry attempts reduced from 3 to 2.
 
-## Latest Runtime Notes: 2026-06-19 v1.7.17 Daily Card Lunar Festival Support
+## Latest Runtime Notes: 2026-06-19 v1.7.18 FC Emulator Audio Output
+
+- Latest release target is `v1.7.18`.
+- Root cause of FC/NES silence: Nofrendo registered `nes.apu->process` through `osd_setsound()`, but the QDTech `qdtech_osd.c` implementation discarded the callback, so the emulator never generated or emitted PCM to the board codec.
+- `components/nofrendo/qdtech_osd.c` now stores the sound callback, generates 22050 Hz mono PCM on each 60 Hz emulator input/video tick, and forwards samples through a QDTech audio callback.
+- `FcEmulatorService` now receives Nofrendo PCM, resamples it to the ES8311 output rate when needed, enables codec output, and writes via the same `AudioCodec::OutputData()` path used by other board audio features.
+- `RunNofrendoRom()` marks external audio active while the emulator is running so XiaoZhi's normal audio loop does not disable output underneath FC gameplay.
+- Final `v1.7.18` local build passed from the Windows checkout: `xiaozhi.bin` `0x3cdf20`, smallest app partition `0x600000`, free `0x2320e0`.
+- Final `v1.7.18` build was flashed to `COM13`.
+- Post-flash logs confirmed `App version: 1.7.18`, `Ota: Current version: 1.7.18`, QDTech boot, WiFi/MQTT, SNTP/weather, FC service registration, FC page activation, SD mount, `/sdcard/FC` selection, and `fc scan found 192 nes files`.
+- The serial monitor session did not capture a ROM actually starting, so the remaining hardware confirmation is to start any ROM and check for `NofrendoQD: audio frames=...` plus audible output.
+- Release assets:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-app.bin`, SHA256 `f63c8383a2bbccaa0fbb852b1723329d7d390cee361ca3baa71e4515d021955e`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-firmware.zip`, SHA256 `aad007cfb27cafac979e542e5a98a60bd46a4ef7d7aff160e6c73d7f260fe404`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-full.bin`, SHA256 `2f447b012b14390adc85b6b9e75611eff55553417720646ab3c1e956cb0f1b75`.
+
+## Previous Runtime Notes: 2026-06-19 v1.7.17 Daily Card Lunar Festival Support
 
 - Latest release target is `v1.7.17`.
 - Main-page daily card now treats lunar festivals as first-class festival matches before history-on-this-day and daily quote fallback.

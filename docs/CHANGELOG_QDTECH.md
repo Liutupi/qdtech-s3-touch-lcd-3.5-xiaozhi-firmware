@@ -2,6 +2,31 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+
+## 2026-06-19: v1.7.18 FC Emulator Audio Output
+
+Scope:
+
+- Bumped firmware version to `1.7.18`.
+- Fixed FC/NES in-game silence in the Nofrendo path. Root cause: `nes.c` registered the APU `process` function through `osd_setsound()`, but the QDTech OSD adapter discarded that callback, so no PCM ever reached the ES8311 codec.
+- Added a QDTech Nofrendo audio callback, stores the APU play function, generates 22050 Hz mono PCM once per 60 Hz emulator tick, and forwards it to `FcEmulatorService`.
+- Added FC-side PCM output through the existing board `AudioCodec` path, including linear resampling to the codec output rate and `Application::SetExternalAudioActive()` while Nofrendo is running.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3cdf20`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2320e0`, about 37%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot/FC logs confirmed `App version: 1.7.18`, `Ota: Current version: 1.7.18`, QDTech board startup, WiFi/MQTT, SNTP/weather, FC service registration, FC page activation, SDMMC mount, `/sdcard/FC` scan, and `fc scan found 192 nes files`.
+- Runtime log capture did not enter a ROM during the monitor window, so the final `NofrendoQD: audio frames=...` line still needs a quick physical ROM-start confirmation on the panel.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.18-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.18-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.18-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-app.bin`: `f63c8383a2bbccaa0fbb852b1723329d7d390cee361ca3baa71e4515d021955e`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-firmware.zip`: `aad007cfb27cafac979e542e5a98a60bd46a4ef7d7aff160e6c73d7f260fe404`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.18-full.bin`: `2f447b012b14390adc85b6b9e75611eff55553417720646ab3c1e956cb0f1b75`
+
 ## 2026-06-19: v1.7.17 Daily Card Lunar Festival Support
 
 Scope:

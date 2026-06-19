@@ -66,6 +66,7 @@ private:
 
     static void TaskWrapper(void* arg);
     static int NofrendoFrameThunk(const uint16_t* pixels, uint16_t width, uint16_t height, void* user);
+    static void NofrendoAudioThunk(const int16_t* samples, int sample_count, int sample_rate, void* user);
     void EnsureTaskStarted();
     void TaskLoop();
     bool MountSdCard();
@@ -86,6 +87,7 @@ private:
     bool PublishFrame(Frame& frame);
     bool PublishLvglFrame(const lv_img_dsc_t* frame);
     bool PublishDirectFrame(const uint16_t* pixels, uint16_t width, uint16_t height);
+    void WriteNofrendoAudio(const int16_t* samples, int sample_count, int sample_rate);
     std::string RomDisplayName(const std::string& path, size_t max_chars = 22) const;
     std::string SelectedName() const;
     std::string BuildRomList() const;

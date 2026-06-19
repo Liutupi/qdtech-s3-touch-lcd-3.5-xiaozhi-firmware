@@ -22,9 +22,18 @@
 #include <nesinput.h>
 
 #define TAG "NofrendoQD"
+#define QD_AUDIO_SAMPLE_RATE 22050
+#define QD_AUDIO_REFRESH_RATE 60
+#define QD_AUDIO_SAMPLES_PER_TICK (QD_AUDIO_SAMPLE_RATE / QD_AUDIO_REFRESH_RATE)
 
 static qd_nofrendo_frame_cb_t s_frame_cb;
 static void* s_frame_user;
+static qd_nofrendo_audio_cb_t s_audio_cb;
+static void* s_audio_user;
+static void (*s_sound_playfunc)(void* buffer, int length);
+static int16_t s_audio_buffer[QD_AUDIO_SAMPLES_PER_TICK];
+static uint32_t s_audio_frames;
+static int64_t s_audio_last_log_us;
 static volatile uint8_t s_controller;
 static volatile bool s_stop_requested;
 static uint16_t s_palette[256];
@@ -46,6 +55,11 @@ static void qd_tick_timer_cb(void* arg) {
 void qd_nofrendo_set_frame_callback(qd_nofrendo_frame_cb_t callback, void* user) {
     s_frame_cb = callback;
     s_frame_user = user;
+}
+
+void qd_nofrendo_set_audio_callback(qd_nofrendo_audio_cb_t callback, void* user) {
+    s_audio_cb = callback;
+    s_audio_user = user;
 }
 
 void qd_nofrendo_set_controller(uint8_t controller) {
@@ -254,6 +268,26 @@ static void qd_video_custom_blit(bitmap_t* bmp, int num_dirties, rect_t* dirty_r
     s_frame_cb(s_rgb_frame, (uint16_t)bmp->width, (uint16_t)bmp->height, s_frame_user);
 }
 
+static void qd_audio_tick(void) {
+    if (!s_sound_playfunc || !s_audio_cb || s_stop_requested) {
+        return;
+    }
+
+    s_sound_playfunc(s_audio_buffer, QD_AUDIO_SAMPLES_PER_TICK);
+    s_audio_cb(s_audio_buffer, QD_AUDIO_SAMPLES_PER_TICK, QD_AUDIO_SAMPLE_RATE, s_audio_user);
+
+    ++s_audio_frames;
+    const int64_t now = esp_timer_get_time();
+    if (s_audio_last_log_us == 0) {
+        s_audio_last_log_us = now;
+    } else if (now - s_audio_last_log_us >= 2000000) {
+        ESP_LOGI(TAG, "audio frames=%lu samples=%d rate=%d",
+                 (unsigned long)s_audio_frames, QD_AUDIO_SAMPLES_PER_TICK, QD_AUDIO_SAMPLE_RATE);
+        s_audio_frames = 0;
+        s_audio_last_log_us = now;
+    }
+}
+
 static viddriver_t qd_video_driver = {
     "QDTech direct RGB565",
     qd_video_init,
@@ -293,11 +327,13 @@ int osd_installtimer(int frequency, void* func, int funcsize, void* counter, int
 }
 
 void osd_setsound(void (*playfunc)(void* buffer, int length)) {
-    (void)playfunc;
+    s_sound_playfunc = playfunc;
+    s_audio_frames = 0;
+    s_audio_last_log_us = 0;
 }
 
 void osd_getsoundinfo(sndinfo_t* info) {
-    info->sample_rate = 22050;
+    info->sample_rate = QD_AUDIO_SAMPLE_RATE;
     info->bps = 16;
 }
 
@@ -329,6 +365,8 @@ void osd_getinput(void) {
         main_quit();
         return;
     }
+
+    qd_audio_tick();
 
     const uint8_t controller = s_controller;
     const uint8_t changed = (uint8_t)(controller ^ old_controller);
@@ -386,6 +424,7 @@ int osd_makesnapname(char* filename, int len) {
 }
 
 void osd_shutdown(void) {
+    s_sound_playfunc = NULL;
     if (s_tick_timer) {
         esp_timer_stop(s_tick_timer);
         esp_timer_delete(s_tick_timer);

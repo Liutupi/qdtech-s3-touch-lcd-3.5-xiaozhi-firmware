@@ -1,5 +1,8 @@
 #include "fc_emulator_service.h"
 
+#include "application.h"
+#include "audio_codecs/audio_codec.h"
+#include "boards/common/board.h"
 #include "config.h"
 #include "qdtech_nofrendo.h"
 
@@ -12,6 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 #include <driver/gpio.h>
 #include <driver/sdmmc_host.h>
@@ -156,6 +160,12 @@ std::string rom_alias_key(const std::string& path_or_name) {
 
 uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
     return static_cast<uint16_t>(((r & 0xf8) << 8) | ((g & 0xfc) << 3) | (b >> 3));
+}
+
+int16_t clamp16(int value) {
+    if (value > 32767) return 32767;
+    if (value < -32768) return -32768;
+    return static_cast<int16_t>(value);
 }
 
 bool is_supported_nofrendo_mapper(uint8_t mapper) {
@@ -374,6 +384,13 @@ void FcEmulatorService::TaskWrapper(void* arg) {
 int FcEmulatorService::NofrendoFrameThunk(const uint16_t* pixels, uint16_t width, uint16_t height, void* user) {
     auto* self = static_cast<FcEmulatorService*>(user);
     return self && self->PublishDirectFrame(pixels, width, height) ? 1 : 0;
+}
+
+void FcEmulatorService::NofrendoAudioThunk(const int16_t* samples, int sample_count, int sample_rate, void* user) {
+    auto* self = static_cast<FcEmulatorService*>(user);
+    if (self) {
+        self->WriteNofrendoAudio(samples, sample_count, sample_rate);
+    }
 }
 
 void FcEmulatorService::TaskLoop() {
@@ -694,13 +711,17 @@ void FcEmulatorService::RunNofrendoRom() {
     }
 
     qd_nofrendo_set_frame_callback(NofrendoFrameThunk, this);
+    qd_nofrendo_set_audio_callback(NofrendoAudioThunk, this);
     qd_nofrendo_set_controller(controller_state_.load());
+    Application::GetInstance().SetExternalAudioActive(true);
     ESP_LOGI(TAG, "nofrendo run rom=%s free_internal=%u largest_internal=%u",
              SelectedName().c_str(),
              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
              static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
     const int result = qd_nofrendo_run(roms_[selected_index_].c_str());
     qd_nofrendo_set_frame_callback(nullptr, nullptr);
+    qd_nofrendo_set_audio_callback(nullptr, nullptr);
+    Application::GetInstance().SetExternalAudioActive(false);
     controller_state_.store(0);
     controller_release_tick_.store(0);
     playing_.store(false);
@@ -976,6 +997,44 @@ bool FcEmulatorService::PublishDirectFrame(const uint16_t* pixels, uint16_t widt
     }
 
     return direct_frame_cb_(pixels, width, height);
+}
+
+
+void FcEmulatorService::WriteNofrendoAudio(const int16_t* samples, int sample_count, int sample_rate) {
+    if (!playing_.load() || !samples || sample_count <= 0 || sample_rate <= 0) {
+        return;
+    }
+
+    AudioCodec* codec = Board::GetInstance().GetAudioCodec();
+    if (!codec) {
+        return;
+    }
+
+    const int out_rate = codec->output_sample_rate();
+    std::vector<int16_t> output;
+    if (sample_rate == out_rate) {
+        output.assign(samples, samples + sample_count);
+    } else {
+        const int out_count = std::max(1, sample_count * out_rate / sample_rate);
+        output.resize(out_count);
+        for (int i = 0; i < out_count; ++i) {
+            const int64_t src_pos_q16 = static_cast<int64_t>(i) * sample_rate * 65536 / out_rate;
+            const int src_index = static_cast<int>(src_pos_q16 >> 16);
+            const int frac = static_cast<int>(src_pos_q16 & 0xffff);
+            if (src_index >= sample_count - 1) {
+                output[i] = samples[sample_count - 1];
+            } else {
+                const int a = samples[src_index];
+                const int b = samples[src_index + 1];
+                output[i] = clamp16((a * (65536 - frac) + b * frac) >> 16);
+            }
+        }
+    }
+
+    if (!codec->output_enabled()) {
+        codec->EnableOutput(true);
+    }
+    codec->OutputData(output);
 }
 
 std::string FcEmulatorService::RomDisplayName(const std::string& path, size_t max_chars) const {
