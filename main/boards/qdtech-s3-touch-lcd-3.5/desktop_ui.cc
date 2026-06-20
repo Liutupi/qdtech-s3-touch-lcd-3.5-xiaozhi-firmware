@@ -5,6 +5,7 @@
 #include "boards/common/board.h"
 #include "firmware_update_service.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -2314,8 +2315,15 @@ void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
         }
     }
 
-    lv_obj_t* battery = label_en(parent, "80%", &style_green);
+    lv_obj_t* battery = label_en(parent, "--%", &style_green);
     lv_obj_align(battery, LV_ALIGN_TOP_RIGHT, -20, 12);
+    for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+        if (!status_bar_battery_labels_[i]) {
+            status_bar_battery_labels_[i] = battery;
+            break;
+        }
+    }
+    SetBatteryStatus(battery_level_, battery_charging_, battery_level_ >= 0);
 }
 
 void DesktopUI::AdjustCalendarMonth(int delta) {
@@ -3052,6 +3060,35 @@ void DesktopUI::SetNetworkStatus(const char* status) {
     }
 }
 
+void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
+    battery_level_ = valid ? std::max(0, std::min(100, level)) : -1;
+    battery_charging_ = charging;
+
+    char text[12];
+    if (battery_level_ < 0) {
+        snprintf(text, sizeof(text), "--%%");
+    } else if (charging) {
+        snprintf(text, sizeof(text), "%d%%+", battery_level_);
+    } else {
+        snprintf(text, sizeof(text), "%d%%", battery_level_);
+    }
+
+    lv_color_t color = COLOR_GREEN;
+    if (battery_level_ < 0) {
+        color = COLOR_MUTED;
+    } else if (battery_level_ <= 20) {
+        color = lv_color_make(0xff, 0x88, 0x68);
+    } else if (battery_level_ <= 40) {
+        color = COLOR_GOLD;
+    }
+
+    for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+        if (status_bar_battery_labels_[i]) {
+            lv_label_set_text(status_bar_battery_labels_[i], text);
+            lv_obj_set_style_text_color(status_bar_battery_labels_[i], color, 0);
+        }
+    }
+}
 void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress) {
     (void)progress;
     if (settings_firmware_status_label_ && status) {

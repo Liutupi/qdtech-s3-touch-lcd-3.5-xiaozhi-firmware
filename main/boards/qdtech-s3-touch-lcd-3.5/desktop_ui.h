@@ -36,6 +36,7 @@ public:
     void SetDailyQuote(const char* quote);
     void SetDailyCard(const char* date, const char* title, const char* body);
     void SetNetworkStatus(const char* status);
+    void SetBatteryStatus(int level, bool charging, bool valid);
     void SetDefaultNetwork(size_t index);
     void SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress);
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
@@ -115,6 +116,9 @@ private:
     lv_obj_t* quote_label_ = nullptr;
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
+    lv_obj_t* status_bar_battery_labels_[6] = {};
+    int battery_level_ = -1;
+    bool battery_charging_ = false;
     lv_obj_t* calendar_app_status_label_ = nullptr;
     std::function<void()> main_page_callback_;
     int current_hour_ = -1;

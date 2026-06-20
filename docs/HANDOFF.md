@@ -72,6 +72,22 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
+## Latest Runtime Notes: 2026-06-20 v1.7.19 Battery Monitor And BOOT Soft Power
+
+- Latest release target is `v1.7.19`.
+- Live GitHub release check before this work showed the newest published release was `v1.7.17`; `main` already contained the pushed `v1.7.18` FC-audio commit, but `v1.7.18` had not been published as a GitHub Release.
+- Battery monitor is now QDTech-specific in `qdtech_s3_touch_lcd_3_5.cc`. It reads ADC1 channel 7 / GPIO8 with 12 dB attenuation and 12-bit width, uses ESP-IDF curve-fitting calibration when available, multiplies ADC millivolts by the board's x2 divider, maps the resulting Li-ion voltage to 0-100%, and publishes to `DesktopUI::SetBatteryStatus()`.
+- The desktop status bar no longer hardcodes `80%`; it starts as `--%` and updates to the sampled battery percentage. Hardware logs after flashing showed stable real readings around `4076-4082mV` and `89-90%` with calibration enabled.
+- `GetBatteryLevel()` now reports the QDTech monitor value through the common board API.
+- BOOT/GPIO0 long press now attempts soft power-off by dimming the backlight, entering deep sleep, and enabling GPIO0 low-level wake. A direct 50 ms GPIO0 polling path was added in addition to the button component callback.
+- BOOT soft-power caveat: this is firmware deep sleep, not true battery power cut. It depends on the board wiring BOOT to GPIO0 during runtime and GPIO0 being usable as the wake source. Two serial-monitor verification windows did not observe `BOOT press down` or `BOOT gpio down`, so deep-sleep entry/wake remains implemented but not hardware-confirmed on this physical unit.
+- Final `v1.7.19` build passed from the Windows checkout: `xiaozhi.bin` `0x3d29b0`, smallest app partition `0x600000`, free `0x22d650`.
+- Final `v1.7.19` build was flashed to `COM13`.
+- Post-flash logs confirmed `App version: 1.7.19`, `Ota: Current version: 1.7.19`, WiFi, idle state, and repeated real battery ADC readings.
+- Release assets prepared locally:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`, SHA256 `5a65a3ecf01e77d8c10b274d78d4e02fb81afc093a5d52245b9dc4c94182f434`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`, SHA256 `5a8c3abfcea5e88c90afcf42d5f3af1648b3023778a8bf12e64f68af45689473`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`, SHA256 `5406b5a0fe3f9b58966d82c1a3e38d02293d5cc4863bd39ab098eca1cd2259c9`.
 ## Current FC/NES Emulator Handoff
 
 Last worked on 2026-06-18 in this Windows workspace:

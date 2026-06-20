@@ -3,6 +3,35 @@
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
 
+
+## 2026-06-20: v1.7.19 Battery Monitor And BOOT Soft Power
+
+Scope:
+
+- Bumped firmware version to `1.7.19`.
+- Replaced the QDTech desktop status-bar fake `80%` battery text with live battery percentage updates.
+- Added QDTech battery ADC support using the vendor battery-voltage path: ADC1 channel 7 / GPIO8, 12 dB attenuation, 12-bit width, calibrated ADC millivolts multiplied by the board's x2 divider.
+- Added a `Board::GetBatteryLevel()` implementation backed by the QDTech battery monitor.
+- Added BOOT/GPIO0 long-press soft power behavior: long press enters ESP32-S3 deep sleep, configures GPIO0 as the wake source, and turns the backlight off first.
+- Added direct GPIO0 polling in addition to the existing button component callback so the soft-power path does not depend only on the button helper event layer.
+
+Verification:
+
+- Checked live GitHub Releases before this work: latest published release was still `v1.7.17`; local `main` already had the pushed `v1.7.18` FC-audio commit but no GitHub Release.
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d29b0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d650`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.19`, `Ota: Current version: 1.7.19`, WiFi connection, and `Application: STATE: idle`.
+- Battery logs confirmed real ADC sampling on hardware: examples included `battery adc raw=2460 adc_mv=2041 battery_mv=4082 level=90% gpio=8 cal=1` and later stable `4076-4082mV / 90%` readings.
+- BOOT soft-power code is compiled and flashed, but two 90-second serial-monitor windows did not capture `BOOT press down` or `BOOT gpio down`; either the physical BOOT key was not pressed during the window, the pressed key is not wired to GPIO0, or this board exposes BOOT differently from the expected GPIO0 path. Treat deep-sleep entry/wake as implemented but not hardware-confirmed until a GPIO0 edge is observed.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`: `5a65a3ecf01e77d8c10b274d78d4e02fb81afc093a5d52245b9dc4c94182f434`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`: `5a8c3abfcea5e88c90afcf42d5f3af1648b3023778a8bf12e64f68af45689473`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`: `5406b5a0fe3f9b58966d82c1a3e38d02293d5cc4863bd39ab098eca1cd2259c9`
+
 ## 2026-06-19: v1.7.18 FC Emulator Audio Output
 
 Scope:

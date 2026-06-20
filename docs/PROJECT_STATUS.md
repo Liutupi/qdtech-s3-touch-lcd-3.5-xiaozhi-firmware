@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-19
+Date: 2026-06-20
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -17,6 +17,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 - v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
 - v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
+- v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus BOOT/GPIO0 deep-sleep soft-power implementation
 
 ## Confirmed Hardware From Source
 
@@ -42,7 +43,7 @@ From `main/boards/qdtech-s3-touch-lcd-3.5/config.h`:
 - Audio I2S: MCLK GPIO17, BCLK GPIO18, WS GPIO21, DOUT GPIO15, DIN GPIO16.
 - Audio and touch I2C: SDA GPIO38, SCL GPIO39.
 - PA pin: GPIO1, inverted enable.
-- Boot button: GPIO0.
+- Boot button: GPIO0.`r`n- Battery voltage ADC: ADC1_CH7 / GPIO8 with x2 divider, calibrated in firmware when available.
 
 Anything not confirmed by source should be treated as unknown until checked against hardware schematics.
 
