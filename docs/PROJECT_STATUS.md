@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-20
+Date: 2026-06-21
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -20,6 +20,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus first BOOT/GPIO0 deep-sleep soft-power implementation
 - v1.7.20 (2026-06-20): BOOT soft-power waits for key release before deep sleep so the same long press does not immediately wake the board
 - v1.7.21 (2026-06-20): BOOT startup clicks no longer clear saved WiFi after wake
+- v1.7.22 (2026-06-21): GitHub OTA download/write path tolerates missing content length and short first TLS chunks
 
 ## Confirmed Hardware From Source
 

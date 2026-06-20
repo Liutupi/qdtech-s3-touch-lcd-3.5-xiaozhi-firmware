@@ -2,9 +2,29 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-21: v1.7.22 More Robust GitHub OTA Download
 
+Scope:
 
+- Bumped firmware version to `1.7.22`.
+- Hardened the shared OTA download/write path used by the QDTech Settings firmware updater.
+- GitHub firmware downloads can now continue when the final asset response has no usable `Content-Length`; progress falls back to byte-count logging instead of failing immediately.
+- The OTA writer now waits until enough image header bytes have been received before calling `esp_ota_begin()` and writing data, avoiding failures when the first TLS/HTTP read returns a short chunk.
+- Added explicit partition-size checking and clearer OTA begin/header-write error logs.
 
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2f40`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d0c0`, about 36%.
+- Flashed successfully to the newly connected board on `COM14` at 921600 baud.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.22-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.22-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.22-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-app.bin`: `6a700d79478094792ce175542a02a9e1520e69cf161db656dfb3980e6e12e4a6`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-firmware.zip`: `413c7a89172c634869d03fa61f606def0af32201ed166b1de0a09533cbbfc635`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-full.bin`: `857ad9ab97c059d7afdbfee3a6d0785826be876ce685b6c390598d5cf400b859`
+- Follow-up: verify a real older-board Settings -> Firmware -> Update path. If a board running the older updater still cannot cross-upgrade from GitHub, flash `v1.7.22-full.bin` once over USB and use `v1.7.22+` as the stable OTA baseline.
 
 ## 2026-06-20: v1.7.21 Preserve WiFi After BOOT Wake
 

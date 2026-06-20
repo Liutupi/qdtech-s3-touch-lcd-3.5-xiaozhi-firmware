@@ -72,7 +72,20 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-20 v1.7.21 Preserve WiFi After BOOT Wake
+## Latest Runtime Notes: 2026-06-21 v1.7.22 More Robust GitHub OTA Download
+
+- Latest release target is `v1.7.22`.
+- User reported a freshly flashed board can detect the newest GitHub firmware in the Settings OTA row, but pressing `Update` repeatedly fails.
+- Root-cause candidate from code review: the old OTA writer required a positive `Content-Length` and could write before `esp_ota_begin()` if the first HTTP/TLS read returned less than the ESP image header size. Both are plausible with GitHub release-asset redirects and small TLS chunks.
+- `v1.7.22` hardens `Ota::Upgrade()` so unknown content length continues with byte-count progress, app size is checked against the target OTA partition when length is known, the image header is accumulated before beginning OTA, and clearer OTA begin/header-write errors are logged.
+- Final `v1.7.22` build passed from the Windows checkout: `xiaozhi.bin` `0x3d2f40`, smallest app partition `0x600000`, free `0x22d0c0`.
+- Final `v1.7.22` build was flashed successfully to the newly connected board on `COM14` at 921600 baud. The serial port was present after flash but did not emit a captured boot log in the short post-flash monitor window.
+- Important compatibility note: boards already running the older updater still use that older updater to fetch `v1.7.22`. If an older board still cannot cross-upgrade from GitHub, install `v1.7.22-full.bin` once over USB; OTA from `v1.7.22` forward uses the hardened path.
+- Release assets prepared locally:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-app.bin`, SHA256 `6a700d79478094792ce175542a02a9e1520e69cf161db656dfb3980e6e12e4a6`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-firmware.zip`, SHA256 `413c7a89172c634869d03fa61f606def0af32201ed166b1de0a09533cbbfc635`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-full.bin`, SHA256 `857ad9ab97c059d7afdbfee3a6d0785826be876ce685b6c390598d5cf400b859`.
+## Previous Runtime Notes: 2026-06-20 v1.7.21 Preserve WiFi After BOOT Wake
 
 - Latest release target is `v1.7.21`.
 - User feedback after `v1.7.20`: BOOT could power the board off/on, but after BOOT wake the saved WiFi was not reused and the board entered the pairing/config flow again.
