@@ -24,6 +24,9 @@ Verification:
 - Boot logs confirmed `App version: 1.7.21`, direct reconnection to saved WiFi `liutupi`, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, and `Application: STATE: idle`.
 - No `ResetWifiConfiguration()`/配网 reset path appeared in the verified boot log.
 - BOOT deep-sleep cycle was not recaptured during this monitor window; the board stayed awake and continued battery logs. The key regression fix is the removal of the startup-click WiFi reset path.
+- Hardware follow-up confirmed from the local QDTech schematic: USB-C `VBUS/+5V` feeds a `TP4054` battery charge circuit for `JP1 BAT+`, so a connected single-cell 3.7V/4.2V Li-ion/LiPo pack should charge automatically from USB-C.
+- A larger 2800mAh pack is acceptable if it remains a protected single-cell 3.7V/4.2V Li-ion/LiPo battery and connector polarity matches the board; charge time will be longer.
+- The firmware reads real battery voltage through `IO8 / ADC1_CH7`, but no ESP32 GPIO mapping for the charger `CHRG` signal was found, so the UI does not yet show a hardware charger-state indicator.
 - Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`.
 - Release asset SHA256:
   - `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`: `91d227d0a8b3d1031d8362317e9237263d0edd971c8c3630589bddd6325c63d2`

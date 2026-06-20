@@ -82,6 +82,9 @@ Observed boot/runtime facts after flashing:
 - Final `v1.7.21` build was flashed to `COM13`.
 - Post-flash logs confirmed `App version: 1.7.21`, saved WiFi `liutupi` reconnect, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, idle state, and live battery readings. No WiFi reset/config path appeared.
 - BOOT deep-sleep cycle was not recaptured in the final monitor window; the board remained awake and continued battery logs. The WiFi regression fix is still valid because the startup reset path has been removed.
+- Battery hardware follow-up on 2026-06-20: local schematic `D:\3.5inch_ESP32-S3\5-_Schematic\ESP32-S3原理图.pdf` shows a USB-C powered battery charge/discharge circuit with `U2 TP4054`, `VBUS/+5V`, `JP1 BAT+`, and `CHRG`. USB-C should charge a connected single-cell Li-ion/LiPo battery automatically in hardware; firmware does not need to control charging.
+- Battery capacity note: replacing the current 1000mAh pack with a larger 2800mAh pack is acceptable if it is still a single-cell 3.7V nominal / 4.2V full Li-ion/LiPo battery, the connector polarity matches `BAT+`/`GND`, and the pack has protection. Larger capacity only extends runtime and increases charge time.
+- Firmware battery status caveat: the QDTech firmware reads battery voltage through `IO8 / ADC1_CH7` and maps voltage to percentage. The schematic's `CHRG` signal was not found on an ESP32 GPIO in the IO allocation table, so the UI currently reports real battery level but not a hardware-proven charging/charged state.
 - Release assets prepared locally:
   - `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`, SHA256 `91d227d0a8b3d1031d8362317e9237263d0edd971c8c3630589bddd6325c63d2`.
   - `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`, SHA256 `63f1ef9152ed390a5ef0a20a24a24c41da23cb53f611237282b3a8e3d71bff0a`.
