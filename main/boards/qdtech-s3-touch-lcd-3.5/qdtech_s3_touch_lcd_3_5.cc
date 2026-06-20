@@ -844,8 +844,9 @@ private:
         });
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting || app.GetDeviceState() == kDeviceStateWifiConfiguring) {
+                ESP_LOGI(TAG, "BOOT click ignored during startup/config to keep saved WiFi");
+                return;
             }
             app.ToggleChatState();
         });

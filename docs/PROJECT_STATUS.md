@@ -19,6 +19,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
 - v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus first BOOT/GPIO0 deep-sleep soft-power implementation
 - v1.7.20 (2026-06-20): BOOT soft-power waits for key release before deep sleep so the same long press does not immediately wake the board
+- v1.7.21 (2026-06-20): BOOT startup clicks no longer clear saved WiFi after wake
 
 ## Confirmed Hardware From Source
 

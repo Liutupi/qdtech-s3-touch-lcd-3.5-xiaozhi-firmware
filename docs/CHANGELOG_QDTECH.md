@@ -5,6 +5,31 @@ This changelog tracks QDTech-specific firmware maintenance. It is not a replacem
 
 
 
+
+## 2026-06-20: v1.7.21 Preserve WiFi After BOOT Wake
+
+Scope:
+
+- Bumped firmware version to `1.7.21`.
+- Fixed a BOOT-power regression from the new soft-power flow: the existing QDTech BOOT single-click handler could call `ResetWifiConfiguration()` while the app was still starting and WiFi had not reconnected yet.
+- Changed QDTech BOOT single-click handling so clicks during `starting` or `wifi configuring` are ignored and never clear saved WiFi credentials. Once the device is idle, BOOT can still toggle chat state.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2bd0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d430`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.21`, direct reconnection to saved WiFi `liutupi`, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, and `Application: STATE: idle`.
+- No `ResetWifiConfiguration()`/配网 reset path appeared in the verified boot log.
+- BOOT deep-sleep cycle was not recaptured during this monitor window; the board stayed awake and continued battery logs. The key regression fix is the removal of the startup-click WiFi reset path.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`: `91d227d0a8b3d1031d8362317e9237263d0edd971c8c3630589bddd6325c63d2`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`: `63f1ef9152ed390a5ef0a20a24a24c41da23cb53f611237282b3a8e3d71bff0a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`: `317a280aa1bc8916dc031203051dacc9f7c50461fd24042b5ceb7cf105a2f730`
+
 ## 2026-06-20: v1.7.20 BOOT Soft Power Release-Gated Sleep
 
 Scope:

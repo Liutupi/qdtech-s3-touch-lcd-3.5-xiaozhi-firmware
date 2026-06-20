@@ -72,7 +72,21 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-20 v1.7.20 BOOT Soft Power Release-Gated Sleep
+## Latest Runtime Notes: 2026-06-20 v1.7.21 Preserve WiFi After BOOT Wake
+
+- Latest release target is `v1.7.21`.
+- User feedback after `v1.7.20`: BOOT could power the board off/on, but after BOOT wake the saved WiFi was not reused and the board entered the pairing/config flow again.
+- Root cause: the QDTech BOOT single-click handler still contained the upstream startup shortcut: if device state was `starting` and WiFi was not connected yet, it called `ResetWifiConfiguration()`. A BOOT wake/release can arrive before WiFi reconnects, so it could clear credentials immediately after wake.
+- `v1.7.21` removes that reset path for QDTech. BOOT clicks during `starting` or `wifi configuring` are ignored with log `BOOT click ignored during startup/config to keep saved WiFi`; after normal idle state, BOOT still toggles chat state.
+- Final `v1.7.21` build passed from the Windows checkout: `xiaozhi.bin` `0x3d2bd0`, smallest app partition `0x600000`, free `0x22d430`.
+- Final `v1.7.21` build was flashed to `COM13`.
+- Post-flash logs confirmed `App version: 1.7.21`, saved WiFi `liutupi` reconnect, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, idle state, and live battery readings. No WiFi reset/config path appeared.
+- BOOT deep-sleep cycle was not recaptured in the final monitor window; the board remained awake and continued battery logs. The WiFi regression fix is still valid because the startup reset path has been removed.
+- Release assets prepared locally:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`, SHA256 `91d227d0a8b3d1031d8362317e9237263d0edd971c8c3630589bddd6325c63d2`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`, SHA256 `63f1ef9152ed390a5ef0a20a24a24c41da23cb53f611237282b3a8e3d71bff0a`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`, SHA256 `317a280aa1bc8916dc031203051dacc9f7c50461fd24042b5ceb7cf105a2f730`.
+## Previous Runtime Notes: 2026-06-20 v1.7.20 BOOT Soft Power Release-Gated Sleep
 
 - Latest release target is `v1.7.20`.
 - `v1.7.19` added the battery monitor and first BOOT deep-sleep path, but entering sleep while BOOT/GPIO0 was still held low could immediately trigger the low-level wake condition. User feedback confirmed long-press BOOT did not feel like power-off.
