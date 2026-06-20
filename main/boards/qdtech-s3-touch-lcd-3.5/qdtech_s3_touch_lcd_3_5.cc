@@ -868,6 +868,9 @@ private:
     }
 
     void PollBootPowerButton() {
+        if (entering_deep_sleep_) {
+            return;
+        }
         const bool pressed = gpio_get_level(BOOT_BUTTON_GPIO) == 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
         if (pressed && !boot_power_pressed_) {
@@ -886,9 +889,27 @@ private:
     }
 
     void EnterDeepSleep() {
-        ESP_LOGI(TAG, "BOOT long press: entering deep sleep, wake on GPIO%d low", BOOT_BUTTON_GPIO);
+        if (entering_deep_sleep_) {
+            return;
+        }
+        entering_deep_sleep_ = true;
+        ESP_LOGI(TAG, "BOOT long press: preparing deep sleep, release BOOT to power off");
+        if (boot_power_timer_) {
+            esp_timer_stop(boot_power_timer_);
+        }
         GetBacklight()->SetBrightness(0, false);
-        vTaskDelay(pdMS_TO_TICKS(150));
+
+        const int64_t wait_start_ms = esp_timer_get_time() / 1000;
+        while (gpio_get_level(BOOT_BUTTON_GPIO) == 0) {
+            if ((esp_timer_get_time() / 1000) - wait_start_ms > 10000) {
+                ESP_LOGW(TAG, "BOOT still held after 10s; entering deep sleep anyway may wake immediately");
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        ESP_LOGI(TAG, "BOOT released: entering deep sleep, wake on GPIO%d low", BOOT_BUTTON_GPIO);
         rtc_gpio_pullup_en(BOOT_BUTTON_GPIO);
         rtc_gpio_pulldown_dis(BOOT_BUTTON_GPIO);
         ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(BOOT_BUTTON_GPIO, 0));
@@ -1129,6 +1150,7 @@ private:
     esp_timer_handle_t boot_power_timer_ = nullptr;
     bool boot_power_pressed_ = false;
     bool boot_power_long_handled_ = false;
+    bool entering_deep_sleep_ = false;
     int64_t boot_power_press_start_ms_ = 0;
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;

@@ -7,7 +7,7 @@ This list is intentionally ordered. Future work should start at the top unless t
 Current state:
 
 - Firmware `v1.7.13` added the first real on-device update flow inside `SET / Settings / Firmware`.
-- Firmware `v1.7.19` is the current higher-version release target after that bootstrap. It includes real QDTech battery ADC reporting and BOOT/GPIO0 deep-sleep soft-power code, and publishes the required standalone `*-app.bin` asset.
+- Firmware `v1.7.20` is the current higher-version release target after that bootstrap. It includes real QDTech battery ADC reporting and the release-gated BOOT/GPIO0 deep-sleep soft-power fix, and publishes the required standalone `*-app.bin` asset.
 - The row has a `Check` / `Update` button with busy, latest, failed, no-WiFi, no-asset, and progress states.
 - The board checks GitHub Releases at `Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest`.
 - The updater compares release tags against `esp_app_get_description()->version`.
@@ -19,7 +19,8 @@ Current state:
 
 Next work:
 
-- Verify a full board-initiated OTA from `1.7.17` or older to `1.7.19`: check -> update -> download -> partition write -> reboot -> new version.`r`n- Verify BOOT physical-key wiring: watch for `BOOT gpio down`; if absent, identify the actual key GPIO or accept that GPIO0 BOOT is not available as a runtime power button on this board.
+- Verify a full board-initiated OTA from `1.7.17` or older to `1.7.20`: check -> update -> download -> partition write -> reboot -> new version.
+- Verify BOOT physical-key wiring: confirm the user-visible flow on battery only: long-press BOOT until the screen turns off, release, then press BOOT once to wake. Record whether USB-connected and battery-only behavior differ.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
 - Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.
 - Keep blocking OTA while FC gameplay, radio playback, or XiaoZhi listening/speaking is active.

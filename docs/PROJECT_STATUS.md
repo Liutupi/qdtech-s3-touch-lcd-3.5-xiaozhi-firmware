@@ -17,7 +17,8 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 - v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
 - v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
-- v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus BOOT/GPIO0 deep-sleep soft-power implementation
+- v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus first BOOT/GPIO0 deep-sleep soft-power implementation
+- v1.7.20 (2026-06-20): BOOT soft-power waits for key release before deep sleep so the same long press does not immediately wake the board
 
 ## Confirmed Hardware From Source
 

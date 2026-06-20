@@ -72,7 +72,21 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-20 v1.7.19 Battery Monitor And BOOT Soft Power
+## Latest Runtime Notes: 2026-06-20 v1.7.20 BOOT Soft Power Release-Gated Sleep
+
+- Latest release target is `v1.7.20`.
+- `v1.7.19` added the battery monitor and first BOOT deep-sleep path, but entering sleep while BOOT/GPIO0 was still held low could immediately trigger the low-level wake condition. User feedback confirmed long-press BOOT did not feel like power-off.
+- `v1.7.20` changes the soft-power sequence: long press turns off the backlight, stops the BOOT poll timer, waits until BOOT is released, waits another 250 ms, then enables GPIO0 low-level wake and enters deep sleep. This makes the same long press power off, while the next BOOT press wakes the board.
+- This is still firmware soft power/deep sleep, not physical battery rail cutoff. A real hard-off switch still needs power-latch/PMIC hardware.
+- Final `v1.7.20` build passed from the Windows checkout: `xiaozhi.bin` `0x3d2b70`, smallest app partition `0x600000`, free `0x22d490`.
+- Final `v1.7.20` build was flashed to `COM13`.
+- Post-flash logs confirmed `App version: 1.7.20`, `Ota: Current version: 1.7.20`, WiFi, idle state, and repeated real battery ADC readings around `4166-4174mV / 97%`.
+- BOOT long-press test behavior: serial monitor saw normal battery logs until the COM port closed/aborted, matching expected USB serial drop during deep sleep; after pressing BOOT again, COM13 reopened and printed a fresh `App version: 1.7.20` boot log.
+- Release assets prepared locally:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-app.bin`, SHA256 `fb80a2806dfaa11d9603e754dabecd0e7bd40c267237c6b9c25e77c61c44e4ec`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-firmware.zip`, SHA256 `62de97c20e442ac5b7646a544a5b42571bdb23904cbc1106d8b1abb4d8247707`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-full.bin`, SHA256 `1eb83bb34fa72f7113fb4078865396dc0ee112e07c1a83905e9aaf9cbab447d6`.
+## Previous Runtime Notes: 2026-06-20 v1.7.19 Battery Monitor And BOOT Soft Power
 
 - Latest release target is `v1.7.19`.
 - Live GitHub release check before this work showed the newest published release was `v1.7.17`; `main` already contained the pushed `v1.7.18` FC-audio commit, but `v1.7.18` had not been published as a GitHub Release.

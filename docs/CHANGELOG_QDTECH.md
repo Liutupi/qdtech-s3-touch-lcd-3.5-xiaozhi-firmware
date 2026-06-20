@@ -4,6 +4,32 @@ This changelog tracks QDTech-specific firmware maintenance. It is not a replacem
 
 
 
+
+## 2026-06-20: v1.7.20 BOOT Soft Power Release-Gated Sleep
+
+Scope:
+
+- Bumped firmware version to `1.7.20`.
+- Fixed the BOOT soft-power timing from `v1.7.19`: entering deep sleep while GPIO0 is still held low can immediately satisfy the wake condition, making the board look like it never powered off.
+- Changed `EnterDeepSleep()` to turn the backlight off, stop the BOOT polling timer, wait for the BOOT key to be released, debounce for 250 ms, and only then enable GPIO0 low-level wake and enter deep sleep.
+- Added an `entering_deep_sleep_` guard so the button callback and GPIO polling path cannot re-enter the sleep sequence.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2b70`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d490`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.20`, `Ota: Current version: 1.7.20`, WiFi, idle state, and live battery readings around `4166-4174mV / 97%`.
+- During BOOT long-press testing, the serial monitor aborted with the COM port closing after the board had been running normally, which matches the expected USB serial drop when the board enters deep sleep. Reopening COM13 after pressing BOOT again produced a fresh `App version: 1.7.20` boot log and normal battery readings.
+- This remains firmware soft power: it enters ESP32-S3 deep sleep rather than physically cutting the battery rail. True zero-power off still requires a power latch or PMIC.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.20-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.20-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.20-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-app.bin`: `fb80a2806dfaa11d9603e754dabecd0e7bd40c267237c6b9c25e77c61c44e4ec`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-firmware.zip`: `62de97c20e442ac5b7646a544a5b42571bdb23904cbc1106d8b1abb4d8247707`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-full.bin`: `1eb83bb34fa72f7113fb4078865396dc0ee112e07c1a83905e9aaf9cbab447d6`
+
 ## 2026-06-20: v1.7.19 Battery Monitor And BOOT Soft Power
 
 Scope:
