@@ -72,7 +72,30 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-21 v1.7.25 FC ROM Name Font Coverage Fix
+## Latest Runtime Notes: 2026-06-22 v1.7.26 GitHub OTA Redirect Buffer Fix
+
+- Latest release target is `v1.7.26`.
+- User reported another Settings OTA update failure on a newly inserted board. Serial capture on `COM13` showed the exact failure:
+  - user pressed the Settings OTA button
+  - `FirmwareUpdate: firmware task create action=1`
+  - `Ota: Upgrading firmware from https://github.com/Liutupi/.../qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`
+  - GitHub returned `302` to a long signed `release-assets.githubusercontent.com` URL
+  - `HTTP_CLIENT: Out of buffer`
+  - `Ota: Failed to open firmware HTTP connection: ESP_FAIL`
+- Root cause: the OTA firmware-download HTTP client used 1024-byte RX/TX buffers, too small for GitHub's long signed release-asset redirect URL/request line.
+- Fix: `main/ota.cc` now uses a 2048-byte RX and TX buffer for firmware downloads and logs only redirect status plus Location length, not the full signed URL.
+- Build verification passed:
+  - `xiaozhi.bin` size: `0x3d6a10`.
+  - Smallest app partition: `0x600000`.
+  - Free app partition space: `0x2295f0`, about 36%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`: `1b2b33dc5cef448fbe8d2142f9f5151e9145c3a25f797c7d765aee1ae192a36e`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`: `51a426a752542126916f512d5a960c9b40e66ebce12a43af58fd267e8a6698df`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`: `276c0f80e0c30f06db08a546d9a811e539d129e8e852e23663b62d0e6df42fbf`
+- Follow-up: after publishing `v1.7.26`, run a real Settings OTA from a board still on `v1.7.25` and confirm it progresses past the GitHub redirect.
+
+## Previous Runtime Notes: 2026-06-21 v1.7.25 FC ROM Name Font Coverage Fix
 
 - Latest release target is `v1.7.25`.
 - FC/NES ROM list and selected-game detail labels were restored to `font_puhui_16_4` after user feedback that game names became garbled/missing-glyph-heavy after the shared LXGW WenKai UI font pass.

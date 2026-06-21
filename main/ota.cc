@@ -25,6 +25,8 @@
 
 #define TAG "Ota"
 
+static constexpr int kFirmwareHttpBufferSize = 2048;
+
 struct FirmwareHttpHeaders {
     std::string location;
 };
@@ -59,7 +61,8 @@ static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url
         config.timeout_ms = 30000;
         config.event_handler = FirmwareHttpEventHandler;
         config.user_data = &headers;
-        config.buffer_size = 1024;
+        config.buffer_size = kFirmwareHttpBufferSize;
+        config.buffer_size_tx = kFirmwareHttpBufferSize;
 
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (!client) {
@@ -89,7 +92,8 @@ static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url
                 ESP_LOGE(TAG, "Firmware redirect missing Location header");
                 return nullptr;
             }
-            ESP_LOGI(TAG, "Firmware redirect %d -> %s", fetched_status, headers.location.c_str());
+            ESP_LOGI(TAG, "Firmware redirect %d location_len=%u",
+                     fetched_status, static_cast<unsigned>(headers.location.size()));
             current_url = headers.location;
             continue;
         }

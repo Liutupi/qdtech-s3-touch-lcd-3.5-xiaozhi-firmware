@@ -2,6 +2,29 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-22: v1.7.26 GitHub OTA Redirect Buffer Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.26`.
+- Fixed the Settings GitHub OTA update failure seen on a board updating to `v1.7.25`.
+- Serial capture showed the failing path: GitHub `browser_download_url` returned a `302` redirect to a very long signed `release-assets.githubusercontent.com` URL, then `HTTP_CLIENT: Out of buffer`, followed by `Ota: Failed to open firmware HTTP connection: ESP_FAIL`.
+- Increased the firmware-download HTTP client RX/TX buffers from 1024 to 2048 bytes so the long GitHub release-asset redirect request can be opened.
+- Changed redirect logging to print only the status and Location length, instead of logging the whole signed URL.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a10`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2295f0`, about 36%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`: `1b2b33dc5cef448fbe8d2142f9f5151e9145c3a25f797c7d765aee1ae192a36e`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`: `51a426a752542126916f512d5a960c9b40e66ebce12a43af58fd267e8a6698df`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`: `276c0f80e0c30f06db08a546d9a811e539d129e8e852e23663b62d0e6df42fbf`
+- Follow-up: after publishing, run a real Settings OTA update from a board on `v1.7.25` to `v1.7.26` and confirm progress passes the GitHub redirect step.
+
 ## 2026-06-21: v1.7.25 FC ROM Name Font Coverage Fix
 
 Scope:
