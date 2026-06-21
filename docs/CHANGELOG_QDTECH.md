@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-21: v1.7.24 Shared LXGW WenKai UI Font Release
+
+Scope:
+
+- Bumped firmware version to `1.7.24`.
+- Regenerated the QDTech embedded `qd_font_lxgw_16` and `qd_font_lxgw_20` LVGL font subsets from LXGW WenKai so the Cat and Classic themes share the same Chinese UI font style.
+- Added the new Cat-theme and desktop Chinese glyphs to the subset, including `小苍兰`, `端午`, cat/theme labels, daily-card text, and related UI copy, avoiding missing-glyph boxes without linking the much larger full Puhui 20/30 px fonts.
+- Switched desktop Chinese labels that previously used `font_puhui_16_4` to the shared LXGW WenKai subset where appropriate, including the daily card, Calendar today/weekday labels, and FC/NES ROM list/detail labels.
+- Increased the Classic theme daily-card title and body text to the 20 px LXGW WenKai font so the quote area reads less thin while keeping the existing layout.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- `idf.py monitor` could not be captured from this non-interactive shell because it requires stdin attached to a TTY; the build output confirmed `App "xiaozhi" version: 1.7.24`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`: `b3d4f95b449db34cb28bb42c70169bcaa960bc4547efb446dc579b839fa17ae3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`: `13c2d4042ed9d96bb0c5bbbf5d4330884abfa4257f6d70c5b79e6a2653035158`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`: `91958bcf02c64000e81b86fe907f30695e45b2f5778709a36efbdbbaaa58e597`
+- Follow-up: visually inspect both Classic and Cat themes on the physical LCD after release, especially the 20 px daily-card line wrapping.
+
 ## 2026-06-21: v1.7.23 Cat Theme Switcher And Layout Polish
 
 Scope:

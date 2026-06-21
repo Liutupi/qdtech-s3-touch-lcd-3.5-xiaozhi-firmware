@@ -72,7 +72,28 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-21 v1.7.23 Cat Theme Switcher And Layout Polish
+## Latest Runtime Notes: 2026-06-21 v1.7.24 Shared LXGW WenKai UI Font Release
+
+- Latest release target is `v1.7.24`.
+- The QDTech embedded `qd_font_lxgw_16` and `qd_font_lxgw_20` LVGL font subsets were regenerated from LXGW WenKai and are now the shared Chinese UI font path for both Classic and Cat themes.
+- The regenerated subset includes the newer Cat-theme and desktop glyphs such as `小苍兰`, `端午`, cat/theme labels, daily-card text, Calendar labels, and related UI copy. This fixes the missing-glyph boxes that appeared when the Cat brand mark used an incomplete subset.
+- Desktop Chinese labels that previously used `font_puhui_16_4` were switched to the shared LXGW WenKai subset where appropriate: daily-card title/body, Calendar today/weekday labels, and FC/NES list/detail labels.
+- Classic theme daily-card title and body now use the 20 px LXGW WenKai font to make the quote area less thin; Cat theme keeps using the same 20 px shared font.
+- Do not link the full `font_puhui_20_4` or `font_puhui_30_4` fonts for this UI pass: a test build with those full fonts overflowed the OTA app partition by about 2 MB. Regenerate the board-local font subset instead when adding new Chinese UI text.
+- Build verification passed:
+  - `xiaozhi.bin` size: `0x3d6a00`.
+  - Smallest app partition: `0x600000`.
+  - Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud. Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- `idf.py monitor` could not be captured from this non-interactive shell because it requires stdin attached to a TTY; the build output confirmed `App "xiaozhi" version: 1.7.24`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`: `b3d4f95b449db34cb28bb42c70169bcaa960bc4547efb446dc579b839fa17ae3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`: `13c2d4042ed9d96bb0c5bbbf5d4330884abfa4257f6d70c5b79e6a2653035158`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`: `91958bcf02c64000e81b86fe907f30695e45b2f5778709a36efbdbbaaa58e597`
+- Follow-up: visually inspect both Classic and Cat themes on the physical LCD after release, especially the 20 px daily-card line wrapping.
+
+## Previous Runtime Notes: 2026-06-21 v1.7.23 Cat Theme Switcher And Layout Polish
 
 - Latest release target is `v1.7.23`.
 - Added a second persisted UI theme named `Cat` while preserving the existing `Classic` black/gold theme.

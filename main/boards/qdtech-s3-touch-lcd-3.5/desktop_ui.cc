@@ -185,7 +185,7 @@ static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
         lv_obj_t* brand_a = lv_label_create(parent);
         lv_label_set_text(brand_a, "\xE5\xB0\x8F\xE8\x8B\x8D\xE5\x85\xB0");
         lv_obj_add_style(brand_a, &style_en, 0);
-        lv_obj_set_style_text_font(brand_a, &font_puhui_16_4, 0);
+        lv_obj_set_style_text_font(brand_a, &qd_font_lxgw_20, 0);
         lv_obj_set_style_text_color(brand_a, COLOR_TEXT, 0);
         lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
         add_gesture_bubble(brand_a);
@@ -193,9 +193,9 @@ static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
         lv_obj_t* brand_b = lv_label_create(parent);
         lv_label_set_text(brand_b, "\xE7\xAB\xAF\xE5\x8D\x88");
         lv_obj_add_style(brand_b, &style_gold, 0);
-        lv_obj_set_style_text_font(brand_b, &font_puhui_16_4, 0);
+        lv_obj_set_style_text_font(brand_b, &qd_font_lxgw_20, 0);
         lv_obj_set_style_text_color(brand_b, COLOR_PURPLE, 0);
-        lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, x, y + 18);
+        lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, x, y + 24);
         add_gesture_bubble(brand_b);
         return;
     }
@@ -1156,7 +1156,7 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
 
     // Brand
     if (is_cat_theme()) {
-        create_brand_mark(main_page_, 20, 10);
+        create_brand_mark(main_page_, 20, 4);
     } else {
         lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
         lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
@@ -1194,8 +1194,8 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
 void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_t* time_group = lv_obj_create(parent);
     lv_obj_remove_style_all(time_group);
-    lv_obj_set_size(time_group, 254, is_cat_theme() ? 92 : 154);
-    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 70 : 18);
+    lv_obj_set_size(time_group, 254, is_cat_theme() ? 106 : 154);
+    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 66 : 18);
     lv_obj_clear_flag(time_group, LV_OBJ_FLAG_SCROLLABLE);
     if (is_cat_theme()) {
         lv_obj_set_style_radius(time_group, 18, 0);
@@ -1211,26 +1211,26 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
 
     clock_hour_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_hour_label_, "00");
-    lv_obj_set_size(clock_hour_label_, 108, 60);
+    lv_obj_set_size(clock_hour_label_, 108, is_cat_theme() ? 78 : 60);
     lv_obj_set_style_text_font(clock_hour_label_, &qd_font_clock_72, 0);
     lv_obj_set_style_text_color(clock_hour_label_, is_cat_theme() ? COLOR_PURPLE : COLOR_CREAM, 0);
     lv_obj_set_style_text_align(clock_hour_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, is_cat_theme() ? 8 : 77);
+    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, is_cat_theme() ? 18 : 77);
     add_gesture_bubble(clock_hour_label_);
 
     clock_minute_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_minute_label_, "00");
-    lv_obj_set_size(clock_minute_label_, 110, 60);
+    lv_obj_set_size(clock_minute_label_, 110, is_cat_theme() ? 78 : 60);
     lv_obj_set_style_text_font(clock_minute_label_, &qd_font_clock_72, 0);
     lv_obj_set_style_text_color(clock_minute_label_, COLOR_GOLD, 0);
     lv_obj_set_style_text_align(clock_minute_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, is_cat_theme() ? 8 : 77);
+    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, is_cat_theme() ? 18 : 77);
     add_gesture_bubble(clock_minute_label_);
 
     clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 4 : 73);
+    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 18 : 73);
     clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 47 : 116);
+    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 60 : 116);
     lv_timer_create(ColonTimerCb, 500, this);
 
     RenderBigTime(0, 0, false);
@@ -1321,8 +1321,8 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     lv_obj_set_width(daily_card_title_label_, 108);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_title_label_, &font_puhui_16_4, 0);
-    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
+    lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_20, 0);
+    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, is_cat_theme() ? 45 : 47);
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 120 : 132, 16);
@@ -1356,13 +1356,14 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, is_cat_theme() ? 228 : 266);
+    lv_obj_set_width(quote_label_, is_cat_theme() ? 232 : 266);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(quote_label_, &font_puhui_16_4, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 190 : 152, 14);
+    lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
+    lv_obj_set_style_text_line_space(quote_label_, is_cat_theme() ? 1 : 0, 0);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 186 : 152, 10);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, is_cat_theme() ? 228 : 266);
+    lv_obj_set_width(network_status_label_, is_cat_theme() ? 232 : 266);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
     lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, is_cat_theme() ? 190 : 152, -7);
@@ -1674,7 +1675,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
 
     fc_detail_label_ = label_en(fc_list_group_, "Scanning SD card", &style_muted);
-    lv_obj_set_style_text_font(fc_detail_label_, &font_puhui_16_4, 0);
+    lv_obj_set_style_text_font(fc_detail_label_, &qd_font_lxgw_16, 0);
     lv_obj_set_width(fc_detail_label_, 300);
     lv_label_set_long_mode(fc_detail_label_, LV_LABEL_LONG_DOT);
     lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
@@ -1688,7 +1689,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_set_style_radius(list_panel, 6, 0);
 
     fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
-    lv_obj_set_style_text_font(fc_list_label_, &font_puhui_16_4, 0);
+    lv_obj_set_style_text_font(fc_list_label_, &qd_font_lxgw_16, 0);
     lv_obj_set_width(fc_list_label_, 400);
     lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
@@ -1820,8 +1821,9 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_align(card_shadow, LV_ALIGN_BOTTOM_LEFT, -58, 26);
 
     lv_obj_t* card_today_cn = label_en(today_card, "\xE4\xBB\x8A""\xE6\x97\xA5", &style_gold);
-    lv_obj_set_style_text_font(card_today_cn, &font_puhui_16_4, 0);
-    lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, 22);
+    lv_obj_set_style_text_font(card_today_cn,
+                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+    lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 18 : 22);
 
     lv_obj_t* card_today_en = label_en(today_card, "TODAY", &style_muted);
     lv_obj_set_style_text_color(card_today_en,
@@ -1837,8 +1839,9 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     calendar_card_weekday_label_ = label_en(today_card, "--", &style_en);
     lv_obj_set_style_text_color(calendar_card_weekday_label_,
                                 themed_color(LV_COLOR_MAKE(0x2e, 0x21, 0x18), COLOR_TEXT), 0);
-    lv_obj_set_style_text_font(calendar_card_weekday_label_, &font_puhui_16_4, 0);
-    lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, 164);
+    lv_obj_set_style_text_font(calendar_card_weekday_label_,
+                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+    lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, is_cat_theme() ? 160 : 164);
 
     calendar_card_date_label_ = label_en(today_card, "---- / --", &style_gold);
     lv_obj_set_style_text_font(calendar_card_date_label_, &lv_font_montserrat_20, 0);
