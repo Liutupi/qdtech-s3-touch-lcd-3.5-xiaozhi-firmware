@@ -15,6 +15,7 @@
 
 #include <esp_app_desc.h>
 #include <esp_log.h>
+#include <esp_system.h>
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
@@ -31,19 +32,113 @@ LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(qd_font_lxgw_16);
 LV_FONT_DECLARE(qd_font_lxgw_20);
 
-// Color palette
-static constexpr lv_color_t COLOR_BG = LV_COLOR_MAKE(0x00, 0x00, 0x00);
-static constexpr lv_color_t COLOR_SURFACE = LV_COLOR_MAKE(0x0b, 0x0c, 0x0d);
-static constexpr lv_color_t COLOR_SURFACE_2 = LV_COLOR_MAKE(0x12, 0x14, 0x13);
-static constexpr lv_color_t COLOR_TEXT = LV_COLOR_MAKE(0xf6, 0xef, 0xdf);
-static constexpr lv_color_t COLOR_CREAM = LV_COLOR_MAKE(0xff, 0xf4, 0xd8);
-static constexpr lv_color_t COLOR_MUTED = LV_COLOR_MAKE(0x8a, 0x8a, 0x82);
-static constexpr lv_color_t COLOR_LINE = LV_COLOR_MAKE(0x34, 0x35, 0x31);
-static constexpr lv_color_t COLOR_GOLD = LV_COLOR_MAKE(0xff, 0xbd, 0x55);
-static constexpr lv_color_t COLOR_GREEN = LV_COLOR_MAKE(0x82, 0xd7, 0x78);
-static constexpr lv_color_t COLOR_PURPLE = LV_COLOR_MAKE(0xaa, 0x78, 0xff);
-static constexpr lv_color_t COLOR_BLUE = LV_COLOR_MAKE(0x68, 0x9d, 0xff);
-static constexpr lv_color_t COLOR_CLOCK_DOT = LV_COLOR_MAKE(0xd7, 0xde, 0xe3);
+// Theme palette
+enum class UiTheme : uint8_t {
+    CLASSIC = 0,
+    CAT = 1,
+};
+
+struct ThemePalette {
+    const char* name;
+    lv_color_t bg;
+    lv_color_t surface;
+    lv_color_t surface2;
+    lv_color_t text;
+    lv_color_t cream;
+    lv_color_t muted;
+    lv_color_t line;
+    lv_color_t gold;
+    lv_color_t green;
+    lv_color_t purple;
+    lv_color_t blue;
+    lv_color_t clock_dot;
+};
+
+static constexpr ThemePalette THEMES[] = {
+    {
+        "Classic",
+        LV_COLOR_MAKE(0x00, 0x00, 0x00),
+        LV_COLOR_MAKE(0x0b, 0x0c, 0x0d),
+        LV_COLOR_MAKE(0x12, 0x14, 0x13),
+        LV_COLOR_MAKE(0xf6, 0xef, 0xdf),
+        LV_COLOR_MAKE(0xff, 0xf4, 0xd8),
+        LV_COLOR_MAKE(0x8a, 0x8a, 0x82),
+        LV_COLOR_MAKE(0x34, 0x35, 0x31),
+        LV_COLOR_MAKE(0xff, 0xbd, 0x55),
+        LV_COLOR_MAKE(0x82, 0xd7, 0x78),
+        LV_COLOR_MAKE(0xaa, 0x78, 0xff),
+        LV_COLOR_MAKE(0x68, 0x9d, 0xff),
+        LV_COLOR_MAKE(0xd7, 0xde, 0xe3),
+    },
+    {
+        "Cat",
+        LV_COLOR_MAKE(0xf6, 0xdb, 0xe8),
+        LV_COLOR_MAKE(0xff, 0xf7, 0xfb),
+        LV_COLOR_MAKE(0xff, 0xeb, 0xf3),
+        LV_COLOR_MAKE(0x4d, 0x3d, 0x50),
+        LV_COLOR_MAKE(0xff, 0xfd, 0xfe),
+        LV_COLOR_MAKE(0x9a, 0x6f, 0x88),
+        LV_COLOR_MAKE(0xff, 0x8f, 0xb5),
+        LV_COLOR_MAKE(0xff, 0xa9, 0x58),
+        LV_COLOR_MAKE(0x68, 0xd1, 0xa2),
+        LV_COLOR_MAKE(0xff, 0x6f, 0xa2),
+        LV_COLOR_MAKE(0x7b, 0xc7, 0xff),
+        LV_COLOR_MAKE(0xff, 0x77, 0xaa),
+    },
+};
+
+static UiTheme current_theme = UiTheme::CLASSIC;
+
+static const ThemePalette& theme() {
+    return THEMES[static_cast<uint8_t>(current_theme)];
+}
+
+static bool is_cat_theme() {
+    return current_theme == UiTheme::CAT;
+}
+
+static void load_theme() {
+    nvs_handle_t handle;
+    uint8_t value = 0;
+    if (nvs_open("qd_ui", NVS_READONLY, &handle) == ESP_OK) {
+        nvs_get_u8(handle, "theme", &value);
+        nvs_close(handle);
+    }
+    if (value >= sizeof(THEMES) / sizeof(THEMES[0])) {
+        value = 0;
+    }
+    current_theme = static_cast<UiTheme>(value);
+}
+
+static void save_theme(UiTheme next_theme) {
+    nvs_handle_t handle;
+    if (nvs_open("qd_ui", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u8(handle, "theme", static_cast<uint8_t>(next_theme));
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+static lv_color_t themed_color(lv_color_t classic, lv_color_t cat) {
+    return is_cat_theme() ? cat : classic;
+}
+
+static lv_color_t cat_card_shadow() {
+    return LV_COLOR_MAKE(0xe9, 0xc8, 0xd8);
+}
+
+#define COLOR_BG (theme().bg)
+#define COLOR_SURFACE (theme().surface)
+#define COLOR_SURFACE_2 (theme().surface2)
+#define COLOR_TEXT (theme().text)
+#define COLOR_CREAM (theme().cream)
+#define COLOR_MUTED (theme().muted)
+#define COLOR_LINE (theme().line)
+#define COLOR_GOLD (theme().gold)
+#define COLOR_GREEN (theme().green)
+#define COLOR_PURPLE (theme().purple)
+#define COLOR_BLUE (theme().blue)
+#define COLOR_CLOCK_DOT (theme().clock_dot)
 static constexpr lv_color_t RADIO_BAR_COLORS[16] = {
     LV_COLOR_MAKE(0xff, 0x6b, 0x6b), LV_COLOR_MAKE(0xff, 0x8e, 0x5a),
     LV_COLOR_MAKE(0xff, 0xb8, 0x4d), LV_COLOR_MAKE(0xf7, 0xd8, 0x5a),
@@ -86,6 +181,25 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
 }
 
 static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
+    if (is_cat_theme()) {
+        lv_obj_t* brand_a = lv_label_create(parent);
+        lv_label_set_text(brand_a, "\xE5\xB0\x8F\xE8\x8B\x8D\xE5\x85\xB0");
+        lv_obj_add_style(brand_a, &style_en, 0);
+        lv_obj_set_style_text_font(brand_a, &font_puhui_16_4, 0);
+        lv_obj_set_style_text_color(brand_a, COLOR_TEXT, 0);
+        lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
+        add_gesture_bubble(brand_a);
+
+        lv_obj_t* brand_b = lv_label_create(parent);
+        lv_label_set_text(brand_b, "\xE7\xAB\xAF\xE5\x8D\x88");
+        lv_obj_add_style(brand_b, &style_gold, 0);
+        lv_obj_set_style_text_font(brand_b, &font_puhui_16_4, 0);
+        lv_obj_set_style_text_color(brand_b, COLOR_PURPLE, 0);
+        lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, x, y + 18);
+        add_gesture_bubble(brand_b);
+        return;
+    }
+
     lv_obj_t* brand_a = label_en(parent, "Nothing", &style_en);
     lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
     lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
@@ -218,9 +332,11 @@ static void init_styles() {
     lv_style_set_pad_all(&style_panel, 0);
 
     lv_style_init(&style_clock_card);
-    lv_style_set_bg_color(&style_clock_card, LV_COLOR_MAKE(0x08, 0x08, 0x08));
+    lv_style_set_bg_color(&style_clock_card,
+                          themed_color(LV_COLOR_MAKE(0x08, 0x08, 0x08), COLOR_SURFACE));
     lv_style_set_bg_opa(&style_clock_card, LV_OPA_COVER);
-    lv_style_set_border_color(&style_clock_card, LV_COLOR_MAKE(0x2a, 0x28, 0x22));
+    lv_style_set_border_color(&style_clock_card,
+                              themed_color(LV_COLOR_MAKE(0x2a, 0x28, 0x22), COLOR_LINE));
     lv_style_set_border_width(&style_clock_card, 1);
     lv_style_set_radius(&style_clock_card, 5);
     lv_style_set_pad_all(&style_clock_card, 0);
@@ -717,6 +833,12 @@ static void settings_firmware_cb(lv_event_t* event) {
     }
 }
 
+static void settings_theme_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->CycleTheme();
+    }
+}
+
 static void main_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -734,6 +856,7 @@ static void xiaozhi_toggle_cb(lv_event_t* event) {
 // ===== DesktopUI implementation =====
 void DesktopUI::Create() {
     g_desktop_ui = this;
+    load_theme();
     init_styles();
 
     lv_obj_t* root = lv_scr_act();
@@ -1032,23 +1155,27 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     add_gesture_bubble(main_page_);
 
     // Brand
-    lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
-    lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
+    if (is_cat_theme()) {
+        create_brand_mark(main_page_, 20, 10);
+    } else {
+        lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
+        lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
+        lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
 
-    lv_obj_t* brand_b = label_en(main_page_, "impossible", &style_gold);
-    lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, 20, 32);
-    
-    lv_obj_t* brand_c = label_en(main_page_, "Tupi", &style_muted);
-    lv_obj_set_style_text_font(brand_c, &lv_font_montserrat_14, 0);
-    lv_obj_align(brand_c, LV_ALIGN_TOP_LEFT, 20, 54);
+        lv_obj_t* brand_b = label_en(main_page_, "impossible", &style_gold);
+        lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_20, 0);
+        lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, 20, 32);
+
+        lv_obj_t* brand_c = label_en(main_page_, "Tupi", &style_muted);
+        lv_obj_set_style_text_font(brand_c, &lv_font_montserrat_14, 0);
+        lv_obj_align(brand_c, LV_ALIGN_TOP_LEFT, 20, 54);
+    }
 
     CreateBigTime(main_page_);
 
     // Date and weekday
     date_label_ = label_en(main_page_, "01 / 01     |", &style_en);
-    lv_obj_set_style_text_color(date_label_, COLOR_CREAM, 0);
+    lv_obj_set_style_text_color(date_label_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_text_font(date_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 52, 174);
 
@@ -1067,18 +1194,28 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
 void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_t* time_group = lv_obj_create(parent);
     lv_obj_remove_style_all(time_group);
-    lv_obj_set_size(time_group, 254, 154);
-    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, 18);
+    lv_obj_set_size(time_group, 254, is_cat_theme() ? 92 : 154);
+    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 70 : 18);
     lv_obj_clear_flag(time_group, LV_OBJ_FLAG_SCROLLABLE);
+    if (is_cat_theme()) {
+        lv_obj_set_style_radius(time_group, 18, 0);
+        lv_obj_set_style_bg_color(time_group, COLOR_SURFACE, 0);
+        lv_obj_set_style_bg_opa(time_group, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(time_group, COLOR_LINE, 0);
+        lv_obj_set_style_border_width(time_group, 1, 0);
+        lv_obj_set_style_shadow_width(time_group, 14, 0);
+        lv_obj_set_style_shadow_color(time_group, cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(time_group, LV_OPA_40, 0);
+    }
     add_gesture_bubble(time_group);
 
     clock_hour_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_hour_label_, "00");
     lv_obj_set_size(clock_hour_label_, 108, 60);
     lv_obj_set_style_text_font(clock_hour_label_, &qd_font_clock_72, 0);
-    lv_obj_set_style_text_color(clock_hour_label_, COLOR_CREAM, 0);
+    lv_obj_set_style_text_color(clock_hour_label_, is_cat_theme() ? COLOR_PURPLE : COLOR_CREAM, 0);
     lv_obj_set_style_text_align(clock_hour_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, 77);
+    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, is_cat_theme() ? 8 : 77);
     add_gesture_bubble(clock_hour_label_);
 
     clock_minute_label_ = lv_label_create(time_group);
@@ -1087,13 +1224,13 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_set_style_text_font(clock_minute_label_, &qd_font_clock_72, 0);
     lv_obj_set_style_text_color(clock_minute_label_, COLOR_GOLD, 0);
     lv_obj_set_style_text_align(clock_minute_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, 77);
+    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, is_cat_theme() ? 8 : 77);
     add_gesture_bubble(clock_minute_label_);
 
     clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, 73);
+    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 4 : 73);
     clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, 116);
+    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 47 : 116);
     lv_timer_create(ColonTimerCb, 500, this);
 
     RenderBigTime(0, 0, false);
@@ -1166,6 +1303,13 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
 
 void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     daily_card_panel_ = CreatePanel(parent, 438, 94, 20, 214);
+    if (is_cat_theme()) {
+        lv_obj_set_style_bg_color(daily_card_panel_, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(daily_card_panel_, COLOR_LINE, 0);
+        lv_obj_set_style_shadow_width(daily_card_panel_, 12, 0);
+        lv_obj_set_style_shadow_color(daily_card_panel_, cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_40, 0);
+    }
 
     daily_card_date_label_ = label_en(daily_card_panel_, "--/--", &style_gold);
     lv_obj_set_width(daily_card_date_label_, 92);
@@ -1181,19 +1325,47 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
-    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 132, 16);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 120 : 132, 16);
+
+    if (is_cat_theme()) {
+        lv_obj_t* cat = circle(daily_card_panel_, 38, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_border_color(cat, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(cat, 1, 0);
+        lv_obj_align(cat, LV_ALIGN_TOP_LEFT, 134, 24);
+
+        lv_obj_t* ear_l = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_l, 3, 0);
+        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_l, 1, 0);
+        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
+        lv_obj_align(ear_l, LV_ALIGN_TOP_LEFT, 139, 18);
+
+        lv_obj_t* ear_r = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_r, 3, 0);
+        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_r, 1, 0);
+        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
+        lv_obj_align(ear_r, LV_ALIGN_TOP_LEFT, 156, 18);
+
+        lv_obj_t* eye_l = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
+        lv_obj_align(eye_l, LV_ALIGN_TOP_LEFT, 146, 39);
+        lv_obj_t* eye_r = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
+        lv_obj_align(eye_r, LV_ALIGN_TOP_LEFT, 160, 39);
+        lv_obj_t* nose = circle(daily_card_panel_, 4, COLOR_PURPLE, LV_OPA_COVER);
+        lv_obj_align(nose, LV_ALIGN_TOP_LEFT, 153, 49);
+    }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, 266);
+    lv_obj_set_width(quote_label_, is_cat_theme() ? 228 : 266);
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_font(quote_label_, &font_puhui_16_4, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 152, 14);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 190 : 152, 14);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, 266);
+    lv_obj_set_width(network_status_label_, is_cat_theme() ? 228 : 266);
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 152, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, is_cat_theme() ? 190 : 152, -7);
     
     // Daily card breathing animation
     lv_timer_create(DailyCardBreathCb, 50, this);
@@ -1207,7 +1379,8 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(apps_page_, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
-    lv_obj_set_style_bg_color(apps_page_, LV_COLOR_MAKE(0x0e, 0x08, 0x05), 0);
+    lv_obj_set_style_bg_color(apps_page_,
+                              themed_color(LV_COLOR_MAKE(0x0e, 0x08, 0x05), COLOR_BG), 0);
 
     create_brand_mark(apps_page_);
 
@@ -1221,8 +1394,10 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
     lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
-    lv_obj_set_style_bg_color(back, LV_COLOR_MAKE(0x24, 0x16, 0x0f), 0);
-    lv_obj_set_style_border_color(back, LV_COLOR_MAKE(0x78, 0x48, 0x26), 0);
+    lv_obj_set_style_bg_color(back,
+                              themed_color(LV_COLOR_MAKE(0x24, 0x16, 0x0f), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(back,
+                                  themed_color(LV_COLOR_MAKE(0x78, 0x48, 0x26), COLOR_LINE), 0);
     lv_obj_set_style_radius(back, 16, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
@@ -1267,16 +1442,24 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(box, LV_COLOR_MAKE(0x18, 0x0f, 0x0a), 0);
-    lv_obj_set_style_border_color(box, LV_COLOR_MAKE(0x68, 0x3d, 0x22), 0);
+    lv_obj_set_style_bg_color(box,
+                              themed_color(LV_COLOR_MAKE(0x18, 0x0f, 0x0a), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(box,
+                                  themed_color(LV_COLOR_MAKE(0x68, 0x3d, 0x22), COLOR_LINE), 0);
     lv_obj_set_style_radius(box, 6, 0);
+    if (is_cat_theme()) {
+        lv_obj_set_style_shadow_width(box, 10, 0);
+        lv_obj_set_style_shadow_color(box, cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(box, LV_OPA_30, 0);
+    }
     add_gesture_bubble(box);
 
     lv_obj_t* icon_box = lv_obj_create(box);
     lv_obj_remove_style_all(icon_box);
     lv_obj_set_size(icon_box, 36, 34);
     lv_obj_set_style_radius(icon_box, 6, 0);
-    lv_obj_set_style_bg_color(icon_box, LV_COLOR_MAKE(0x1b, 0x11, 0x0b), 0);
+    lv_obj_set_style_bg_color(icon_box,
+                              themed_color(LV_COLOR_MAKE(0x1b, 0x11, 0x0b), COLOR_SURFACE_2), 0);
     lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(icon_box, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(icon_box, 1, 0);
@@ -1315,9 +1498,12 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             lv_obj_remove_style_all(frame);
             lv_obj_set_size(frame, 58, 26);
             lv_obj_set_style_radius(frame, 3, 0);
-            lv_obj_set_style_bg_color(frame, LV_COLOR_MAKE(0x8b, 0x6c, 0x45), 0);
+            lv_obj_set_style_bg_color(frame,
+                                      themed_color(LV_COLOR_MAKE(0x8b, 0x6c, 0x45),
+                                                   LV_COLOR_MAKE(0xff, 0xe8, 0xf0)), 0);
             lv_obj_set_style_bg_opa(frame, LV_OPA_COVER, 0);
-            lv_obj_set_style_border_color(frame, LV_COLOR_MAKE(0xe8, 0xc9, 0x8e), 0);
+            lv_obj_set_style_border_color(frame,
+                                          themed_color(LV_COLOR_MAKE(0xe8, 0xc9, 0x8e), COLOR_LINE), 0);
             lv_obj_set_style_border_width(frame, 1, 0);
             lv_obj_align(frame, LV_ALIGN_TOP_RIGHT, -14, 11);
             add_gesture_bubble(frame);
@@ -1330,7 +1516,9 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 2: {
-            lv_obj_t* face = circle(box, 28, LV_COLOR_MAKE(0x20, 0x14, 0x0d), LV_OPA_COVER);
+            lv_obj_t* face = circle(box, 28,
+                                    themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_CREAM),
+                                    LV_OPA_COVER);
             lv_obj_set_style_border_color(face, COLOR_GOLD, 0);
             lv_obj_set_style_border_width(face, 2, 0);
             lv_obj_align(face, LV_ALIGN_TOP_RIGHT, -32, 10);
@@ -1345,12 +1533,17 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 3: {
-            lv_obj_t* cart = bar(box, 42, 18, LV_COLOR_MAKE(0x8d, 0xa7, 0xb4), LV_OPA_COVER);
+            lv_obj_t* cart = bar(box, 42, 18,
+                                 themed_color(LV_COLOR_MAKE(0x8d, 0xa7, 0xb4), COLOR_BLUE),
+                                 LV_OPA_COVER);
             lv_obj_set_style_radius(cart, 2, 0);
-            lv_obj_set_style_border_color(cart, LV_COLOR_MAKE(0x5c, 0x3a, 0x24), 0);
+            lv_obj_set_style_border_color(cart,
+                                          themed_color(LV_COLOR_MAKE(0x5c, 0x3a, 0x24), COLOR_LINE), 0);
             lv_obj_set_style_border_width(cart, 2, 0);
             lv_obj_align(cart, LV_ALIGN_TOP_RIGHT, -28, 15);
-            lv_obj_t* led = circle(box, 6, LV_COLOR_MAKE(0xc5, 0x6e, 0x4c), LV_OPA_COVER);
+            lv_obj_t* led = circle(box, 6,
+                                   themed_color(LV_COLOR_MAKE(0xc5, 0x6e, 0x4c), COLOR_PURPLE),
+                                   LV_OPA_COVER);
             lv_obj_align(led, LV_ALIGN_TOP_RIGHT, -15, 21);
             break;
         }
@@ -1367,8 +1560,11 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 5: {
-            lv_obj_t* ring = circle(box, 36, LV_COLOR_MAKE(0x1c, 0x11, 0x0b), LV_OPA_COVER);
-            lv_obj_set_style_border_color(ring, LV_COLOR_MAKE(0xe0, 0x8d, 0x4d), 0);
+            lv_obj_t* ring = circle(box, 36,
+                                    themed_color(LV_COLOR_MAKE(0x1c, 0x11, 0x0b), COLOR_CREAM),
+                                    LV_OPA_COVER);
+            lv_obj_set_style_border_color(ring,
+                                          themed_color(LV_COLOR_MAKE(0xe0, 0x8d, 0x4d), COLOR_PURPLE), 0);
             lv_obj_set_style_border_width(ring, 4, 0);
             lv_obj_align(ring, LV_ALIGN_TOP_RIGHT, -25, 6);
             lv_obj_t* number = label_en(ring, "25", &style_en);
@@ -1484,8 +1680,10 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
 
     lv_obj_t* list_panel = CreatePanel(fc_list_group_, 432, 204, 24, 52);
-    lv_obj_set_style_bg_color(list_panel, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
-    lv_obj_set_style_border_color(list_panel, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_bg_color(list_panel,
+                              themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(list_panel,
+                                  themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(list_panel, 1, 0);
     lv_obj_set_style_radius(list_panel, 6, 0);
 
@@ -1509,8 +1707,10 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(next, LV_ALIGN_TOP_LEFT, 356, 272);
 
     lv_obj_t* screen = CreatePanel(fc_game_group_, 480, 240, 0, 0);
-    lv_obj_set_style_bg_color(screen, LV_COLOR_MAKE(0x02, 0x03, 0x05), 0);
-    lv_obj_set_style_border_color(screen, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_bg_color(screen,
+                              themed_color(LV_COLOR_MAKE(0x02, 0x03, 0x05), LV_COLOR_MAKE(0xff, 0xfb, 0xfc)), 0);
+    lv_obj_set_style_border_color(screen,
+                                  themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_radius(screen, 0, 0);
 
@@ -1519,7 +1719,8 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     add_gesture_bubble(fc_screen_image_);
 
     lv_obj_t* controls = CreatePanel(fc_game_group_, 480, 80, 0, 240);
-    lv_obj_set_style_bg_color(controls, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
+    lv_obj_set_style_bg_color(controls,
+                              themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(controls, 0, 0);
     lv_obj_set_style_radius(controls, 0, 0);
 
@@ -1530,9 +1731,11 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
         lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x12, 0x1a, 0x20), 0);
+        lv_obj_set_style_bg_color(key,
+                                  themed_color(LV_COLOR_MAKE(0x12, 0x1a, 0x20), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
-        lv_obj_set_style_border_color(key, LV_COLOR_MAKE(0x47, 0xb3, 0xff), 0);
+        lv_obj_set_style_border_color(key,
+                                      themed_color(LV_COLOR_MAKE(0x47, 0xb3, 0xff), COLOR_BLUE), 0);
         lv_obj_set_style_border_width(key, 1, 0);
         lv_obj_set_style_radius(key, 6, 0);
         lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESSED, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
@@ -1553,7 +1756,8 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
         lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x1c, 0x18, 0x14), 0);
+        lv_obj_set_style_bg_color(key,
+                                  themed_color(LV_COLOR_MAKE(0x1c, 0x18, 0x14), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
         lv_obj_set_style_border_color(key, COLOR_GOLD, 0);
         lv_obj_set_style_border_width(key, 1, 0);
@@ -1591,20 +1795,28 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_add_event_cb(calendar_page_, calendar_gesture_cb, LV_EVENT_GESTURE, NULL);
     add_gesture_bubble(calendar_page_);
 
-    lv_obj_set_style_bg_color(calendar_page_, LV_COLOR_MAKE(0x2a, 0x16, 0x0c), 0);
+    lv_obj_set_style_bg_color(calendar_page_,
+                              themed_color(LV_COLOR_MAKE(0x2a, 0x16, 0x0c), COLOR_BG), 0);
 
-    lv_obj_t* glow = circle(calendar_page_, 146, LV_COLOR_MAKE(0xb0, 0x6c, 0x36), LV_OPA_30);
+    lv_obj_t* glow = circle(calendar_page_, 146,
+                            themed_color(LV_COLOR_MAKE(0xb0, 0x6c, 0x36), COLOR_PURPLE),
+                            is_cat_theme() ? LV_OPA_20 : LV_OPA_30);
     lv_obj_align(glow, LV_ALIGN_BOTTOM_LEFT, -48, 34);
 
     lv_obj_t* today_card = CreatePanel(calendar_page_, 146, 252, 10, 18);
-    lv_obj_set_style_bg_color(today_card, LV_COLOR_MAKE(0xff, 0xf3, 0xdb), 0);
+    lv_obj_set_style_bg_color(today_card,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xf3, 0xdb), COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(today_card, 0, 0);
     lv_obj_set_style_radius(today_card, 8, 0);
 
-    lv_obj_t* card_sun = circle(today_card, 112, LV_COLOR_MAKE(0xff, 0xc8, 0x78), LV_OPA_30);
+    lv_obj_t* card_sun = circle(today_card, 112,
+                                themed_color(LV_COLOR_MAKE(0xff, 0xc8, 0x78), COLOR_PURPLE),
+                                LV_OPA_30);
     lv_obj_align(card_sun, LV_ALIGN_TOP_RIGHT, 38, -32);
 
-    lv_obj_t* card_shadow = circle(today_card, 96, LV_COLOR_MAKE(0xed, 0xa0, 0x54), LV_OPA_20);
+    lv_obj_t* card_shadow = circle(today_card, 96,
+                                   themed_color(LV_COLOR_MAKE(0xed, 0xa0, 0x54), COLOR_BLUE),
+                                   LV_OPA_20);
     lv_obj_align(card_shadow, LV_ALIGN_BOTTOM_LEFT, -58, 26);
 
     lv_obj_t* card_today_cn = label_en(today_card, "\xE4\xBB\x8A""\xE6\x97\xA5", &style_gold);
@@ -1612,16 +1824,19 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, 22);
 
     lv_obj_t* card_today_en = label_en(today_card, "TODAY", &style_muted);
-    lv_obj_set_style_text_color(card_today_en, LV_COLOR_MAKE(0x55, 0x4c, 0x42), 0);
+    lv_obj_set_style_text_color(card_today_en,
+                                themed_color(LV_COLOR_MAKE(0x55, 0x4c, 0x42), COLOR_MUTED), 0);
     lv_obj_align(card_today_en, LV_ALIGN_TOP_LEFT, 20, 54);
 
     calendar_card_day_label_ = label_en(today_card, "--", &style_en);
-    lv_obj_set_style_text_color(calendar_card_day_label_, LV_COLOR_MAKE(0x20, 0x16, 0x10), 0);
+    lv_obj_set_style_text_color(calendar_card_day_label_,
+                                themed_color(LV_COLOR_MAKE(0x20, 0x16, 0x10), COLOR_PURPLE), 0);
     lv_obj_set_style_text_font(calendar_card_day_label_, &lv_font_montserrat_48, 0);
     lv_obj_align(calendar_card_day_label_, LV_ALIGN_TOP_MID, 0, 92);
 
     calendar_card_weekday_label_ = label_en(today_card, "--", &style_en);
-    lv_obj_set_style_text_color(calendar_card_weekday_label_, LV_COLOR_MAKE(0x2e, 0x21, 0x18), 0);
+    lv_obj_set_style_text_color(calendar_card_weekday_label_,
+                                themed_color(LV_COLOR_MAKE(0x2e, 0x21, 0x18), COLOR_TEXT), 0);
     lv_obj_set_style_text_font(calendar_card_weekday_label_, &font_puhui_16_4, 0);
     lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, 164);
 
@@ -1630,36 +1845,43 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_align(calendar_card_date_label_, LV_ALIGN_TOP_LEFT, 22, 198);
 
     lv_obj_t* panel = CreatePanel(calendar_page_, 304, 252, 166, 18);
-    lv_obj_set_style_bg_color(panel, LV_COLOR_MAKE(0x18, 0x0f, 0x0a), 0);
-    lv_obj_set_style_border_color(panel, LV_COLOR_MAKE(0x63, 0x43, 0x2b), 0);
+    lv_obj_set_style_bg_color(panel,
+                              themed_color(LV_COLOR_MAKE(0x18, 0x0f, 0x0a), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(panel,
+                                  themed_color(LV_COLOR_MAKE(0x63, 0x43, 0x2b), COLOR_LINE), 0);
     lv_obj_set_style_radius(panel, 8, 0);
 
     calendar_title_label_ = label_en(panel, "Month ----", &style_en);
-    lv_obj_set_style_text_color(calendar_title_label_, LV_COLOR_MAKE(0xff, 0xf5, 0xe4), 0);
+    lv_obj_set_style_text_color(calendar_title_label_,
+                                themed_color(LV_COLOR_MAKE(0xff, 0xf5, 0xe4), COLOR_TEXT), 0);
     lv_obj_set_style_text_font(calendar_title_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(calendar_title_label_, LV_ALIGN_TOP_LEFT, 18, 18);
 
     lv_obj_t* top_today = CreateButton(panel, "Today", calendar_today_cb);
     lv_obj_set_size(top_today, 76, 28);
-    lv_obj_set_style_bg_color(top_today, LV_COLOR_MAKE(0xff, 0xc1, 0x70), 0);
+    lv_obj_set_style_bg_color(top_today,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xc1, 0x70), COLOR_CREAM), 0);
     lv_obj_set_style_border_width(top_today, 0, 0);
     lv_obj_align(top_today, LV_ALIGN_TOP_RIGHT, -18, 18);
 
     calendar_today_label_ = label_en(panel, "Minimal monthly view", &style_muted);
     lv_obj_set_width(calendar_today_label_, 180);
     lv_label_set_long_mode(calendar_today_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_color(calendar_today_label_, LV_COLOR_MAKE(0x9a, 0x76, 0x5e), 0);
+    lv_obj_set_style_text_color(calendar_today_label_,
+                                themed_color(LV_COLOR_MAKE(0x9a, 0x76, 0x5e), COLOR_MUTED), 0);
     lv_obj_set_style_text_font(calendar_today_label_, &lv_font_montserrat_14, 0);
     lv_obj_align(calendar_today_label_, LV_ALIGN_TOP_LEFT, 18, 50);
 
-    lv_obj_t* divider = bar(panel, 268, 1, LV_COLOR_MAKE(0x6b, 0x48, 0x2e), LV_OPA_COVER);
+    lv_obj_t* divider = bar(panel, 268, 1,
+                            themed_color(LV_COLOR_MAKE(0x6b, 0x48, 0x2e), COLOR_LINE),
+                            LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 18, 76);
 
     static constexpr const char* kWeekdays[] = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"};
     for (int col = 0; col < 7; ++col) {
         lv_obj_t* label = label_en(panel, kWeekdays[col], &style_muted);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        const lv_color_t weekday_color = col >= 5 ? COLOR_GOLD : lv_color_make(0xa8, 0x86, 0x6e);
+        const lv_color_t weekday_color = col >= 5 ? COLOR_GOLD : themed_color(lv_color_make(0xa8, 0x86, 0x6e), COLOR_MUTED);
         lv_obj_set_style_text_color(label, weekday_color, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
         lv_obj_set_width(label, 36);
@@ -1673,9 +1895,11 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
         lv_obj_remove_style_all(cell);
         lv_obj_set_size(cell, 32, 20);
         lv_obj_set_style_radius(cell, 8, 0);
-        lv_obj_set_style_bg_color(cell, LV_COLOR_MAKE(0x24, 0x18, 0x10), 0);
+        lv_obj_set_style_bg_color(cell,
+                                  themed_color(LV_COLOR_MAKE(0x24, 0x18, 0x10), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(cell, LV_OPA_50, 0);
-        lv_obj_set_style_border_color(cell, LV_COLOR_MAKE(0x5d, 0x40, 0x2b), 0);
+        lv_obj_set_style_border_color(cell,
+                                      themed_color(LV_COLOR_MAKE(0x5d, 0x40, 0x2b), COLOR_LINE), 0);
         lv_obj_set_style_border_width(cell, 1, 0);
         lv_obj_align(cell, LV_ALIGN_TOP_LEFT, 16 + col * 40, 116 + row * 22);
         add_gesture_bubble(cell);
@@ -1692,22 +1916,27 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_t* prev = CreateButton(calendar_page_, "Prev", calendar_prev_cb);
     lv_obj_set_size(prev, 96, 34);
     lv_obj_set_ext_click_area(prev, 12);
-    lv_obj_set_style_bg_color(prev, LV_COLOR_MAKE(0x20, 0x14, 0x0d), 0);
-    lv_obj_set_style_border_color(prev, LV_COLOR_MAKE(0x5b, 0x3c, 0x27), 0);
+    lv_obj_set_style_bg_color(prev,
+                              themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(prev,
+                                  themed_color(LV_COLOR_MAKE(0x5b, 0x3c, 0x27), COLOR_LINE), 0);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 18, 278);
 
     lv_obj_t* today = CreateButton(calendar_page_, "Today", calendar_today_cb);
     lv_obj_set_size(today, 96, 34);
     lv_obj_set_ext_click_area(today, 12);
-    lv_obj_set_style_bg_color(today, LV_COLOR_MAKE(0xff, 0xc1, 0x70), 0);
+    lv_obj_set_style_bg_color(today,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xc1, 0x70), COLOR_CREAM), 0);
     lv_obj_set_style_border_width(today, 0, 0);
     lv_obj_align(today, LV_ALIGN_TOP_MID, 0, 278);
 
     lv_obj_t* next = CreateButton(calendar_page_, "Next", calendar_next_cb);
     lv_obj_set_size(next, 96, 34);
     lv_obj_set_ext_click_area(next, 12);
-    lv_obj_set_style_bg_color(next, LV_COLOR_MAKE(0x20, 0x14, 0x0d), 0);
-    lv_obj_set_style_border_color(next, LV_COLOR_MAKE(0x5b, 0x3c, 0x27), 0);
+    lv_obj_set_style_bg_color(next,
+                              themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(next,
+                                  themed_color(LV_COLOR_MAKE(0x5b, 0x3c, 0x27), COLOR_LINE), 0);
     lv_obj_align(next, LV_ALIGN_TOP_RIGHT, -18, 278);
 
     RenderCalendar();
@@ -2071,14 +2300,40 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_CREAM, LV_PART_KNOB);
     lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
 
+    lv_obj_t* theme_title = label_en(settings_content_, "Appearance", &style_gold);
+    lv_obj_set_style_text_font(theme_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(theme_title, LV_ALIGN_TOP_LEFT, 4, 166);
+
+    lv_obj_t* theme_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(theme_row, &style_panel, 0);
+    lv_obj_set_size(theme_row, 414, 58);
+    lv_obj_align(theme_row, LV_ALIGN_TOP_LEFT, 0, 192);
+    lv_obj_clear_flag(theme_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* theme_label = label_en(theme_row, "Theme", &style_en);
+    lv_obj_align(theme_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    settings_theme_value_ = label_en(theme_row, theme().name, &style_muted);
+    lv_obj_set_style_text_font(settings_theme_value_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_theme_value_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_theme_button_ = lv_btn_create(theme_row);
+    lv_obj_set_size(settings_theme_button_, 84, 30);
+    lv_obj_set_style_radius(settings_theme_button_, 15, 0);
+    lv_obj_set_style_bg_color(settings_theme_button_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_border_color(settings_theme_button_, COLOR_PURPLE, 0);
+    lv_obj_set_style_border_width(settings_theme_button_, 1, 0);
+    lv_obj_add_event_cb(settings_theme_button_, settings_theme_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(settings_theme_button_, LV_ALIGN_RIGHT_MID, -14, 0);
+    settings_theme_button_label_ = label_en(settings_theme_button_, "Switch", &style_en);
+    lv_obj_set_style_text_font(settings_theme_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_center(settings_theme_button_label_);
+
     lv_obj_t* weather_title = label_en(settings_content_, "Weather", &style_gold);
     lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 166);
+    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 258);
 
     lv_obj_t* weather_row = lv_obj_create(settings_content_);
     lv_obj_add_style(weather_row, &style_panel, 0);
     lv_obj_set_size(weather_row, 414, 58);
-    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 192);
+    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 284);
     lv_obj_clear_flag(weather_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* weather_label = label_en(weather_row, "Location", &style_en);
     lv_obj_align(weather_label, LV_ALIGN_TOP_LEFT, 14, 8);
@@ -2088,12 +2343,12 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
 
     lv_obj_t* firmware_title = label_en(settings_content_, "Firmware", &style_gold);
     lv_obj_set_style_text_font(firmware_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 258);
+    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 350);
 
     lv_obj_t* firmware_row = lv_obj_create(settings_content_);
     lv_obj_add_style(firmware_row, &style_panel, 0);
     lv_obj_set_size(firmware_row, 414, 74);
-    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 284);
+    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 376);
     lv_obj_clear_flag(firmware_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* version_label = label_en(firmware_row, "Version", &style_en);
     lv_obj_align(version_label, LV_ALIGN_TOP_LEFT, 14, 9);
@@ -2184,21 +2439,53 @@ void DesktopUI::UpdateWifiList() {
 }
 
 void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
+    if (is_cat_theme()) {
+        lv_obj_t* head = circle(parent, 154, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_border_color(head, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(head, 2, 0);
+        lv_obj_align(head, LV_ALIGN_CENTER, 0, -24);
+
+        lv_obj_t* ear_l = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_l, 8, 0);
+        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_l, 2, 0);
+        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
+        lv_obj_align(ear_l, LV_ALIGN_CENTER, -48, -110);
+
+        lv_obj_t* ear_r = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_r, 8, 0);
+        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_r, 2, 0);
+        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
+        lv_obj_align(ear_r, LV_ALIGN_CENTER, 48, -110);
+
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_t* whisker_l = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
+            lv_obj_set_style_transform_rotation(whisker_l, (i - 1) * 80, 0);
+            lv_obj_align(whisker_l, LV_ALIGN_CENTER, -102, -18 + i * 18);
+            lv_obj_t* whisker_r = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
+            lv_obj_set_style_transform_rotation(whisker_r, (1 - i) * 80, 0);
+            lv_obj_align(whisker_r, LV_ALIGN_CENTER, 102, -18 + i * 18);
+        }
+    }
     // 全屏黑色背景，直接在parent上创建元素
 
     // 左眼白
     eye_left_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_left_, 60, 70);
+    lv_obj_set_size(eye_left_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
     lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
-    lv_obj_set_style_radius(eye_left_, 30, 0);
-    lv_obj_set_style_bg_color(eye_left_, COLOR_CREAM, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(eye_left_, LV_ALIGN_CENTER, -38, -46);
+    }
+    lv_obj_set_style_radius(eye_left_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_style_bg_color(eye_left_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_left_, 0, 0);
     add_gesture_bubble(eye_left_);
 
     // 左瞳孔
     pupil_left_ = lv_obj_create(eye_left_);
-    lv_obj_set_size(pupil_left_, 28, 35);
+    lv_obj_set_size(pupil_left_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
     lv_obj_align(pupil_left_, LV_ALIGN_CENTER, 0, 4);
     lv_obj_set_style_radius(pupil_left_, 14, 0);
     lv_obj_set_style_bg_color(pupil_left_, lv_color_black(), 0);
@@ -2216,17 +2503,20 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 右眼白
     eye_right_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_right_, 60, 70);
+    lv_obj_set_size(eye_right_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
     lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
-    lv_obj_set_style_radius(eye_right_, 30, 0);
-    lv_obj_set_style_bg_color(eye_right_, COLOR_CREAM, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(eye_right_, LV_ALIGN_CENTER, 38, -46);
+    }
+    lv_obj_set_style_radius(eye_right_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_style_bg_color(eye_right_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_right_, 0, 0);
     add_gesture_bubble(eye_right_);
 
     // 右瞳孔
     pupil_right_ = lv_obj_create(eye_right_);
-    lv_obj_set_size(pupil_right_, 28, 35);
+    lv_obj_set_size(pupil_right_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
     lv_obj_align(pupil_right_, LV_ALIGN_CENTER, 0, 4);
     lv_obj_set_style_radius(pupil_right_, 14, 0);
     lv_obj_set_style_bg_color(pupil_right_, lv_color_black(), 0);
@@ -2250,6 +2540,9 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_left_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_left_, 0, 0);
+    if (is_cat_theme()) {
+        lv_obj_add_flag(eyebrow_left_, LV_OBJ_FLAG_HIDDEN);
+    }
     add_gesture_bubble(eyebrow_left_);
 
     // 右眉毛
@@ -2260,14 +2553,20 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_right_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_right_, 0, 0);
+    if (is_cat_theme()) {
+        lv_obj_add_flag(eyebrow_right_, LV_OBJ_FLAG_HIDDEN);
+    }
     add_gesture_bubble(eyebrow_right_);
 
     // 嘴巴
     mouth_ = lv_obj_create(parent);
-    lv_obj_set_size(mouth_, 80, 20);
+    lv_obj_set_size(mouth_, is_cat_theme() ? 46 : 80, is_cat_theme() ? 10 : 20);
     lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
-    lv_obj_set_style_radius(mouth_, 10, 0);
-    lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 6);
+    }
+    lv_obj_set_style_radius(mouth_, is_cat_theme() ? 5 : 10, 0);
+    lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mouth_, 0, 0);
     add_gesture_bubble(mouth_);
@@ -2382,7 +2681,8 @@ void DesktopUI::RenderCalendar() {
             }
             if (calendar_day_cells_[i]) {
                 lv_obj_set_style_bg_opa(calendar_day_cells_[i], LV_OPA_20, 0);
-                lv_obj_set_style_border_color(calendar_day_cells_[i], LV_COLOR_MAKE(0x5d, 0x40, 0x2b), 0);
+                lv_obj_set_style_border_color(calendar_day_cells_[i],
+                                              themed_color(LV_COLOR_MAKE(0x5d, 0x40, 0x2b), COLOR_LINE), 0);
             }
         }
         return;
@@ -2453,24 +2753,24 @@ void DesktopUI::RenderCalendar() {
         const int col = i % 7;
         const bool weekend = col >= 5;
 
-        lv_color_t bg_color = lv_color_make(0x17, 0x0f, 0x0a);
-        lv_color_t border_color = lv_color_make(0x35, 0x26, 0x1c);
-        lv_color_t text_color = lv_color_make(0x72, 0x58, 0x44);
+        lv_color_t bg_color = themed_color(lv_color_make(0x17, 0x0f, 0x0a), COLOR_SURFACE_2);
+        lv_color_t border_color = themed_color(lv_color_make(0x35, 0x26, 0x1c), COLOR_LINE);
+        lv_color_t text_color = themed_color(lv_color_make(0x72, 0x58, 0x44), COLOR_MUTED);
         lv_opa_t bg_opa = LV_OPA_30;
         if (is_today) {
-            bg_color = lv_color_make(0xff, 0xc1, 0x70);
+            bg_color = themed_color(lv_color_make(0xff, 0xc1, 0x70), COLOR_PURPLE);
             border_color = bg_color;
-            text_color = lv_color_make(0x20, 0x16, 0x10);
+            text_color = themed_color(lv_color_make(0x20, 0x16, 0x10), COLOR_CREAM);
             bg_opa = LV_OPA_COVER;
         } else if (weekend && in_current_month) {
-            bg_color = lv_color_make(0xe7, 0x91, 0x42);
+            bg_color = themed_color(lv_color_make(0xe7, 0x91, 0x42), COLOR_CREAM);
             border_color = bg_color;
-            text_color = lv_color_make(0xff, 0xd0, 0x94);
+            text_color = themed_color(lv_color_make(0xff, 0xd0, 0x94), COLOR_GOLD);
             bg_opa = LV_OPA_COVER;
         } else if (in_current_month) {
-            bg_color = lv_color_make(0x24, 0x18, 0x10);
-            border_color = lv_color_make(0x5d, 0x40, 0x2b);
-            text_color = lv_color_make(0xff, 0xf5, 0xe4);
+            bg_color = themed_color(lv_color_make(0x24, 0x18, 0x10), COLOR_SURFACE);
+            border_color = themed_color(lv_color_make(0x5d, 0x40, 0x2b), COLOR_LINE);
+            text_color = themed_color(lv_color_make(0xff, 0xf5, 0xe4), COLOR_TEXT);
             bg_opa = LV_OPA_70;
         }
 
@@ -2909,6 +3209,20 @@ void DesktopUI::SetSystemVolume(int value) {
     RefreshSettingsControls();
 }
 
+void DesktopUI::CycleTheme() {
+    const uint8_t count = sizeof(THEMES) / sizeof(THEMES[0]);
+    uint8_t next = static_cast<uint8_t>(current_theme) + 1;
+    if (next >= count) {
+        next = 0;
+    }
+    save_theme(static_cast<UiTheme>(next));
+    if (settings_theme_value_) {
+        lv_label_set_text(settings_theme_value_, THEMES[next].name);
+    }
+    ESP_LOGI(TAG, "Theme switched to %s, restarting UI", THEMES[next].name);
+    esp_restart();
+}
+
 void DesktopUI::RefreshSettingsControls() {
     char value_text[16];
 
@@ -2931,6 +3245,10 @@ void DesktopUI::RefreshSettingsControls() {
     if (settings_firmware_version_label_) {
         const esp_app_desc_t* app_desc = esp_app_get_description();
         lv_label_set_text(settings_firmware_version_label_, app_desc ? app_desc->version : "--");
+    }
+
+    if (settings_theme_value_) {
+        lv_label_set_text(settings_theme_value_, theme().name);
     }
 }
 

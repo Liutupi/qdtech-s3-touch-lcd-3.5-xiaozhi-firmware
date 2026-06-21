@@ -2,6 +2,35 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-21: v1.7.23 Cat Theme Switcher And Layout Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.23`.
+- Added a persisted `Cat` UI theme alongside the existing `Classic` theme.
+- Added `Appearance / Theme` to Settings so the user can switch themes with one button. The setting is stored in NVS and applied after restart.
+- Kept the existing desktop/page architecture intact; the Cat theme changes colors, cards, brand styling, page decorations, and selected Cat-only layout offsets.
+- Updated Cat theme palette toward a stronger pink background and pink/white card system.
+- Updated the main clock card for Cat theme with better contrast: pink hour digits, orange minute digits, and a dedicated card positioned below the top-left brand mark.
+- Added Cat-theme Chinese brand mark `小苍兰 / 端午` using the existing Puhui Chinese font path.
+- Added a small Cat-theme cat icon to the main daily-card panel while preserving the existing festival/history/daily-quote content priority.
+- Added Cat-style XiaoZhi face decoration using LVGL primitives.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d4f00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22b100`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`: `51f84d5d354c5959a81b93a2766ab7e00551f3e579d3999c5d54c0f94bfc0634`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`: `360cd8bff4ad320f633ea15633a5b22159483da08437a922382f9c37178eb494`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`: `aff237067c6e55e9b6ff94fa6a82ddea6d9dca70d696e13f23463d6dbe6d1df8`
+- Follow-up: perform one more visual pass on the physical display after the release if the Cat theme still needs tighter spacing or stronger contrast.
+
 ## 2026-06-21: v1.7.22 More Robust GitHub OTA Download
 
 Scope:

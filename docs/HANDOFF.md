@@ -72,7 +72,28 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-21 v1.7.22 More Robust GitHub OTA Download
+## Latest Runtime Notes: 2026-06-21 v1.7.23 Cat Theme Switcher And Layout Polish
+
+- Latest release target is `v1.7.23`.
+- Added a second persisted UI theme named `Cat` while preserving the existing `Classic` black/gold theme.
+- Settings now includes an `Appearance / Theme` row. Tapping `Switch` cycles `Classic` <-> `Cat`, saves the choice in NVS namespace `qd_ui`, and restarts so the whole LVGL desktop is recreated with the selected palette.
+- The Cat theme intentionally keeps the existing page architecture: Main, Apps, Radio, FC/NES, Calendar, Focus, Network, Settings, Photos, and XiaoZhi navigation and callbacks are unchanged. Only palette, card styling, brand mark, icon decoration, and selected Cat-theme layout offsets change.
+- Cat theme visual updates include a pinker background, pink/white cards, pink-orange high-contrast time digits, Chinese brand mark `小苍兰 / 端午`, a small cat on the daily-card panel, and a cat-style XiaoZhi face page.
+- The main-page Cat time card was moved below the top-left brand mark after hardware feedback showed the first version overlapped the logo. In Cat mode the time group now starts lower and uses a shorter card; Classic mode keeps the previous layout.
+- The Chinese brand mark uses the already-linked `font_puhui_16_4` font path to avoid adding new glyph subset requirements for this theme pass.
+- Build verification passed after the final layout fix:
+  - `xiaozhi.bin` size: `0x3d4f00`.
+  - Smallest app partition: `0x600000`.
+  - Free app partition space: `0x22b100`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud. Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`: `51f84d5d354c5959a81b93a2766ab7e00551f3e579d3999c5d54c0f94bfc0634`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`: `360cd8bff4ad320f633ea15633a5b22159483da08437a922382f9c37178eb494`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`: `aff237067c6e55e9b6ff94fa6a82ddea6d9dca70d696e13f23463d6dbe6d1df8`
+- Remaining visual follow-up: inspect the Cat theme on hardware after this release and fine-tune exact spacing/colors from the physical screen rather than screenshots alone.
+
+## Previous Runtime Notes: 2026-06-21 v1.7.22 More Robust GitHub OTA Download
 
 - Latest release target is `v1.7.22`.
 - User reported a freshly flashed board can detect the newest GitHub firmware in the Settings OTA row, but pressing `Update` repeatedly fails.

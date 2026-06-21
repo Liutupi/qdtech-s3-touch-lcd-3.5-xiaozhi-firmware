@@ -2,10 +2,13 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: OTA Follow-Up Verification
+## Current Active Task: Cat Theme Hardware Polish And OTA Follow-Up
 
 Current state:
 
+- Firmware `v1.7.23` adds a persisted Settings -> Appearance -> Theme switcher with `Classic` and `Cat` themes.
+- The Cat theme keeps the existing desktop architecture but changes palette, cards, brand mark, main clock styling, daily-card decoration, and the XiaoZhi face visual style.
+- Cat theme was built and flashed to `COM13`; the final time-card layout no longer overlaps the top-left brand mark.
 - Firmware `v1.7.13` added the first real on-device update flow inside `SET / Settings / Firmware`.
 - Firmware `v1.7.22` is the current higher-version release target after that bootstrap. It includes the v1.7.21 battery/BOOT/WiFi fixes plus a hardened GitHub OTA download/write path.
 - The row has a `Check` / `Update` button with busy, latest, failed, no-WiFi, no-asset, and progress states.
@@ -19,6 +22,8 @@ Current state:
 
 Next work:
 
+- Inspect the Cat theme on the actual 480x320 screen and tune exact pink strength, time-card spacing, daily-card cat position, and Chinese brand readability from hardware feedback.
+- Consider replacing the restart-to-apply theme flow with a safe immediate UI recreation only after LVGL timer/object lifecycle risk is designed and tested.
 - Verify a full board-initiated OTA from `1.7.17` or older to `1.7.22`: check -> update -> download -> partition write -> reboot -> new version.
 - Verify BOOT physical-key wiring: confirm the user-visible flow on battery only: long-press BOOT until the screen turns off, release, then press BOOT once to wake. Confirm it reconnects to the saved WiFi without pairing/config mode. Record whether USB-connected and battery-only behavior differ.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.

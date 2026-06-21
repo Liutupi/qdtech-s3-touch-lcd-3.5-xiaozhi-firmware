@@ -21,6 +21,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.20 (2026-06-20): BOOT soft-power waits for key release before deep sleep so the same long press does not immediately wake the board
 - v1.7.21 (2026-06-20): BOOT startup clicks no longer clear saved WiFi after wake
 - v1.7.22 (2026-06-21): GitHub OTA download/write path tolerates missing content length and short first TLS chunks
+- v1.7.23 (2026-06-21): Persisted Classic/Cat theme switcher with Cat-style pink UI, brand mark, main clock, daily-card cat, and XiaoZhi face polish
 
 ## Confirmed Hardware From Source
 
@@ -78,6 +79,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - XiaoZhi voice stack remains the core application.
 - Landscape LVGL display with QDTech board-specific flush path.
 - Touch tap/swipe polling for desktop navigation.
+- Persisted Settings -> Appearance -> Theme switcher with `Classic` and `Cat` themes.
 - Unified navigation hierarchy:
   - Main left swipe opens Apps.
   - Apps right swipe returns to Main.

@@ -39,6 +39,7 @@ public:
     void SetBatteryStatus(int level, bool charging, bool valid);
     void SetDefaultNetwork(size_t index);
     void SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress);
+    void CycleTheme();
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
     void SetRadioState(const char* station, const char* state, const char* meta);
@@ -196,6 +197,9 @@ private:
     lv_obj_t* settings_firmware_status_label_ = nullptr;
     lv_obj_t* settings_firmware_button_ = nullptr;
     lv_obj_t* settings_firmware_button_label_ = nullptr;
+    lv_obj_t* settings_theme_value_ = nullptr;
+    lv_obj_t* settings_theme_button_ = nullptr;
+    lv_obj_t* settings_theme_button_label_ = nullptr;
 
     // Network page elements
     lv_obj_t* network_list_container_ = nullptr;
