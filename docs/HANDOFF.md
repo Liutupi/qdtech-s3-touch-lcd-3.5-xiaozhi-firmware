@@ -72,7 +72,25 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-21 v1.7.24 Shared LXGW WenKai UI Font Release
+## Latest Runtime Notes: 2026-06-21 v1.7.25 FC ROM Name Font Coverage Fix
+
+- Latest release target is `v1.7.25`.
+- FC/NES ROM list and selected-game detail labels were restored to `font_puhui_16_4` after user feedback that game names became garbled/missing-glyph-heavy after the shared LXGW WenKai UI font pass.
+- Keep this distinction: fixed UI copy can use the board-local LXGW WenKai subset, but dynamic SD-card ROM names must use a broad Chinese-coverage font such as `font_puhui_16_4` because ROM filenames are not known when generating the subset.
+- The rest of the `v1.7.24` font direction remains: Cat/Classic fixed Chinese UI text uses the shared LXGW WenKai subset, including daily-card and Calendar labels.
+- Build verification passed:
+  - `xiaozhi.bin` size: `0x3d6a00`.
+  - Smallest app partition: `0x600000`.
+  - Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud. Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`: `c6aded5a555049e414718fe84705fc8f4ceb84a1ade9bbdf0e00744c4a0db6c3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`: `abd27e9bc1b1e243dc99206e0b23bdfb977843f2792c0625e34297b239b1d80f`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`: `ea2a2a3afda4e8c286ae6d1b8a947fe5e0c7c801ac62fd09dcde871434671845`
+- Follow-up: visually re-open FC/NES on the physical LCD and confirm Chinese ROM names render normally.
+
+## Previous Runtime Notes: 2026-06-21 v1.7.24 Shared LXGW WenKai UI Font Release
 
 - Latest release target is `v1.7.24`.
 - The QDTech embedded `qd_font_lxgw_16` and `qd_font_lxgw_20` LVGL font subsets were regenerated from LXGW WenKai and are now the shared Chinese UI font path for both Classic and Cat themes.

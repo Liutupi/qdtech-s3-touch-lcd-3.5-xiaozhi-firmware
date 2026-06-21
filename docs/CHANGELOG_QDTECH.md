@@ -2,6 +2,30 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-21: v1.7.25 FC ROM Name Font Coverage Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.25`.
+- Restored FC/NES ROM list and selected-game detail labels to `font_puhui_16_4`.
+- Kept the shared LXGW WenKai subset for fixed UI copy, but avoided using that subset for dynamic SD-card ROM names because the subset cannot cover arbitrary Chinese game titles.
+- Fixed the regression where FC game names showed missing glyph boxes or garbled-looking text after the shared LXGW WenKai UI font pass.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`: `c6aded5a555049e414718fe84705fc8f4ceb84a1ade9bbdf0e00744c4a0db6c3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`: `abd27e9bc1b1e243dc99206e0b23bdfb977843f2792c0625e34297b239b1d80f`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`: `ea2a2a3afda4e8c286ae6d1b8a947fe5e0c7c801ac62fd09dcde871434671845`
+- Follow-up: visually re-open FC/NES on the physical LCD and confirm Chinese ROM names render normally with the restored full-coverage font.
+
 ## 2026-06-21: v1.7.24 Shared LXGW WenKai UI Font Release
 
 Scope:

@@ -1675,7 +1675,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
 
     fc_detail_label_ = label_en(fc_list_group_, "Scanning SD card", &style_muted);
-    lv_obj_set_style_text_font(fc_detail_label_, &qd_font_lxgw_16, 0);
+    lv_obj_set_style_text_font(fc_detail_label_, &font_puhui_16_4, 0);
     lv_obj_set_width(fc_detail_label_, 300);
     lv_label_set_long_mode(fc_detail_label_, LV_LABEL_LONG_DOT);
     lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
@@ -1689,7 +1689,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_set_style_radius(list_panel, 6, 0);
 
     fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
-    lv_obj_set_style_text_font(fc_list_label_, &qd_font_lxgw_16, 0);
+    lv_obj_set_style_text_font(fc_list_label_, &font_puhui_16_4, 0);
     lv_obj_set_width(fc_list_label_, 400);
     lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
