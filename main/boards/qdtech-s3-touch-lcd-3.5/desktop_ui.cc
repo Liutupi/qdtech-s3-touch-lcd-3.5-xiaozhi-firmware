@@ -36,6 +36,7 @@ LV_FONT_DECLARE(qd_font_lxgw_20);
 enum class UiTheme : uint8_t {
     CLASSIC = 0,
     CAT = 1,
+    TUPI_WARM = 2,
 };
 
 struct ThemePalette {
@@ -85,6 +86,21 @@ static constexpr ThemePalette THEMES[] = {
         LV_COLOR_MAKE(0x7b, 0xc7, 0xff),
         LV_COLOR_MAKE(0xff, 0x77, 0xaa),
     },
+    {
+        "Tupi Warm",
+        LV_COLOR_MAKE(0xf6, 0xf0, 0xe6),
+        LV_COLOR_MAKE(0xfb, 0xf7, 0xee),
+        LV_COLOR_MAKE(0xf4, 0xee, 0xe3),
+        LV_COLOR_MAKE(0x1c, 0x1b, 0x19),
+        LV_COLOR_MAKE(0xff, 0xfc, 0xf4),
+        LV_COLOR_MAKE(0x6f, 0x72, 0x5f),
+        LV_COLOR_MAKE(0xc9, 0xbf, 0xae),
+        LV_COLOR_MAKE(0xd9, 0x90, 0x2f),
+        LV_COLOR_MAKE(0x7f, 0x87, 0x6d),
+        LV_COLOR_MAKE(0xb9, 0x79, 0x5a),
+        LV_COLOR_MAKE(0x8d, 0x8b, 0x7d),
+        LV_COLOR_MAKE(0x7f, 0x87, 0x6d),
+    },
 };
 
 static UiTheme current_theme = UiTheme::CLASSIC;
@@ -95,6 +111,10 @@ static const ThemePalette& theme() {
 
 static bool is_cat_theme() {
     return current_theme == UiTheme::CAT;
+}
+
+static bool is_tupi_warm_theme() {
+    return current_theme == UiTheme::TUPI_WARM;
 }
 
 static void load_theme() {
@@ -125,6 +145,10 @@ static lv_color_t themed_color(lv_color_t classic, lv_color_t cat) {
 
 static lv_color_t cat_card_shadow() {
     return LV_COLOR_MAKE(0xe9, 0xc8, 0xd8);
+}
+
+static lv_color_t tupi_warm_shadow() {
+    return LV_COLOR_MAKE(0xd8, 0xcd, 0xbc);
 }
 
 #define COLOR_BG (theme().bg)
@@ -180,6 +204,20 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
     return label;
 }
 
+static lv_obj_t* circle(lv_obj_t* parent, int16_t size, lv_color_t color, lv_opa_t opa);
+
+static void create_tupi_dot_mark(lv_obj_t* parent, int16_t x, int16_t y, int16_t dot = 8, int16_t gap = 4) {
+    const lv_color_t colors[4] = {
+        COLOR_TEXT, COLOR_TEXT, COLOR_GREEN, COLOR_MUTED
+    };
+    for (int r = 0; r < 2; ++r) {
+        for (int c = 0; c < 2; ++c) {
+            lv_obj_t* d = circle(parent, dot, colors[r * 2 + c], LV_OPA_COVER);
+            lv_obj_align(d, LV_ALIGN_TOP_LEFT, x + c * (dot + gap), y + r * (dot + gap));
+        }
+    }
+}
+
 static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
     if (is_cat_theme()) {
         lv_obj_t* brand_a = lv_label_create(parent);
@@ -197,6 +235,21 @@ static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
         lv_obj_set_style_text_color(brand_b, COLOR_PURPLE, 0);
         lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, x, y + 24);
         add_gesture_bubble(brand_b);
+        return;
+    }
+
+    if (is_tupi_warm_theme()) {
+        create_tupi_dot_mark(parent, x, y + 2, 8, 4);
+
+        lv_obj_t* brand = label_en(parent, "nothing impossible", &style_en);
+        lv_obj_set_style_text_font(brand, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_color(brand, COLOR_TEXT, 0);
+        lv_obj_align(brand, LV_ALIGN_TOP_LEFT, x + 34, y);
+
+        lv_obj_t* sub = label_en(parent, "tupi", &style_muted);
+        lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(sub, COLOR_GREEN, 0);
+        lv_obj_align(sub, LV_ALIGN_TOP_LEFT, x + 34, y + 24);
         return;
     }
 
@@ -328,17 +381,25 @@ static void init_styles() {
     lv_style_set_bg_opa(&style_panel, LV_OPA_COVER);
     lv_style_set_border_color(&style_panel, COLOR_LINE);
     lv_style_set_border_width(&style_panel, 1);
-    lv_style_set_radius(&style_panel, 6);
+    lv_style_set_radius(&style_panel, is_tupi_warm_theme() ? 10 : 6);
     lv_style_set_pad_all(&style_panel, 0);
+    if (is_tupi_warm_theme()) {
+        lv_style_set_shadow_width(&style_panel, 8);
+        lv_style_set_shadow_color(&style_panel, tupi_warm_shadow());
+        lv_style_set_shadow_opa(&style_panel, LV_OPA_20);
+        lv_style_set_shadow_ofs_y(&style_panel, 2);
+    }
 
     lv_style_init(&style_clock_card);
     lv_style_set_bg_color(&style_clock_card,
+                          is_tupi_warm_theme() ? COLOR_SURFACE :
                           themed_color(LV_COLOR_MAKE(0x08, 0x08, 0x08), COLOR_SURFACE));
     lv_style_set_bg_opa(&style_clock_card, LV_OPA_COVER);
     lv_style_set_border_color(&style_clock_card,
+                              is_tupi_warm_theme() ? COLOR_LINE :
                               themed_color(LV_COLOR_MAKE(0x2a, 0x28, 0x22), COLOR_LINE));
     lv_style_set_border_width(&style_clock_card, 1);
-    lv_style_set_radius(&style_clock_card, 5);
+    lv_style_set_radius(&style_clock_card, is_tupi_warm_theme() ? 12 : 5);
     lv_style_set_pad_all(&style_clock_card, 0);
 }
 
@@ -1155,7 +1216,24 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     add_gesture_bubble(main_page_);
 
     // Brand
-    if (is_cat_theme()) {
+    if (is_tupi_warm_theme()) {
+        create_brand_mark(main_page_, 20, 10);
+
+        lv_obj_t* wifi = label_en(main_page_, "WiFi", &style_en);
+        lv_obj_set_style_text_font(wifi, &lv_font_montserrat_14, 0);
+        lv_obj_align(wifi, LV_ALIGN_TOP_LEFT, 278, 14);
+
+        lv_obj_t* battery = label_en(main_page_, "--%", &style_en);
+        lv_obj_set_style_text_color(battery, COLOR_TEXT, 0);
+        lv_obj_align(battery, LV_ALIGN_TOP_LEFT, 340, 14);
+        for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+            if (!status_bar_battery_labels_[i]) {
+                status_bar_battery_labels_[i] = battery;
+                break;
+            }
+        }
+        SetBatteryStatus(battery_level_, battery_charging_, battery_level_ >= 0);
+    } else if (is_cat_theme()) {
         create_brand_mark(main_page_, 20, 4);
     } else {
         lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
@@ -1183,56 +1261,102 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(week_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 178, 174);
 
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(date_label_, COLOR_TEXT, 0);
+        lv_obj_set_style_text_font(date_label_, &lv_font_montserrat_20, 0);
+        lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 60, 165);
+        lv_obj_set_style_text_color(week_label_, COLOR_GREEN, 0);
+        lv_obj_set_style_text_font(week_label_, &qd_font_lxgw_20, 0);
+        lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 182, 164);
+    }
+
     CreateWeatherPanel(main_page_);
     CreateQuotePanel(main_page_);
 
     // Menu button
     lv_obj_t* menu = CreateButton(main_page_, "Menu", show_apps_cb);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_size(menu, 58, 30);
+        lv_obj_set_style_bg_color(menu, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(menu, COLOR_LINE, 0);
+        lv_obj_set_style_radius(menu, 15, 0);
+    }
     lv_obj_align(menu, LV_ALIGN_TOP_RIGHT, -18, 10);
 }
 
 void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_t* time_group = lv_obj_create(parent);
     lv_obj_remove_style_all(time_group);
-    lv_obj_set_size(time_group, 254, is_cat_theme() ? 106 : 154);
-    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 66 : 18);
+    lv_obj_set_size(time_group, is_tupi_warm_theme() ? 254 : 254,
+                    is_tupi_warm_theme() ? 142 : (is_cat_theme() ? 106 : 154));
+    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20,
+                 is_tupi_warm_theme() ? 58 : (is_cat_theme() ? 66 : 18));
     lv_obj_clear_flag(time_group, LV_OBJ_FLAG_SCROLLABLE);
-    if (is_cat_theme()) {
-        lv_obj_set_style_radius(time_group, 18, 0);
+    if (is_cat_theme() || is_tupi_warm_theme()) {
+        lv_obj_set_style_radius(time_group, is_tupi_warm_theme() ? 12 : 18, 0);
         lv_obj_set_style_bg_color(time_group, COLOR_SURFACE, 0);
         lv_obj_set_style_bg_opa(time_group, LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(time_group, COLOR_LINE, 0);
         lv_obj_set_style_border_width(time_group, 1, 0);
-        lv_obj_set_style_shadow_width(time_group, 14, 0);
-        lv_obj_set_style_shadow_color(time_group, cat_card_shadow(), 0);
-        lv_obj_set_style_shadow_opa(time_group, LV_OPA_40, 0);
+        lv_obj_set_style_shadow_width(time_group, is_tupi_warm_theme() ? 8 : 14, 0);
+        lv_obj_set_style_shadow_color(time_group,
+                                      is_tupi_warm_theme() ? tupi_warm_shadow() : cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(time_group, is_tupi_warm_theme() ? LV_OPA_20 : LV_OPA_40, 0);
     }
     add_gesture_bubble(time_group);
 
     clock_hour_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_hour_label_, "00");
-    lv_obj_set_size(clock_hour_label_, 108, is_cat_theme() ? 78 : 60);
+    lv_obj_set_size(clock_hour_label_, is_tupi_warm_theme() ? 104 : 108,
+                    is_tupi_warm_theme() ? 78 : (is_cat_theme() ? 78 : 60));
     lv_obj_set_style_text_font(clock_hour_label_, &qd_font_clock_72, 0);
-    lv_obj_set_style_text_color(clock_hour_label_, is_cat_theme() ? COLOR_PURPLE : COLOR_CREAM, 0);
+    lv_obj_set_style_text_color(clock_hour_label_,
+                                is_tupi_warm_theme() ? COLOR_TEXT :
+                                (is_cat_theme() ? COLOR_PURPLE : COLOR_CREAM), 0);
     lv_obj_set_style_text_align(clock_hour_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, is_cat_theme() ? 18 : 77);
+    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 18 : 0,
+                 is_tupi_warm_theme() ? 22 : (is_cat_theme() ? 18 : 77));
     add_gesture_bubble(clock_hour_label_);
 
     clock_minute_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_minute_label_, "00");
-    lv_obj_set_size(clock_minute_label_, 110, is_cat_theme() ? 78 : 60);
+    lv_obj_set_size(clock_minute_label_, is_tupi_warm_theme() ? 100 : 110,
+                    is_tupi_warm_theme() ? 78 : (is_cat_theme() ? 78 : 60));
     lv_obj_set_style_text_font(clock_minute_label_, &qd_font_clock_72, 0);
     lv_obj_set_style_text_color(clock_minute_label_, COLOR_GOLD, 0);
     lv_obj_set_style_text_align(clock_minute_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, is_cat_theme() ? 18 : 77);
+    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 150 : 142,
+                 is_tupi_warm_theme() ? 22 : (is_cat_theme() ? 18 : 77));
     add_gesture_bubble(clock_minute_label_);
 
-    clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 18 : 73);
-    clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 60 : 116);
-    lv_timer_create(ColonTimerCb, 500, this);
-
+    if (is_tupi_warm_theme()) {
+        lv_obj_t* colon = lv_label_create(time_group);
+        lv_label_set_text(colon, ":");
+        lv_obj_set_style_text_font(colon, &qd_font_clock_72, 0);
+        lv_obj_set_style_text_color(colon, COLOR_TEXT, 0);
+        lv_obj_set_size(colon, 26, 78);
+        lv_obj_set_style_text_align(colon, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(colon, LV_ALIGN_TOP_LEFT, 124, 22);
+        add_gesture_bubble(colon);
+    } else {
+        clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+        lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 18 : 73);
+        clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+        lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 60 : 116);
+        lv_timer_create(ColonTimerCb, 500, this);
+    }
+    if (is_tupi_warm_theme()) {
+        lv_obj_t* divider = bar(time_group, 190, 1, COLOR_LINE, LV_OPA_70);
+        lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 32, 96);
+        lv_obj_t* dot = circle(time_group, 5, COLOR_GREEN, LV_OPA_COVER);
+        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 124, 94);
+        lv_obj_t* date_pill = bar(time_group, 196, 28, COLOR_SURFACE_2, LV_OPA_COVER);
+        lv_obj_set_style_border_color(date_pill, COLOR_LINE, 0);
+        lv_obj_set_style_border_width(date_pill, 1, 0);
+        lv_obj_align(date_pill, LV_ALIGN_TOP_LEFT, 30, 106);
+    }
     RenderBigTime(0, 0, false);
 }
 
@@ -1248,12 +1372,18 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 56, 28);
 
     // Clouds
-    weather_cloud_[0] = circle(panel, 38, COLOR_CREAM, LV_OPA_70);
+    weather_cloud_[0] = circle(panel, 38, COLOR_CREAM, LV_OPA_COVER);
     lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 42, 60);
-    weather_cloud_[1] = circle(panel, 46, COLOR_CREAM, LV_OPA_80);
+    weather_cloud_[1] = circle(panel, 46, COLOR_CREAM, LV_OPA_COVER);
     lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 72, 52);
-    weather_cloud_[2] = bar(panel, 88, 26, COLOR_CREAM, LV_OPA_80);
+    weather_cloud_[2] = bar(panel, 88, 26, COLOR_CREAM, LV_OPA_COVER);
     lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 40, 78);
+    if (is_tupi_warm_theme()) {
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_set_style_border_color(weather_cloud_[i], COLOR_LINE, 0);
+            lv_obj_set_style_border_width(weather_cloud_[i], 1, 0);
+        }
+    }
 
     for (int i = 0; i < 3; ++i) {
         weather_rain_[i] = bar(panel, 4, 20, COLOR_BLUE, LV_OPA_80);
@@ -1288,6 +1418,10 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
 
     weather_temp_label_ = label_en(panel, "-- C", &style_en);
     lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(weather_temp_label_, COLOR_GREEN, 0);
+        lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
+    }
     lv_obj_set_width(weather_temp_label_, 142);
     lv_label_set_long_mode(weather_temp_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 12, 108);
@@ -1296,36 +1430,64 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_obj_set_width(weather_meta_label_, 142);
     lv_label_set_long_mode(weather_meta_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(weather_meta_label_, &lv_font_montserrat_12, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(weather_meta_label_, COLOR_GREEN, 0);
+    }
     lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 12, 132);
 
     ApplyWeatherVisual(-1);
 }
 
 void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
-    daily_card_panel_ = CreatePanel(parent, 438, 94, 20, 214);
+    daily_card_panel_ = CreatePanel(parent, 438, is_tupi_warm_theme() ? 76 : 94,
+                                    20, is_tupi_warm_theme() ? 232 : 214);
     if (is_cat_theme()) {
         lv_obj_set_style_bg_color(daily_card_panel_, COLOR_SURFACE, 0);
         lv_obj_set_style_border_color(daily_card_panel_, COLOR_LINE, 0);
         lv_obj_set_style_shadow_width(daily_card_panel_, 12, 0);
         lv_obj_set_style_shadow_color(daily_card_panel_, cat_card_shadow(), 0);
         lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_40, 0);
+    } else if (is_tupi_warm_theme()) {
+        lv_obj_set_style_bg_color(daily_card_panel_, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(daily_card_panel_, COLOR_LINE, 0);
+        lv_obj_set_style_shadow_width(daily_card_panel_, 8, 0);
+        lv_obj_set_style_shadow_color(daily_card_panel_, tupi_warm_shadow(), 0);
+        lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_20, 0);
+
+        lv_obj_t* note = label_en(daily_card_panel_, "tupi note", &style_muted);
+        lv_obj_set_style_text_font(note, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(note, COLOR_GREEN, 0);
+        lv_obj_align(note, LV_ALIGN_TOP_LEFT, 22, 8);
+        create_tupi_dot_mark(daily_card_panel_, 98, 10, 6, 3);
     }
 
     daily_card_date_label_ = label_en(daily_card_panel_, "--/--", &style_gold);
     lv_obj_set_width(daily_card_date_label_, 92);
-    lv_obj_set_style_text_align(daily_card_date_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_date_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
+    lv_obj_set_style_text_align(daily_card_date_label_,
+                                is_tupi_warm_theme() ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(daily_card_date_label_,
+                               is_tupi_warm_theme() ? &lv_font_montserrat_16 : &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(daily_card_date_label_,
+                                is_tupi_warm_theme() ? COLOR_GREEN : COLOR_GOLD, 0);
+    lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 24 : 16, is_tupi_warm_theme() ? 33 : 15);
 
     daily_card_title_label_ = label_en(daily_card_panel_, "今日", &style_muted);
-    lv_obj_set_width(daily_card_title_label_, 108);
+    lv_obj_set_width(daily_card_title_label_, is_tupi_warm_theme() ? 104 : 108);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_title_label_, &qd_font_lxgw_20, 0);
-    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, is_cat_theme() ? 45 : 47);
+    lv_obj_set_style_text_align(daily_card_title_label_,
+                                is_tupi_warm_theme() ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(daily_card_title_label_, COLOR_TEXT, 0);
+    lv_obj_set_style_text_font(daily_card_title_label_,
+                               is_tupi_warm_theme() ? &qd_font_lxgw_16 : &qd_font_lxgw_20, 0);
+    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 24 : 16,
+                 is_tupi_warm_theme() ? 52 : (is_cat_theme() ? 45 : 47));
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
-    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 120 : 132, 16);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 124 : (is_cat_theme() ? 120 : 132),
+                 is_tupi_warm_theme() ? 10 : 16);
 
     if (is_cat_theme()) {
         lv_obj_t* cat = circle(daily_card_panel_, 38, COLOR_CREAM, LV_OPA_COVER);
@@ -1356,17 +1518,26 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
     }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, is_cat_theme() ? 232 : 266);
+    lv_obj_set_width(quote_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_color(quote_label_, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
-    lv_obj_set_style_text_line_space(quote_label_, is_cat_theme() ? 1 : 0, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, is_cat_theme() ? 186 : 152, 10);
+    lv_obj_set_style_text_line_space(quote_label_,
+                                     is_tupi_warm_theme() ? 2 : (is_cat_theme() ? 1 : 0), 0);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 146 : (is_cat_theme() ? 186 : 152),
+                 is_tupi_warm_theme() ? 16 : 10);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, is_cat_theme() ? 232 : 266);
+    lv_obj_set_width(network_status_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, is_cat_theme() ? 190 : 152, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT,
+                 is_tupi_warm_theme() ? 148 : (is_cat_theme() ? 190 : 152),
+                 is_tupi_warm_theme() ? -9 : -7);
+    if (is_tupi_warm_theme()) {
+        lv_obj_add_flag(network_status_label_, LV_OBJ_FLAG_HIDDEN);
+    }
     
     // Daily card breathing animation
     lv_timer_create(DailyCardBreathCb, 50, this);
@@ -1381,6 +1552,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(apps_page_, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_set_style_bg_color(apps_page_,
+                              is_tupi_warm_theme() ? COLOR_BG :
                               themed_color(LV_COLOR_MAKE(0x0e, 0x08, 0x05), COLOR_BG), 0);
 
     create_brand_mark(apps_page_);
@@ -1389,6 +1561,9 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
     lv_obj_t* title = label_en(apps_page_, "Apps", &style_en);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
+    }
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(apps_page_, "App Center", &style_muted);
@@ -1396,8 +1571,10 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
     lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
     lv_obj_set_style_bg_color(back,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x24, 0x16, 0x0f), COLOR_SURFACE), 0);
     lv_obj_set_style_border_color(back,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
                                   themed_color(LV_COLOR_MAKE(0x78, 0x48, 0x26), COLOR_LINE), 0);
     lv_obj_set_style_radius(back, 16, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
@@ -1414,11 +1591,11 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     AppInfo apps[] = {
         {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
         {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
-        {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
+        {"AI", "XiaoZhi", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
         {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
-        {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
+        {"CAL", "Calendar", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
         {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi Hub", COLOR_BLUE, network_card_cb},
+        {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
         {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
     };
 
@@ -1444,14 +1621,20 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_color(box,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x18, 0x0f, 0x0a), COLOR_SURFACE), 0);
     lv_obj_set_style_border_color(box,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
                                   themed_color(LV_COLOR_MAKE(0x68, 0x3d, 0x22), COLOR_LINE), 0);
-    lv_obj_set_style_radius(box, 6, 0);
+    lv_obj_set_style_radius(box, is_tupi_warm_theme() ? 8 : 6, 0);
     if (is_cat_theme()) {
         lv_obj_set_style_shadow_width(box, 10, 0);
         lv_obj_set_style_shadow_color(box, cat_card_shadow(), 0);
         lv_obj_set_style_shadow_opa(box, LV_OPA_30, 0);
+    } else if (is_tupi_warm_theme()) {
+        lv_obj_set_style_shadow_width(box, 6, 0);
+        lv_obj_set_style_shadow_color(box, tupi_warm_shadow(), 0);
+        lv_obj_set_style_shadow_opa(box, LV_OPA_20, 0);
     }
     add_gesture_bubble(box);
 
@@ -1460,14 +1643,16 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_set_size(icon_box, 36, 34);
     lv_obj_set_style_radius(icon_box, 6, 0);
     lv_obj_set_style_bg_color(icon_box,
+                              is_tupi_warm_theme() ? COLOR_SURFACE_2 :
                               themed_color(LV_COLOR_MAKE(0x1b, 0x11, 0x0b), COLOR_SURFACE_2), 0);
     lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(icon_box, COLOR_GOLD, 0);
+    lv_obj_set_style_border_color(icon_box, is_tupi_warm_theme() ? COLOR_LINE : COLOR_GOLD, 0);
     lv_obj_set_style_border_width(icon_box, 1, 0);
     lv_obj_align(icon_box, LV_ALIGN_TOP_LEFT, 10, 7);
     add_gesture_bubble(icon_box);
 
     lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
+    lv_obj_set_style_text_color(cn_label, is_tupi_warm_theme() ? color : COLOR_GOLD, 0);
     lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_12, 0);
     lv_obj_center(cn_label);
 
@@ -1520,7 +1705,7 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             lv_obj_t* face = circle(box, 28,
                                     themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_CREAM),
                                     LV_OPA_COVER);
-            lv_obj_set_style_border_color(face, COLOR_GOLD, 0);
+            lv_obj_set_style_border_color(face, is_tupi_warm_theme() ? COLOR_GREEN : COLOR_GOLD, 0);
             lv_obj_set_style_border_width(face, 2, 0);
             lv_obj_align(face, LV_ALIGN_TOP_RIGHT, -32, 10);
             lv_obj_t* eye_l = circle(face, 3, COLOR_GOLD, LV_OPA_COVER);
@@ -1671,6 +1856,9 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     add_gesture_bubble(fc_game_group_);
 
     fc_title_label_ = label_en(fc_list_group_, "FC / NES", &style_gold);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(fc_title_label_, COLOR_TEXT, 0);
+    }
     lv_obj_set_style_text_font(fc_title_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
 
@@ -1682,14 +1870,19 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
 
     lv_obj_t* list_panel = CreatePanel(fc_list_group_, 432, 204, 24, 52);
     lv_obj_set_style_bg_color(list_panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
     lv_obj_set_style_border_color(list_panel,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
                                   themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(list_panel, 1, 0);
     lv_obj_set_style_radius(list_panel, 6, 0);
 
     fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
     lv_obj_set_style_text_font(fc_list_label_, &font_puhui_16_4, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(fc_list_label_, COLOR_TEXT, 0);
+    }
     lv_obj_set_width(fc_list_label_, 400);
     lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
@@ -1709,8 +1902,10 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
 
     lv_obj_t* screen = CreatePanel(fc_game_group_, 480, 240, 0, 0);
     lv_obj_set_style_bg_color(screen,
+                              is_tupi_warm_theme() ? COLOR_BG :
                               themed_color(LV_COLOR_MAKE(0x02, 0x03, 0x05), LV_COLOR_MAKE(0xff, 0xfb, 0xfc)), 0);
     lv_obj_set_style_border_color(screen,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
                                   themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_radius(screen, 0, 0);
@@ -1721,6 +1916,7 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
 
     lv_obj_t* controls = CreatePanel(fc_game_group_, 480, 80, 0, 240);
     lv_obj_set_style_bg_color(controls,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(controls, 0, 0);
     lv_obj_set_style_radius(controls, 0, 0);
@@ -2605,6 +2801,9 @@ lv_obj_t* DesktopUI::CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t
 
 void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
     lv_obj_t* wifi = label_en(parent, "WiFi", &style_green);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(wifi, COLOR_TEXT, 0);
+    }
     lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -168, 12);
 
     lv_obj_t* time = label_en(parent, "--:--", &style_en);
@@ -2618,6 +2817,9 @@ void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
     }
 
     lv_obj_t* battery = label_en(parent, "--%", &style_green);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(battery, COLOR_TEXT, 0);
+    }
     lv_obj_align(battery, LV_ALIGN_TOP_RIGHT, -20, 12);
     for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
         if (!status_bar_battery_labels_[i]) {
@@ -3516,7 +3718,7 @@ void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
     lv_obj_set_style_bg_color(particle, COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(particle, LV_OPA_60, 0);
     
-    // Random position near sun
+    // Random position near the icon.
     int16_t x = 56 + (esp_random() % 54);
     int16_t y = 28 + (esp_random() % 30);
     lv_obj_align(particle, LV_ALIGN_TOP_LEFT, x, y);

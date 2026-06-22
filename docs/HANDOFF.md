@@ -72,7 +72,24 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-22 v1.7.26 GitHub OTA Redirect Buffer Fix
+## Latest Runtime Notes: 2026-06-23 v1.7.27 Tupi Warm Theme And Weather Layout Reuse
+
+- Latest release target is `v1.7.27`.
+- User approved a third warm paper theme direction built around the `nothing impossible / tupi` brand mark.
+- `desktop_ui.cc` now includes a third persisted theme enum value, `Tupi Warm`, with an ivory/warm-paper palette, graphite text, muted olive, amber accents, and a four-dot Tupi brand mark.
+- The main Tupi Warm page keeps the earlier accepted large time treatment while moving the top status items apart, hiding the daily-card network footer in Tupi mode, and keeping the FC/NES surfaces readable instead of black-on-black.
+- The compact Tupi-specific weather layout was rejected on hardware. The final `v1.7.27` code intentionally reuses the previous Classic weather animation geometry for sun, clouds, rain, snow, storm, and gold particles, while retaining the Tupi Warm card colors.
+- Build verification passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x3d75d0`, smallest app partition is `0x600000`, and free app space is `0x228a30`, about 36%.
+- Flash verification passed on `COM13` at 921600 baud.
+- Captured boot logs after the weather-layout correction confirmed QDTech startup, `Desktop UI created`, `Touch max points: 5`, battery ADC readings, saved WiFi reconnect, GitHub OTA latest check, MQTT connection, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`: `88a347cb3700185db6dcb17b6b590c28f8da0309446f7bc9dbb81c399a74a82a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`: `126b45d88d6e50c1a102c81e9db39559593d963c79e61d54fcb2d4637320961c`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`: `56f506ef9f7dd255c6b114fcdde78c6327839b4dbff5436af1e192427f9c7b4e`
+- Follow-up: visually inspect Tupi Warm on the actual 480x320 LCD after release, especially the big-clock colon alignment, top-right status spacing, quote wrapping, and weather contrast.
+
+## Previous Runtime Notes: 2026-06-22 v1.7.26 GitHub OTA Redirect Buffer Fix
 
 - Latest release target is `v1.7.26`.
 - User reported another Settings OTA update failure on a newly inserted board. Serial capture on `COM13` showed the exact failure:

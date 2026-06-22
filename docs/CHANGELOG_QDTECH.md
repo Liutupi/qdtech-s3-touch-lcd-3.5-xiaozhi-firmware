@@ -2,6 +2,31 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.27 Tupi Warm Theme And Weather Layout Reuse
+
+Scope:
+
+- Bumped firmware version to `1.7.27`.
+- Added a third persisted desktop theme, `Tupi Warm`, after the user approved the warm paper `nothing impossible / tupi` direction.
+- Added the Tupi Warm palette, four-dot brand mark, warm main clock card, warm daily-card treatment, and warm Apps/FC/NES surface colors without changing the overall desktop page architecture.
+- Removed the rejected compact Tupi weather-card layout. Tupi Warm now reuses the proven Classic weather animation geometry for sun, cloud, rain, snow, storm, and gold particles while retaining the warm-paper card colors.
+- Kept the weather card free of the added city label because it collided with the animation on the 480x320 panel.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x3d75d0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x228a30`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.27`, QDTech board startup, `Desktop UI created`, touch input creation, battery ADC readings, saved WiFi reconnect, `Ota: Current version: 1.7.27`, GitHub OTA latest check, MQTT connection, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`: `88a347cb3700185db6dcb17b6b590c28f8da0309446f7bc9dbb81c399a74a82a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`: `126b45d88d6e50c1a102c81e9db39559593d963c79e61d54fcb2d4637320961c`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`: `56f506ef9f7dd255c6b114fcdde78c6327839b4dbff5436af1e192427f9c7b4e`
+- Follow-up: after publishing `v1.7.27`, install or OTA it on the board and visually confirm the Tupi Warm weather card now matches the older accepted weather animation behavior.
+
 ## 2026-06-22: v1.7.26 GitHub OTA Redirect Buffer Fix
 
 Scope:

@@ -2,11 +2,15 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: Cat Theme Hardware Polish And OTA Follow-Up
+## Current Active Task: Tupi Warm Theme Hardware Polish And OTA Follow-Up
 
 Current state:
 
-- Firmware `v1.7.23` adds a persisted Settings -> Appearance -> Theme switcher with `Classic` and `Cat` themes.
+- Firmware `v1.7.27` adds a third persisted Settings -> Appearance -> Theme option named `Tupi Warm`.
+- `Tupi Warm` follows the warm paper `nothing impossible / tupi` direction: ivory background, graphite text, muted olive, and amber accents.
+- The main page keeps the earlier accepted large time style, adds the Tupi brand mark, warms the Apps/FC surfaces, and hides the main daily-card network footer so the quote does not collide.
+- The Tupi weather card deliberately reuses the prior Classic weather animation geometry after the new compact weather layout was rejected on hardware.
+- Firmware `v1.7.23` previously added the persisted `Classic` and `Cat` themes.
 - The Cat theme keeps the existing desktop architecture but changes palette, cards, brand mark, main clock styling, daily-card decoration, and the XiaoZhi face visual style.
 - Cat theme was built and flashed to `COM13`; the final time-card layout no longer overlaps the top-left brand mark.
 - Firmware `v1.7.13` added the first real on-device update flow inside `SET / Settings / Firmware`.
@@ -22,6 +26,7 @@ Current state:
 
 Next work:
 
+- Inspect `Tupi Warm` on the physical 480x320 screen and tune exact time colon alignment, top-right status spacing, daily-card line wrapping, and weather-card contrast from hardware feedback.
 - Inspect the Cat theme on the actual 480x320 screen and tune exact pink strength, time-card spacing, daily-card cat position, and Chinese brand readability from hardware feedback.
 - Consider replacing the restart-to-apply theme flow with a safe immediate UI recreation only after LVGL timer/object lifecycle risk is designed and tested.
 - Verify a full board-initiated OTA from `1.7.17` or older to `1.7.22`: check -> update -> download -> partition write -> reboot -> new version.
