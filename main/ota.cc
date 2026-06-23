@@ -17,7 +17,7 @@
 #include <esp_hmac.h>
 #endif
 #include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include <cctype>
@@ -48,52 +48,52 @@ enum class OtaFlashCommand : uint8_t {
     Stop,
 };
 
-struct OtaFlashRequest {
-    OtaFlashCommand command;
-    size_t length = 0;
-};
-
 struct OtaFlashWorkerContext {
-    QueueHandle_t requests = nullptr;
-    QueueHandle_t responses = nullptr;
+    SemaphoreHandle_t done = nullptr;
     const esp_partition_t* partition = nullptr;
     esp_ota_handle_t handle = 0;
-    uint8_t* buffer = nullptr;
+    const uint8_t* data = nullptr;
+    size_t length = 0;
     esp_err_t result = ESP_OK;
+    OtaFlashCommand command = OtaFlashCommand::Begin;
 };
 
 static void OtaFlashWorkerTask(void* arg) {
     auto* ctx = static_cast<OtaFlashWorkerContext*>(arg);
-    OtaFlashRequest request;
-    while (xQueueReceive(ctx->requests, &request, portMAX_DELAY) == pdTRUE) {
-        switch (request.command) {
-            case OtaFlashCommand::Begin:
-                ctx->result = esp_ota_begin(ctx->partition, OTA_WITH_SEQUENTIAL_WRITES, &ctx->handle);
+    switch (ctx->command) {
+        case OtaFlashCommand::Begin:
+            ctx->result = esp_ota_begin(ctx->partition, OTA_WITH_SEQUENTIAL_WRITES, &ctx->handle);
+            break;
+        case OtaFlashCommand::Write: {
+            uint8_t* buffer = static_cast<uint8_t*>(
+                heap_caps_malloc(ctx->length, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            if (!buffer) {
+                ctx->result = ESP_ERR_NO_MEM;
                 break;
-            case OtaFlashCommand::Write:
-                ctx->result = esp_ota_write(ctx->handle, ctx->buffer, request.length);
-                break;
-            case OtaFlashCommand::End:
-                ctx->result = esp_ota_end(ctx->handle);
-                break;
-            case OtaFlashCommand::SetBoot:
-                ctx->result = esp_ota_set_boot_partition(ctx->partition);
-                break;
-            case OtaFlashCommand::Abort:
-                if (ctx->handle) {
-                    esp_ota_abort(ctx->handle);
-                    ctx->handle = 0;
-                }
-                ctx->result = ESP_OK;
-                break;
-            case OtaFlashCommand::Stop:
-                ctx->result = ESP_OK;
-                xQueueSend(ctx->responses, &ctx->result, portMAX_DELAY);
-                vTaskDelete(nullptr);
-                return;
+            }
+            memcpy(buffer, ctx->data, ctx->length);
+            ctx->result = esp_ota_write(ctx->handle, buffer, ctx->length);
+            heap_caps_free(buffer);
+            break;
         }
-        xQueueSend(ctx->responses, &ctx->result, portMAX_DELAY);
+        case OtaFlashCommand::End:
+            ctx->result = esp_ota_end(ctx->handle);
+            break;
+        case OtaFlashCommand::SetBoot:
+            ctx->result = esp_ota_set_boot_partition(ctx->partition);
+            break;
+        case OtaFlashCommand::Abort:
+            if (ctx->handle) {
+                esp_ota_abort(ctx->handle);
+                ctx->handle = 0;
+            }
+            ctx->result = ESP_OK;
+            break;
+        case OtaFlashCommand::Stop:
+            ctx->result = ESP_OK;
+            break;
     }
+    xSemaphoreGive(ctx->done);
     vTaskDelete(nullptr);
 }
 
@@ -101,36 +101,17 @@ class OtaFlashWorker {
 public:
     explicit OtaFlashWorker(const esp_partition_t* partition) {
         ctx_.partition = partition;
-        ctx_.requests = xQueueCreate(1, sizeof(OtaFlashRequest));
-        ctx_.responses = xQueueCreate(1, sizeof(esp_err_t));
-        ctx_.buffer = static_cast<uint8_t*>(
-            heap_caps_malloc(kFirmwareHttpBufferSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-        if (!ctx_.requests || !ctx_.responses || !ctx_.buffer) {
-            return;
-        }
-        BaseType_t ret = xTaskCreateWithCaps(
-            OtaFlashWorkerTask, "ota_flash", 3072, &ctx_, 3, &task_,
-            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        ready_ = ret == pdPASS;
+        ctx_.done = xSemaphoreCreateBinary();
+        ready_ = ctx_.done != nullptr;
     }
 
     ~OtaFlashWorker() {
-        if (ready_) {
-            Send(OtaFlashCommand::Stop);
-        }
-        if (ctx_.buffer) {
-            heap_caps_free(ctx_.buffer);
-        }
-        if (ctx_.requests) {
-            vQueueDelete(ctx_.requests);
-        }
-        if (ctx_.responses) {
-            vQueueDelete(ctx_.responses);
+        if (ctx_.done) {
+            vSemaphoreDelete(ctx_.done);
         }
     }
 
     bool ready() const { return ready_; }
-    uint8_t* buffer() const { return ctx_.buffer; }
 
     esp_err_t Begin() { return Send(OtaFlashCommand::Begin); }
     esp_err_t Write(const void* data, size_t length) {
@@ -138,8 +119,7 @@ public:
         size_t offset = 0;
         while (offset < length) {
             const size_t chunk = std::min(static_cast<size_t>(kFirmwareHttpBufferSize), length - offset);
-            memcpy(ctx_.buffer, bytes + offset, chunk);
-            esp_err_t err = Send(OtaFlashCommand::Write, chunk);
+            esp_err_t err = Send(OtaFlashCommand::Write, chunk, bytes + offset);
             if (err != ESP_OK) {
                 return err;
             }
@@ -152,20 +132,27 @@ public:
     esp_err_t Abort() { return Send(OtaFlashCommand::Abort); }
 
 private:
-    esp_err_t Send(OtaFlashCommand command, size_t length = 0) {
-        OtaFlashRequest request{command, length};
-        esp_err_t response = ESP_FAIL;
-        if (xQueueSend(ctx_.requests, &request, pdMS_TO_TICKS(10000)) != pdTRUE) {
+    esp_err_t Send(OtaFlashCommand command, size_t length = 0, const uint8_t* data = nullptr) {
+        ctx_.command = command;
+        ctx_.length = length;
+        ctx_.data = data;
+        BaseType_t ret = xTaskCreateWithCaps(
+            OtaFlashWorkerTask, "ota_flash", 3072, &ctx_, 3, nullptr,
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (ret != pdPASS) {
+            ESP_LOGE(TAG, "OTA flash command task create failed cmd=%u free_internal=%u largest_internal=%u",
+                     static_cast<unsigned>(command),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+            return ESP_ERR_NO_MEM;
+        }
+        if (xSemaphoreTake(ctx_.done, pdMS_TO_TICKS(60000)) != pdTRUE) {
             return ESP_ERR_TIMEOUT;
         }
-        if (xQueueReceive(ctx_.responses, &response, pdMS_TO_TICKS(60000)) != pdTRUE) {
-            return ESP_ERR_TIMEOUT;
-        }
-        return response;
+        return ctx_.result;
     }
 
     OtaFlashWorkerContext ctx_;
-    TaskHandle_t task_ = nullptr;
     bool ready_ = false;
 };
 

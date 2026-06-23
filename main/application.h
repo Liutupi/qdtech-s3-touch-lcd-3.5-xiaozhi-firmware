@@ -87,6 +87,7 @@ public:
     void SetExternalAudioActive(bool active);
     bool IsExternalAudioActive() const { return external_audio_active_.load(std::memory_order_relaxed); }
     void RegisterDeviceStateCallback(std::function<void(DeviceState previous, DeviceState current)> callback);
+    void PrepareForFirmwareUpgrade();
 
 private:
     Application();

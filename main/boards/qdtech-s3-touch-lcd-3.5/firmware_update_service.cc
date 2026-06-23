@@ -331,6 +331,7 @@ void FirmwareUpdateService::RunUpgrade() {
     }
 
     Board::GetInstance().SetPowerSaveMode(false);
+    app.PrepareForFirmwareUpgrade();
     AudioCodec* codec = Board::GetInstance().GetAudioCodec();
     bool restore_input = false;
     bool restore_output = false;
@@ -358,6 +359,8 @@ void FirmwareUpdateService::RunUpgrade() {
         codec->EnableOutput(restore_output);
     }
     app.SetDeviceState(kDeviceStateIdle);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    app.Reboot();
 }
 
 void FirmwareUpdateService::SetUi(const char* status, bool update_available, bool busy, int progress) {
