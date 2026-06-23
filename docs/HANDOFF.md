@@ -72,21 +72,23 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.33 OTA Flash Worker Split
+## Latest Runtime Notes: 2026-06-23 v1.7.39 OTA Verified
 
-- Latest release target is `v1.7.33`.
-- Follow-up OTA testing proved `v1.7.32` still mixed HTTPS/TLS and flash writing inside one constrained upgrade task: 4096-byte internal stack avoided header allocation failure, but TLS then stack-overflowed or ran out of AES memory.
-- The new architecture splits responsibilities: the firmware upgrade task runs on a PSRAM stack for HTTPS/proxy download, and a dedicated internal-RAM `ota_flash` worker performs only `esp_ota_*` flash operations.
-- OTA header/download buffers live in PSRAM and are copied into the worker's internal staging buffer before each flash write.
-- `COM14` was USB-flashed with a `v1.7.32` bootstrap build containing this split before preparing `v1.7.33`.
-- `v1.7.33` build passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48fd80`, smallest app partition is `0x600000`, and free app space is `0x170280`, about 24%.
-- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`.
-- Release asset SHA256:
-  - `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`: `c5b910059161cfbeeb31fe036bf8890d90b16c656be04696406103c89c7c1bd0`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`: `bb5e40f3bc0391a4c6c5323dc08bfe3c08b891d72c0acbed4dd2549f1e6b6b65`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`: `be346268722b679b9157601667e9e2cfc3c0ba3a8c7862d0b8b1764554f22125`
-- Hardware OTA verification from the `v1.7.32` bootstrap build to `v1.7.33` still failed. The new split removed the cache assertion and stack overflow, but the TLS/proxy stream failed with `esp-aes: Failed to allocate memory`; later retries could not allocate enough internal RAM for the flash worker after the failed TLS attempt.
-- Next debugging pivot: reduce internal RAM pressure before the firmware HTTP connection opens, stop/deinit more services for the whole OTA window, or move release delivery away from HTTPS GitHub/proxy streaming to a lower-memory transport.
+- Latest release target is `v1.7.39`.
+- Current GitHub head after the OTA work: `4e30dcb` on `main`.
+- Current board used for validation: `COM13`.
+- `v1.7.38` is the real OTA updater fix: a persistent internal-RAM `ota_flash` worker is allocated before the firmware HTTPS/proxy connection opens; it owns `esp_ota_begin()`, `esp_ota_write()`, `esp_ota_end()`, and `esp_ota_set_boot_partition()`.
+- The HTTPS/proxy download path uses proxy candidates first for GitHub Release assets. The verified attempt logged `Firmware download attempt 1/3: proxy` and `Firmware download proxy selected`.
+- The `v1.7.39` release is a version-only validation target for the `v1.7.38` updater.
+- Hardware OTA verification succeeded from `v1.7.38` to `v1.7.39`:
+  - Settings updater selected `qdtech-s3-touch-lcd-3.5-v1.7.39-app.bin`.
+  - OTA wrote to `ota_1` at `0x700000`.
+  - Progress reached `100% (4784848/4784848)`.
+  - Runtime logged `Firmware upgrade successful, rebooting in 3 seconds...`.
+  - Rebooted firmware logged `App version: 1.7.39`.
+  - Boot validation logged `Running partition: ota_1` and `Marking firmware as valid`.
+- Important test note: do not reopen the USB serial monitor while OTA is in progress. Opening the serial port resets this board and interrupts the OTA. Start one monitor before tapping Update and leave it open until reboot completes.
+- Still observed during long OTA: repeated touch I2C timeout/reset logs. They did not stop OTA, but touch stability should be investigated separately if the user reports missed taps.
 
 ## Previous Runtime Notes: 2026-06-23 v1.7.32 OTA Low-Internal-RAM Upgrade Fit
 

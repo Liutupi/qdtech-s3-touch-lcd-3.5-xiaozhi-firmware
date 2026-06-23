@@ -2,6 +2,70 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.39 Settings OTA Verified End-to-End
+
+Scope:
+
+- Bumped firmware version to `1.7.39`.
+- This is the validation release for the `v1.7.38` OTA updater; code is unchanged except the version bump.
+- Published GitHub Release `v1.7.39` with app, full, and zip assets.
+
+Verification:
+
+- Board on `COM13` was running `v1.7.38` after USB app-only bootstrap.
+- Settings updater selected `qdtech-s3-touch-lcd-3.5-v1.7.39-app.bin`.
+- Firmware download used proxy candidate first: `Firmware download attempt 1/3: proxy`, then `Firmware download proxy selected`.
+- OTA read the image header: `New firmware version: 1.7.39`.
+- OTA wrote the full app image to `ota_1` with progress reaching `100% (4784848/4784848)`.
+- Runtime logged `Firmware upgrade successful, rebooting in 3 seconds...`.
+- After reboot, firmware logged `App version: 1.7.39`, `Running partition: ota_1`, and `Marking firmware as valid`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-app.bin`: `BAB265FF1F70263C8CC1596878209CCB4D416172107A3B121A80137F56BF8CD1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-firmware.zip`: `ED46D36418BFFB98B4AC844215A346C48699A18AAAF5ABE03D3801B076C8A01A`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-full.bin`: `0349A8AB8B0694FE85B118675CC7DB489DBCC299A42276BBD12BFC720DBCD01F`
+
+Notes:
+
+- The exact failure was not "network cannot reach GitHub" alone. Earlier logs proved GitHub release metadata could be fetched and the proxy asset stream could start.
+- Final root cause was a combination of TLS/internal-RAM pressure and ESP-IDF's flash-write requirement that cache-freeze work run from an internal-RAM stack.
+- Serial monitor must remain open for the whole OTA test. Reopening the USB serial port resets this board and interrupts an in-progress OTA.
+
+## 2026-06-23: v1.7.38 Persistent Internal OTA Flash Worker
+
+Scope:
+
+- Bumped firmware version to `1.7.38`.
+- Replaced the per-chunk OTA flash task creation with one persistent internal-RAM `ota_flash` worker.
+- The worker is created before the firmware HTTP connection opens and owns the `esp_ota_*` calls.
+- OTA data is downloaded on the normal updater path, then copied through a 1024-byte internal staging buffer before `esp_ota_write()`.
+- This avoids both previous failure modes: post-TLS task allocation failure and `s_task_stack_is_sane_when_cache_frozen()` assertion from PSRAM task stacks.
+
+Verification:
+
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x4902d0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x16fd30`, about 24%.
+- USB app-only flashed `v1.7.38` to the current `COM13` board at `0x100000`, preserving WiFi/NVS.
+- Boot logs confirmed `App version: 1.7.38`, WiFi reconnect, MQTT idle, and Settings OTA readiness.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-app.bin`: `772EF16098ABB2F2927501A119A54BB005EFFBA6F779C4438FC1B6FC0DEC3A93`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-firmware.zip`: `6DF259376BEA59B64CC8C240FBD30B842A9C6042003D90BE9698B4F519A3D03E`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-full.bin`: `48DBE8496E0B2BEEEEB9F20ADA9D39F7B075DB0ADBD4A7A21E66BEF47E4A1B3C`
+
+## 2026-06-23: v1.7.36-v1.7.37 OTA Debug Attempts
+
+Scope:
+
+- `v1.7.36` tried to avoid internal task allocation by writing OTA data directly with a preallocated internal staging buffer.
+- `v1.7.37` was a version-only validation target for that updater.
+
+Verification:
+
+- `v1.7.36` could detect `v1.7.37`, select the GitHub Release app asset, and open the proxy stream.
+- It then asserted at `esp_cache_freeze_caches_disable_interrupts` because the updater task stack was in PSRAM while calling `esp_ota_write()`.
+- Conclusion: the write path must stay on an internal-RAM worker task, but that worker must be persistent and allocated before TLS download pressure.
+
 ## 2026-06-23: v1.7.33 OTA Flash Worker Split
 
 Scope:

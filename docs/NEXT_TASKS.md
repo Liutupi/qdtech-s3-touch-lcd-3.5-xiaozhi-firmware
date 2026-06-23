@@ -2,18 +2,17 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: OTA Verification After Flash Worker Split
+## Current Active Task: Post-OTA Cleanup And Touch Stability
 
 Current state:
 
-- Firmware `v1.7.33` splits OTA into a PSRAM-stack HTTPS task and an internal-RAM flash worker, so TLS/AES and flash cache-disable constraints no longer fight over the same task stack.
-- Firmware `v1.7.32` reduces the internal upgrade task stack to 4096 bytes and the firmware HTTP buffer to 1024 bytes after `v1.7.31` still lacked enough internal heap for OTA header/buffer allocation.
-- Firmware `v1.7.31` keeps the Settings release-check task on a PSRAM stack and keeps only the flash-writing upgrade task on an internal-RAM stack.
-- `v1.7.30` correctly fixed the PSRAM stack crash during flash write, but its first implementation also forced the check task into internal RAM and failed to create the 10KB check task on the live board.
-- Firmware `v1.7.30` fixes the OTA crash captured on a new board running `v1.7.28`: the updater reached the proxy app download and then asserted during flash-write cache-freeze handling because the upgrade task used a PSRAM stack.
-- Firmware upgrade tasks now prefer internal RAM, the upgrade stack is reduced to fit observed internal RAM, and the OTA header/download buffers are allocated from internal RAM before `esp_ota_write()`.
-- Important bootstrap note: boards already running `v1.7.28` need one USB flash before OTA can be reliable, because the old updater crashes before installing the fixed updater.
-- The new `COM14` board was USB-flashed with the fixed `v1.7.29` bootstrap build so it can be used to verify OTA to `v1.7.30`.
+- Firmware `v1.7.39` is the current verified release.
+- Settings OTA from `v1.7.38` to `v1.7.39` was verified end-to-end on `COM13`.
+- Verified OTA sequence: GitHub Release metadata fetch, app asset selection, proxy-first firmware download, image header validation, full app image write to `ota_1`, reboot, `App version: 1.7.39`, and `Marking firmware as valid`.
+- The final OTA architecture is a persistent internal-RAM `ota_flash` worker plus internal staging buffer, allocated before the firmware HTTPS/proxy stream opens.
+- The updater still uses the GitHub Release app asset, but for firmware downloads it tries proxy URLs before direct GitHub to avoid long signed redirect URLs.
+- Important bootstrap note: boards already running older broken updaters may still need one USB flash to `v1.7.38` or newer, because the old updater code is the code that fails before it can install the fixed updater.
+- During long OTA verification, repeated touch I2C timeout/reset logs appeared. They did not stop OTA, but they can make taps unreliable and should be treated as a separate touch-driver/hardware-timing issue.
 - Firmware `v1.7.29` replaces the main-page weather module's primitive LVGL shape animation with a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm.
 - QDTech now selects `LV_USE_GIF` and `LV_GIF_CACHE_DECODE_DATA`; the main weather card uses one 142x84 GIF scene area plus separate bottom text labels.
 - Current build size after the full weather scene pack is `0x48f920`, with app partition free space `0x1706e0` (about 24%). Watch this if adding more bitmap/GIF assets.
@@ -37,11 +36,12 @@ Current state:
 
 Next work:
 
+- Investigate touch I2C stability if missed taps continue. Capture whether failures correlate with OTA/network load, display flushes, or normal idle. Avoid mixing this with OTA unless the user reports that Update taps cannot be recognized.
 - Inspect all six weather scenes on the physical 480x320 screen. Storm has been runtime-verified through live Zhongshan weather; clear, cloudy, rain, snow, and fog still need visual inspection under forced or real weather codes.
 - Inspect `Tupi Warm` on the physical 480x320 screen and tune exact time colon alignment, top-right status spacing, daily-card line wrapping, and weather-card contrast from hardware feedback.
 - Inspect the Cat theme on the actual 480x320 screen and tune exact pink strength, time-card spacing, daily-card cat position, and Chinese brand readability from hardware feedback.
 - Consider replacing the restart-to-apply theme flow with a safe immediate UI recreation only after LVGL timer/object lifecycle risk is designed and tested.
-- Fix the remaining OTA download memory failure captured after `v1.7.33`: direct GitHub timed out, proxy selected, firmware header was read, then TLS stream reads failed with `esp-aes: Failed to allocate memory`. The flash-worker split removed flash/cache/stack failures, but the HTTPS/proxy download path still needs more internal RAM or a lower-memory transport.
+- Keep OTA validation practice: start serial monitor once before tapping Update and do not reopen the port until reboot completes, because reopening COM13 resets the board.
 - Verify BOOT physical-key wiring: confirm the user-visible flow on battery only: long-press BOOT until the screen turns off, release, then press BOOT once to wake. Confirm it reconnects to the saved WiFi without pairing/config mode. Record whether USB-connected and battery-only behavior differ.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
 - Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.
