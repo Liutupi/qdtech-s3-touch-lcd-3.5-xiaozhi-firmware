@@ -17,6 +17,7 @@
 #include <esp_hmac.h>
 #endif
 #include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include <cctype>
@@ -38,36 +39,105 @@ struct FirmwareHttpHeaders {
     std::string location;
 };
 
+enum class OtaFlashCommand : uint8_t {
+    Begin,
+    Write,
+    End,
+    SetBoot,
+    Abort,
+    Stop,
+};
+
+struct OtaFlashWorkerContext {
+    SemaphoreHandle_t done = nullptr;
+    const esp_partition_t* partition = nullptr;
+    esp_ota_handle_t handle = 0;
+    uint8_t* staging_buffer = nullptr;
+    const uint8_t* data = nullptr;
+    size_t length = 0;
+    esp_err_t result = ESP_OK;
+    OtaFlashCommand command = OtaFlashCommand::Begin;
+};
+
+static void OtaFlashWorkerTask(void* arg) {
+    auto* ctx = static_cast<OtaFlashWorkerContext*>(arg);
+    while (true) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        switch (ctx->command) {
+            case OtaFlashCommand::Begin:
+                ctx->result = esp_ota_begin(ctx->partition, OTA_WITH_SEQUENTIAL_WRITES, &ctx->handle);
+                break;
+            case OtaFlashCommand::Write:
+                memcpy(ctx->staging_buffer, ctx->data, ctx->length);
+                ctx->result = esp_ota_write(ctx->handle, ctx->staging_buffer, ctx->length);
+                break;
+            case OtaFlashCommand::End:
+                ctx->result = esp_ota_end(ctx->handle);
+                ctx->handle = 0;
+                break;
+            case OtaFlashCommand::SetBoot:
+                ctx->result = esp_ota_set_boot_partition(ctx->partition);
+                break;
+            case OtaFlashCommand::Abort:
+                if (ctx->handle) {
+                    esp_ota_abort(ctx->handle);
+                    ctx->handle = 0;
+                }
+                ctx->result = ESP_OK;
+                break;
+            case OtaFlashCommand::Stop:
+                ctx->result = ESP_OK;
+                xSemaphoreGive(ctx->done);
+                vTaskDelete(nullptr);
+                return;
+        }
+        xSemaphoreGive(ctx->done);
+    }
+}
+
 class OtaFlashWorker {
 public:
     explicit OtaFlashWorker(const esp_partition_t* partition) {
-        partition_ = partition;
-        staging_buffer_ = static_cast<uint8_t*>(
+        ctx_.partition = partition;
+        ctx_.done = xSemaphoreCreateBinary();
+        ctx_.staging_buffer = static_cast<uint8_t*>(
             heap_caps_malloc(kFirmwareHttpBufferSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
-        ready_ = staging_buffer_ != nullptr;
+        ready_ = ctx_.done != nullptr && ctx_.staging_buffer != nullptr;
+        if (ready_) {
+            BaseType_t ret = xTaskCreateWithCaps(
+                OtaFlashWorkerTask, "ota_flash", 3072, &ctx_, 3, &task_,
+                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            ready_ = ret == pdPASS;
+        }
         if (!ready_) {
-            ESP_LOGE(TAG, "No internal memory for OTA flash staging free_internal=%u largest_internal=%u",
+            ESP_LOGE(TAG, "No internal memory for OTA flash worker free_internal=%u largest_internal=%u",
                      static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
                      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
         }
     }
 
     ~OtaFlashWorker() {
-        if (staging_buffer_) {
-            heap_caps_free(staging_buffer_);
+        if (task_) {
+            Send(OtaFlashCommand::Stop);
+            task_ = nullptr;
+        }
+        if (ctx_.staging_buffer) {
+            heap_caps_free(ctx_.staging_buffer);
+        }
+        if (ctx_.done) {
+            vSemaphoreDelete(ctx_.done);
         }
     }
 
     bool ready() const { return ready_; }
 
-    esp_err_t Begin() { return esp_ota_begin(partition_, OTA_WITH_SEQUENTIAL_WRITES, &handle_); }
+    esp_err_t Begin() { return Send(OtaFlashCommand::Begin); }
     esp_err_t Write(const void* data, size_t length) {
         const uint8_t* bytes = static_cast<const uint8_t*>(data);
         size_t offset = 0;
         while (offset < length) {
             const size_t chunk = std::min(static_cast<size_t>(kFirmwareHttpBufferSize), length - offset);
-            memcpy(staging_buffer_, bytes + offset, chunk);
-            esp_err_t err = esp_ota_write(handle_, staging_buffer_, chunk);
+            esp_err_t err = Send(OtaFlashCommand::Write, chunk, bytes + offset);
             if (err != ESP_OK) {
                 return err;
             }
@@ -75,20 +145,27 @@ public:
         }
         return ESP_OK;
     }
-    esp_err_t End() { return esp_ota_end(handle_); }
-    esp_err_t SetBoot() { return esp_ota_set_boot_partition(partition_); }
-    esp_err_t Abort() {
-        if (handle_) {
-            esp_ota_abort(handle_);
-            handle_ = 0;
-        }
-        return ESP_OK;
-    }
+    esp_err_t End() { return Send(OtaFlashCommand::End); }
+    esp_err_t SetBoot() { return Send(OtaFlashCommand::SetBoot); }
+    esp_err_t Abort() { return Send(OtaFlashCommand::Abort); }
 
 private:
-    const esp_partition_t* partition_ = nullptr;
-    esp_ota_handle_t handle_ = 0;
-    uint8_t* staging_buffer_ = nullptr;
+    esp_err_t Send(OtaFlashCommand command, size_t length = 0, const uint8_t* data = nullptr) {
+        if (!task_ || !ctx_.done) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        ctx_.command = command;
+        ctx_.length = length;
+        ctx_.data = data;
+        xTaskNotifyGive(task_);
+        if (xSemaphoreTake(ctx_.done, pdMS_TO_TICKS(60000)) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+        return ctx_.result;
+    }
+
+    OtaFlashWorkerContext ctx_;
+    TaskHandle_t task_ = nullptr;
     bool ready_ = false;
 };
 
