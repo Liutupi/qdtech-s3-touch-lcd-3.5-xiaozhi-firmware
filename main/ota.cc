@@ -239,15 +239,15 @@ static bool StartsWith(const std::string& text, const char* prefix) {
 
 static std::vector<std::string> BuildFirmwareUrlCandidates(const std::string& firmware_url) {
     std::vector<std::string> urls;
-    urls.push_back(firmware_url);
-
     if (!StartsWith(firmware_url, "https://github.com/")) {
+        urls.push_back(firmware_url);
         return urls;
     }
 
     for (const char* proxy_prefix : kFirmwareDownloadProxyPrefixes) {
         urls.push_back(std::string(proxy_prefix) + firmware_url);
     }
+    urls.push_back(firmware_url);
     return urls;
 }
 
@@ -514,16 +514,17 @@ void Ota::Upgrade(const std::string& firmware_url) {
     for (size_t i = 0; i < firmware_urls.size(); ++i) {
         status_code = 0;
         content_length = 0;
+        const bool using_proxy = firmware_urls[i] != firmware_url;
         ESP_LOGI(TAG, "Firmware download attempt %u/%u: %s",
                  static_cast<unsigned>(i + 1),
                  static_cast<unsigned>(firmware_urls.size()),
-                 i == 0 ? "direct" : "proxy");
+                 using_proxy ? "proxy" : "direct");
         client = OpenFirmwareHttp(firmware_urls[i], &status_code, &content_length);
         if (!client) {
             continue;
         }
         if (status_code == 200) {
-            if (i > 0) {
+            if (using_proxy) {
                 ESP_LOGI(TAG, "Firmware download proxy selected");
             }
             break;
