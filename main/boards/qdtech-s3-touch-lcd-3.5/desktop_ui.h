@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 
 enum class DesktopPage {
     MAIN,
@@ -231,7 +232,7 @@ private:
     lv_obj_t* xiaozhi_hint_label_ = nullptr;
 
     // Animation state
-    const char* emotion_ = "neutral";
+    std::string emotion_ = "neutral";
     uint32_t anim_tick_ = 0;
     float pupil_offset_x_ = 0;
     float pupil_offset_y_ = 0;

@@ -35,14 +35,93 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-15 in the Windows workspace:
+Last verified on 2026-06-23 in the macOS workspace:
 
-- Workspace: `C:\Users\Administrator\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-15 P0-P6 optimization, LVGL touch migration, font fix
-- Build directory used for board verification: `build-qdtech`
-- Serial port used during the last device flash: `COM13`
+- Last verified update: 2026-06-23 code quality optimization, SD card radio config, FC stability fixes
+- Build directory used for board verification: `build`
+- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+
+## Latest Runtime Notes: 2026-06-23 Code Quality & SD Card Radio
+
+### Code Quality Optimizations (P0-P2)
+
+1. **RadioService thread safety**
+   - `play_requested_` and `stop_requested_` changed from `bool` to `std::atomic<bool>`
+   - Prevents race conditions on dual-core ESP32-S3
+
+2. **last_success_url_ array overflow fix**
+   - Changed from fixed `[16]` to `std::vector<int>`
+   - Resized dynamically based on actual station count (37+)
+
+3. **emotion_ dangling pointer fix**
+   - Changed from `const char*` to `std::string` in DesktopUI
+   - Prevents dangling pointer from temporary strings
+
+4. **FC emulator dead code cleanup**
+   - Removed `LoadNesRom()`, `RunNesFrame()`, `RenderFrame()` functions
+   - Removed `nes_bus.cc/h`, `nes_cpu.cc/h`, `nes_ppu.cc/h` files
+   - Saved ~5-10KB in compiled binary
+
+5. **RadioService PSRAM fallback**
+   - Task stack now uses internal RAM (not PSRAM) to avoid cache-disable crash during NVS access
+
+6. **WritePcm persistent buffer**
+   - Added `pcm_mono_buf_` and `pcm_output_buf_` member variables
+   - Avoids per-frame heap allocation/deallocation
+
+7. **Weather particle limit**
+   - Added `kMaxParticles = 12` limit in `WeatherParticleCb`
+   - Prevents internal RAM exhaustion from too many particle objects
+
+8. **Theme switch without restart**
+   - `CycleTheme()` now clears and rebuilds UI instead of calling `esp_restart()`
+
+### SD Card Radio Configuration
+
+RadioService now supports loading stations from `/sdcard/radio.json`:
+
+```json
+{
+  "stations": [
+    {
+      "name": "Station Name",
+      "url": "http://stream.url/mp3",
+      "url2": "backup_url",
+      "url3": "third_backup",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "national"
+    }
+  ]
+}
+```
+
+Supported categories: `national`, `beijing`, `shanghai`, `guangdong`, `zhejiang`, `jiangsu`, `sichuan`, `hunan`, `hubei`, `shandong`, `music`, `traffic`, `other`
+
+If `radio.json` is not found, firmware uses built-in 37 stations.
+
+### FC Emulator Stability Fixes
+
+1. **selected_index_ thread safety**
+   - Changed from `size_t` to `std::atomic<size_t>`
+   - All accesses use `load()`/`store()` with proper memory ordering
+
+2. **Boundary checks added**
+   - `HandleCommand()`, `NextStation()`, `PlayCurrentStation()` all validate indices
+   - Prevents crash from out-of-bounds vector access
+
+3. **FC display optimization**
+   - Palette pre-swaps bytes in `qd_video_set_palette()`
+   - Added `DrawLandscapeRgb565PreSwapped()` fast path
+   - Removed per-frame 256->320 scaling (now uses native 256x240)
+
+### Radio Page Chinese Font Fix
+
+- Radio station label now uses `font_puhui_16_4` instead of `lv_font_montserrat_20`
+- Supports Chinese characters in station names
 
 Observed boot/runtime facts after flashing:
 

@@ -2224,15 +2224,15 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
 
     // 当前电台信息
     radio_station_label_ = label_en(radio_page_, "CNR China Voice", &style_gold);
-    lv_obj_set_style_text_font(radio_station_label_, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(radio_station_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_station_label_, LV_ALIGN_TOP_LEFT, 24, 88);
 
     radio_state_label_ = label_en(radio_page_, "Ready", &style_green);
-    lv_obj_set_style_text_font(radio_state_label_, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(radio_state_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_state_label_, LV_ALIGN_TOP_LEFT, 24, 118);
 
     radio_meta_label_ = label_en(radio_page_, "MP3 64 kbps", &style_muted);
-    lv_obj_set_style_text_font(radio_meta_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(radio_meta_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
     // 播放控制按钮
@@ -3122,7 +3122,7 @@ void DesktopUI::UpdateFaceAnimation() {
         eyebrow_y = -92 + (int)(3 * sin(anim_tick_ * 0.15));
     } else if (listening) {
         eyebrow_y = -95;
-    } else if (strcmp(emotion_, "sad") == 0) {
+    } else if (emotion_ == "sad") {
         eyebrow_y = -82;
     }
 
@@ -3519,11 +3519,28 @@ void DesktopUI::CycleTheme() {
         next = 0;
     }
     save_theme(static_cast<UiTheme>(next));
-    if (settings_theme_value_) {
-        lv_label_set_text(settings_theme_value_, THEMES[next].name);
-    }
-    ESP_LOGI(TAG, "Theme switched to %s, restarting UI", THEMES[next].name);
-    esp_restart();
+    ESP_LOGI(TAG, "Theme switched to %s, recreating UI", THEMES[next].name);
+
+    lv_obj_t* root = lv_scr_act();
+    lv_obj_clean(root);
+    
+    main_page_ = nullptr;
+    apps_page_ = nullptr;
+    photo_page_ = nullptr;
+    fc_page_ = nullptr;
+    calendar_page_ = nullptr;
+    radio_page_ = nullptr;
+    focus_page_ = nullptr;
+    xiaozhi_page_ = nullptr;
+    network_page_ = nullptr;
+    settings_page_ = nullptr;
+    
+    weather_particle_timer_ = nullptr;
+    radio_anim_timer_ = nullptr;
+    focus_timer_ = nullptr;
+    
+    Create();
+    ShowPage(DesktopPage::SETTINGS);
 }
 
 void DesktopUI::RefreshSettingsControls() {
@@ -3771,11 +3788,13 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
     if (emotion) {
         emotion_ = emotion;
     }
+
 }
 
 void DesktopUI::SetXiaozhiEmotion(const char* emotion) {
     emotion_ = emotion ? emotion : "neutral";
 }
+
 
 void DesktopUI::DailyCardBreathCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
@@ -3806,6 +3825,12 @@ void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
 
     lv_obj_t* parent = lv_obj_get_parent(self->weather_sun_);
     if (!parent) return;
+
+    constexpr uint32_t kMaxParticles = 12;
+    const uint32_t child_count = lv_obj_get_child_count(parent);
+    if (child_count >= kMaxParticles + 10) {
+        return;
+    }
 
     const int code = self->current_weather_code_;
     const bool is_rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);

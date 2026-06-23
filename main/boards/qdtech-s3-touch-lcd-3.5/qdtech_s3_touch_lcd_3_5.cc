@@ -208,6 +208,20 @@ public:
         return true;
     }
 
+    bool DrawLandscapeRgb565PreSwapped(int x, int y, int width, int height, const uint16_t* pixels,
+                                        uint32_t timeout_ms = 20) {
+        if (!pixels || width <= 0 || height <= 0 || x < 0 || y < 0 ||
+            x + width > DISPLAY_WIDTH || y + height > DISPLAY_HEIGHT) {
+            return false;
+        }
+        if (!lvgl_port_lock(timeout_ms)) {
+            return false;
+        }
+        DrawLandscapeRgb565LockedPreSwapped(x, y, width, height, pixels);
+        lvgl_port_unlock();
+        return true;
+    }
+
 private:
     DesktopUI desktop_ui_;
 
@@ -261,6 +275,41 @@ private:
                 for (int x = 0; x < trans_width; x++) {
                     uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
                     color = (color << 8) | (color >> 8);
+                    transfer_buffer_[x * height + (height - y - 1)] = color;
+                }
+            }
+
+            const int draw_x_start = DISPLAY_HEIGHT - y_end - 1;
+            const int draw_x_end = DISPLAY_HEIGHT - y_start - 1;
+            const int draw_y_start = x_start_tmp;
+            const int draw_y_end = x_end_tmp;
+
+            xSemaphoreTake(transfer_done_, 0);
+            ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_, draw_x_start, draw_y_start, draw_x_end + 1, draw_y_end + 1, transfer_buffer_));
+            xSemaphoreTake(transfer_done_, pdMS_TO_TICKS(1000));
+            x_start_tmp += trans_width;
+        }
+    }
+
+    void DrawLandscapeRgb565LockedPreSwapped(int x_start, int y_start, int width, int height,
+                                              const uint16_t* color_map) {
+        const int x_end = x_start + width - 1;
+        const int y_end = y_start + height - 1;
+        constexpr int transfer_pixels = DISPLAY_WIDTH * DISPLAY_HEIGHT / 10;
+
+        int max_width = transfer_pixels / height;
+        if (max_width < 1) {
+            max_width = 1;
+        }
+
+        int x_start_tmp = x_start;
+        while (x_start_tmp <= x_end) {
+            const int trans_width = std::min(max_width, x_end - x_start_tmp + 1);
+            const int x_end_tmp = x_start_tmp + trans_width - 1;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < trans_width; x++) {
+                    uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
                     transfer_buffer_[x * height + (height - y - 1)] = color;
                 }
             }
@@ -1100,7 +1149,7 @@ private:
         }
 
         if (width == 256 && height == 240) {
-            constexpr uint16_t target_width = 320;
+            constexpr uint16_t target_width = 256;
             constexpr uint16_t target_height = 240;
             constexpr size_t target_pixels = target_width * target_height;
 
@@ -1115,24 +1164,15 @@ private:
                 if (!fc_scaled_frame_) {
                     ESP_LOGW(TAG, "FC scale buffer alloc failed, draw original frame");
                     const int fallback_x = (DISPLAY_WIDTH - width) / 2;
-                    return qd_display->DrawLandscapeRgb565(fallback_x, 0, width, height, pixels);
+                    return qd_display->DrawLandscapeRgb565PreSwapped(fallback_x, 0, width, height, pixels);
                 }
                 fc_scaled_pixels_ = target_pixels;
             }
 
-            const uint32_t x_step = (static_cast<uint32_t>(width) << 16) / target_width;
-            for (uint16_t y = 0; y < target_height; ++y) {
-                const uint16_t* src = pixels + y * width;
-                uint16_t* dst = fc_scaled_frame_ + y * target_width;
-                uint32_t src_x_acc = 0;
-                for (uint16_t x = 0; x < target_width; ++x) {
-                    dst[x] = src[src_x_acc >> 16];
-                    src_x_acc += x_step;
-                }
-            }
+            memcpy(fc_scaled_frame_, pixels, target_pixels * sizeof(uint16_t));
 
-            return qd_display->DrawLandscapeRgb565((DISPLAY_WIDTH - target_width) / 2, 0,
-                                                   target_width, target_height, fc_scaled_frame_);
+            const int x = (DISPLAY_WIDTH - target_width) / 2;
+            return qd_display->DrawLandscapeRgb565PreSwapped(x, 0, target_width, target_height, fc_scaled_frame_);
         }
 
         if (width > DISPLAY_WIDTH || height > 240) {
@@ -1140,7 +1180,7 @@ private:
         }
         const int x = (DISPLAY_WIDTH - width) / 2;
         const int y = (240 - height) / 2;
-        return qd_display->DrawLandscapeRgb565(x, y, width, height, pixels);
+        return qd_display->DrawLandscapeRgb565PreSwapped(x, y, width, height, pixels);
     }
 
     Button boot_button_;
