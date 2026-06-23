@@ -2,6 +2,30 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.33 OTA Flash Worker Split
+
+Scope:
+
+- Bumped firmware version to `1.7.33`.
+- Split OTA into a PSRAM-stack HTTPS download task plus a small internal-RAM flash worker task.
+- The HTTPS task can keep the larger stack and TLS/AES memory needs outside the scarce internal task stack budget.
+- The flash worker is the only task that calls `esp_ota_begin()`, `esp_ota_write()`, `esp_ota_end()`, and `esp_ota_set_boot_partition()`, so flash cache-disable operations no longer run on a PSRAM stack.
+- OTA header and HTTP download buffers are allocated from PSRAM; each write is copied into the flash worker's internal staging buffer before `esp_ota_write()`.
+
+Verification:
+
+- Built and USB-flashed the `v1.7.32` bootstrap build with the flash-worker split to `COM14`.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48fd80`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x170280`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`: `c5b910059161cfbeeb31fe036bf8890d90b16c656be04696406103c89c7c1bd0`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`: `bb5e40f3bc0391a4c6c5323dc08bfe3c08b891d72c0acbed4dd2549f1e6b6b65`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`: `be346268722b679b9157601667e9e2cfc3c0ba3a8c7862d0b8b1764554f22125`
+- Follow-up target: publish `v1.7.33` and verify board-initiated OTA from the bootstrap build to `v1.7.33`.
+
 ## 2026-06-23: v1.7.32 OTA Low-Internal-RAM Upgrade Fit
 
 Scope:

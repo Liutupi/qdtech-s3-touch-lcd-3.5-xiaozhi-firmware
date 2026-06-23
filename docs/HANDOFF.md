@@ -72,9 +72,23 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.32 OTA Low-Internal-RAM Upgrade Fit
+## Latest Runtime Notes: 2026-06-23 v1.7.33 OTA Flash Worker Split
 
-- Latest release target is `v1.7.32`.
+- Latest release target is `v1.7.33`.
+- Follow-up OTA testing proved `v1.7.32` still mixed HTTPS/TLS and flash writing inside one constrained upgrade task: 4096-byte internal stack avoided header allocation failure, but TLS then stack-overflowed or ran out of AES memory.
+- The new architecture splits responsibilities: the firmware upgrade task runs on a PSRAM stack for HTTPS/proxy download, and a dedicated internal-RAM `ota_flash` worker performs only `esp_ota_*` flash operations.
+- OTA header/download buffers live in PSRAM and are copied into the worker's internal staging buffer before each flash write.
+- `COM14` was USB-flashed with a `v1.7.32` bootstrap build containing this split before preparing `v1.7.33`.
+- `v1.7.33` build passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48fd80`, smallest app partition is `0x600000`, and free app space is `0x170280`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`: `c5b910059161cfbeeb31fe036bf8890d90b16c656be04696406103c89c7c1bd0`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`: `bb5e40f3bc0391a4c6c5323dc08bfe3c08b891d72c0acbed4dd2549f1e6b6b65`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`: `be346268722b679b9157601667e9e2cfc3c0ba3a8c7862d0b8b1764554f22125`
+
+## Previous Runtime Notes: 2026-06-23 v1.7.32 OTA Low-Internal-RAM Upgrade Fit
+
+- Release target was `v1.7.32`.
 - Follow-up OTA testing proved `v1.7.31` could check GitHub and create the upgrade task, but the 6144-byte internal upgrade stack left too little internal heap for the OTA image header and download buffer.
 - The new fit is a 4096-byte internal upgrade stack plus 1024-byte HTTP firmware download buffer.
 - `COM14` was USB-flashed with a `v1.7.31` bootstrap build containing these reductions before preparing `v1.7.32`.

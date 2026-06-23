@@ -2,10 +2,11 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: OTA Verification After Low-Internal-RAM Fit
+## Current Active Task: OTA Verification After Flash Worker Split
 
 Current state:
 
+- Firmware `v1.7.33` splits OTA into a PSRAM-stack HTTPS task and an internal-RAM flash worker, so TLS/AES and flash cache-disable constraints no longer fight over the same task stack.
 - Firmware `v1.7.32` reduces the internal upgrade task stack to 4096 bytes and the firmware HTTP buffer to 1024 bytes after `v1.7.31` still lacked enough internal heap for OTA header/buffer allocation.
 - Firmware `v1.7.31` keeps the Settings release-check task on a PSRAM stack and keeps only the flash-writing upgrade task on an internal-RAM stack.
 - `v1.7.30` correctly fixed the PSRAM stack crash during flash write, but its first implementation also forced the check task into internal RAM and failed to create the 10KB check task on the live board.
@@ -40,7 +41,7 @@ Next work:
 - Inspect `Tupi Warm` on the physical 480x320 screen and tune exact time colon alignment, top-right status spacing, daily-card line wrapping, and weather-card contrast from hardware feedback.
 - Inspect the Cat theme on the actual 480x320 screen and tune exact pink strength, time-card spacing, daily-card cat position, and Chinese brand readability from hardware feedback.
 - Consider replacing the restart-to-apply theme flow with a safe immediate UI recreation only after LVGL timer/object lifecycle risk is designed and tested.
-- Verify a full board-initiated OTA from the fixed bootstrap build to `1.7.32`: check -> update -> direct GitHub timeout if present -> proxy fallback -> download -> partition write -> reboot -> new version. Confirm no task-create failure, no internal-buffer allocation failure, and no `s_task_stack_is_sane_when_cache_frozen()` assertion.
+- Verify a full board-initiated OTA from the fixed bootstrap build to `1.7.33`: check -> update -> direct GitHub timeout if present -> proxy fallback -> download -> partition write -> reboot -> new version. Confirm no task-create failure, no internal-buffer allocation failure, no stack overflow, and no `s_task_stack_is_sane_when_cache_frozen()` assertion.
 - Verify BOOT physical-key wiring: confirm the user-visible flow on battery only: long-press BOOT until the screen turns off, release, then press BOOT once to wake. Confirm it reconnects to the saved WiFi without pairing/config mode. Record whether USB-connected and battery-only behavior differ.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
 - Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.
