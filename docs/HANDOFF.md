@@ -72,7 +72,40 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.28 GitHub OTA Proxy Fallback
+## Latest Runtime Notes: 2026-06-23 v1.7.29 Weather Scene GIF Pack
+
+- Latest release target is `v1.7.29`.
+- User rejected the LVGL primitive weather animation quality, especially the storm effect, and asked for a richer/惊艳 visual approach.
+- Implemented the replacement route as a GIF scene player rather than more LVGL circles/bars/lines.
+- QDTech board type now selects `LV_USE_GIF` and `LV_GIF_CACHE_DECODE_DATA`.
+- Added six generated weather scene resources in `main/boards/qdtech-s3-touch-lcd-3.5/`:
+  - `qd_weather_clear_scene.c`
+  - `qd_weather_cloudy_scene.c`
+  - `qd_weather_rain_scene.c`
+  - `qd_weather_snow_scene.c`
+  - `qd_weather_fog_scene.c`
+  - `qd_weather_storm_scene.c`
+- `desktop_ui.cc` declares all six `lv_img_dsc_t` resources and creates one 142x84 `lv_gif` object in the weather card. The bottom temperature and summary labels remain outside the animation area.
+- Weather scene mapping:
+  - `scene=0`: clear, weather code `0`
+  - `scene=1`: cloudy/pending, weather codes `1`, `2`, `3`, and default/pending
+  - `scene=2`: rain, weather codes `51-67` and `80-82`
+  - `scene=3`: snow, weather codes `71-77`
+  - `scene=4`: fog, weather codes `45` and `48`
+  - `scene=5`: storm, weather codes `95+`
+- Older LVGL shape-based weather objects still exist as fallback code, but normal QDTech runtime hides them while the GIF scene player is available.
+- Build verification passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48f920`, smallest app partition is `0x600000`, and free app space is `0x1706e0`, about 24%.
+- Flashed successfully to the currently connected board on `COM13` at 921600 baud.
+- Captured boot logs confirmed `App version: 1.7.29`, QDTech startup, `Desktop UI created`, saved WiFi reconnect, MQTT connection, and `Application: STATE: idle`.
+- Runtime weather logs confirmed pending/default `scene=1`, then live Zhongshan storm weather `code=95` switching to `scene=5`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`: `483dd14a036b6b66861729889a6525286be102287b47d48a555e3679d85f06e1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`: `9c7170cc4e8a73beb1a73b094a6dae216ae2558b6ed48746b1d821fe2e446557`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`: `e5d99dab73860a5834c6c9f7d560f02a50846dc4fc0b968aba501913046063ed`
+- Follow-up: storm was verified by live weather on COM13. Clear, cloudy, rain, snow, and fog still need a visual hardware pass by forcing weather codes or waiting for real weather conditions. App partition free space is now 24%, so be careful with additional embedded bitmap/GIF assets.
+
+## Previous Runtime Notes: 2026-06-23 v1.7.28 GitHub OTA Proxy Fallback
 
 - Latest release target is `v1.7.28`.
 - User reported that a board on `v1.7.26` could detect `v1.7.27`, but pressing Update failed and appeared to restart/return without updating.

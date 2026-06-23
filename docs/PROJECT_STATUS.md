@@ -27,6 +27,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.26 (2026-06-22): GitHub OTA firmware-download buffers enlarged for long release-asset redirects
 - v1.7.27 (2026-06-23): Added Tupi Warm theme and restored its weather card to the proven Classic weather animation layout
 - v1.7.28 (2026-06-23): GitHub Release asset OTA fallback via proxy-prefixed download URLs after direct GitHub TLS connection failures
+- v1.7.29 (2026-06-23): Main-page weather module uses a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm
 
 ## Confirmed Hardware From Source
 

@@ -2,10 +2,13 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: Tupi Warm Theme Hardware Polish And OTA Follow-Up
+## Current Active Task: Weather GIF Scene Polish And OTA Follow-Up
 
 Current state:
 
+- Firmware `v1.7.29` replaces the main-page weather module's primitive LVGL shape animation with a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm.
+- QDTech now selects `LV_USE_GIF` and `LV_GIF_CACHE_DECODE_DATA`; the main weather card uses one 142x84 GIF scene area plus separate bottom text labels.
+- Current build size after the full weather scene pack is `0x48f920`, with app partition free space `0x1706e0` (about 24%). Watch this if adding more bitmap/GIF assets.
 - Firmware `v1.7.27` adds a third persisted Settings -> Appearance -> Theme option named `Tupi Warm`.
 - `Tupi Warm` follows the warm paper `nothing impossible / tupi` direction: ivory background, graphite text, muted olive, and amber accents.
 - The main page keeps the earlier accepted large time style, adds the Tupi brand mark, warms the Apps/FC surfaces, and hides the main daily-card network footer so the quote does not collide.
@@ -26,10 +29,11 @@ Current state:
 
 Next work:
 
+- Inspect all six weather scenes on the physical 480x320 screen. Storm has been runtime-verified through live Zhongshan weather; clear, cloudy, rain, snow, and fog still need visual inspection under forced or real weather codes.
 - Inspect `Tupi Warm` on the physical 480x320 screen and tune exact time colon alignment, top-right status spacing, daily-card line wrapping, and weather-card contrast from hardware feedback.
 - Inspect the Cat theme on the actual 480x320 screen and tune exact pink strength, time-card spacing, daily-card cat position, and Chinese brand readability from hardware feedback.
 - Consider replacing the restart-to-apply theme flow with a safe immediate UI recreation only after LVGL timer/object lifecycle risk is designed and tested.
-- Verify a full board-initiated OTA from `1.7.28` or newer to a later release: check -> update -> direct GitHub timeout if present -> proxy fallback -> download -> partition write -> reboot -> new version.
+- Verify a full board-initiated OTA from `1.7.29` or newer to a later release: check -> update -> direct GitHub timeout if present -> proxy fallback -> download -> partition write -> reboot -> new version.
 - Verify BOOT physical-key wiring: confirm the user-visible flow on battery only: long-press BOOT until the screen turns off, release, then press BOOT once to wake. Confirm it reconnects to the saved WiFi without pairing/config mode. Record whether USB-connected and battery-only behavior differ.
 - Add a second-tap confirmation or a tiny modal before starting `Update`; the current bootstrap intentionally avoids auto-update but still starts update on the available-state button.
 - Consider adding SHA256 verification by release manifest or asset sidecar before writing, because GitHub's latest-release JSON does not provide the asset checksum.

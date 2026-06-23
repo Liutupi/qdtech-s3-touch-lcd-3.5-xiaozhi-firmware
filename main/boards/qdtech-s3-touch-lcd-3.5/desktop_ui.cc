@@ -19,6 +19,7 @@
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
+#include <libs/gif/lv_gif.h>
 
 #define TAG "DesktopUI"
 
@@ -31,6 +32,12 @@ LV_FONT_DECLARE(qd_font_clock_72);
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(qd_font_lxgw_16);
 LV_FONT_DECLARE(qd_font_lxgw_20);
+LV_IMAGE_DECLARE(qd_weather_clear_scene);
+LV_IMAGE_DECLARE(qd_weather_cloudy_scene);
+LV_IMAGE_DECLARE(qd_weather_rain_scene);
+LV_IMAGE_DECLARE(qd_weather_snow_scene);
+LV_IMAGE_DECLARE(qd_weather_fog_scene);
+LV_IMAGE_DECLARE(qd_weather_storm_scene);
 
 // Theme palette
 enum class UiTheme : uint8_t {
@@ -406,6 +413,10 @@ static void init_styles() {
 // ===== Animation callbacks =====
 void DesktopUI::ObjOpaCb(void* obj, int32_t value) {
     lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), value, 0);
+}
+
+void DesktopUI::ObjXCb(void* obj, int32_t value) {
+    lv_obj_set_x(static_cast<lv_obj_t*>(obj), value);
 }
 
 void DesktopUI::ObjYCb(void* obj, int32_t value) {
@@ -1363,43 +1374,79 @@ void DesktopUI::CreateBigTime(lv_obj_t* parent) {
 void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_obj_t* panel = CreatePanel(parent, 166, 154, 294, 50);
     lv_obj_set_style_bg_color(panel, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_clip_corner(panel, true, 0);
 
     lv_obj_t* title = label_en(panel, "Weather", &style_muted);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 12, 8);
 
-    // Weather icon pieces are reused for all weather codes to keep the main page light.
-    weather_sun_ = circle(panel, 54, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 56, 28);
+    weather_horizon_ = bar(panel, 132, 1, COLOR_LINE, LV_OPA_60);
+    lv_obj_align(weather_horizon_, LV_ALIGN_TOP_LEFT, 17, 105);
 
-    // Clouds
-    weather_cloud_[0] = circle(panel, 38, COLOR_CREAM, LV_OPA_COVER);
-    lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 42, 60);
-    weather_cloud_[1] = circle(panel, 46, COLOR_CREAM, LV_OPA_COVER);
-    lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 72, 52);
-    weather_cloud_[2] = bar(panel, 88, 26, COLOR_CREAM, LV_OPA_COVER);
-    lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 40, 78);
+    weather_glow_ = circle(panel, 82, COLOR_GOLD, LV_OPA_20);
+    lv_obj_align(weather_glow_, LV_ALIGN_TOP_LEFT, 38, 18);
+
+    const int16_t ray_pos[6][3] = {
+        {78, 22, 0}, {108, 34, 450}, {112, 66, 900},
+        {76, 92, 0}, {44, 70, 450}, {42, 36, 900},
+    };
+    for (int i = 0; i < 6; ++i) {
+        weather_rays_[i] = bar(panel, 4, 16, COLOR_GOLD, LV_OPA_60);
+        lv_obj_align(weather_rays_[i], LV_ALIGN_TOP_LEFT, ray_pos[i][0], ray_pos[i][1]);
+        lv_obj_set_style_transform_rotation(weather_rays_[i], ray_pos[i][2], 0);
+    }
+
+    weather_sun_ = circle(panel, 46, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 58, 42);
+    lv_obj_t* sun_highlight = circle(weather_sun_, 14, COLOR_CREAM, LV_OPA_40);
+    lv_obj_align(sun_highlight, LV_ALIGN_TOP_LEFT, 9, 8);
+
+    weather_cloud_shadow_ = bar(panel, 94, 24, COLOR_LINE, LV_OPA_30);
+    lv_obj_align(weather_cloud_shadow_, LV_ALIGN_TOP_LEFT, 36, 82);
+
+    weather_cloud_[0] = circle(panel, 40, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 38, 68);
+    weather_cloud_[1] = circle(panel, 50, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 67, 58);
+    weather_cloud_[2] = bar(panel, 96, 28, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 34, 84);
     if (is_tupi_warm_theme()) {
         for (int i = 0; i < 3; ++i) {
             lv_obj_set_style_border_color(weather_cloud_[i], COLOR_LINE, 0);
             lv_obj_set_style_border_width(weather_cloud_[i], 1, 0);
         }
+        lv_obj_set_style_bg_opa(weather_glow_, LV_OPA_30, 0);
     }
 
-    for (int i = 0; i < 3; ++i) {
-        weather_rain_[i] = bar(panel, 4, 20, COLOR_BLUE, LV_OPA_80);
-        lv_obj_align(weather_rain_[i], LV_ALIGN_TOP_LEFT, 55 + i * 22, 100);
+    for (int i = 0; i < 6; ++i) {
+        weather_rain_[i] = bar(panel, 3, i % 2 == 0 ? 15 : 11, COLOR_BLUE, LV_OPA_70);
+        lv_obj_align(weather_rain_[i], LV_ALIGN_TOP_LEFT, 40 + i * 15, 86 + (i % 2) * 5);
         lv_obj_set_style_transform_rotation(weather_rain_[i], 180, 0);
 
-        weather_snow_[i] = circle(panel, 8, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_align(weather_snow_[i], LV_ALIGN_TOP_LEFT, 54 + i * 24, 104);
+        weather_snow_[i] = circle(panel, i % 2 == 0 ? 7 : 5, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_align(weather_snow_[i], LV_ALIGN_TOP_LEFT, 40 + i * 15, 88 + (i % 3) * 5);
     }
 
-    weather_storm_[0] = bar(panel, 10, 32, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_storm_[0], LV_ALIGN_TOP_LEFT, 84, 92);
-    lv_obj_set_style_transform_rotation(weather_storm_[0], 250, 0);
-    weather_storm_[1] = bar(panel, 10, 26, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_storm_[1], LV_ALIGN_TOP_LEFT, 72, 112);
+    weather_storm_[0] = circle(panel, 74, COLOR_GOLD, LV_OPA_20);
+    lv_obj_align(weather_storm_[0], LV_ALIGN_TOP_LEFT, 45, 39);
+    lv_obj_move_background(weather_storm_[0]);
+    weather_storm_[1] = bar(panel, 24, 4, COLOR_GOLD, LV_OPA_70);
+    lv_obj_align(weather_storm_[1], LV_ALIGN_TOP_LEFT, 70, 70);
     lv_obj_set_style_transform_rotation(weather_storm_[1], 250, 0);
+    weather_storm_[2] = bar(panel, 18, 3, COLOR_GOLD, LV_OPA_50);
+    lv_obj_align(weather_storm_[2], LV_ALIGN_TOP_LEFT, 91, 60);
+    lv_obj_set_style_transform_rotation(weather_storm_[2], 650, 0);
+    weather_storm_[3] = bar(panel, 16, 3, COLOR_CREAM, LV_OPA_50);
+    lv_obj_align(weather_storm_[3], LV_ALIGN_TOP_LEFT, 56, 82);
+    lv_obj_set_style_transform_rotation(weather_storm_[3], 420, 0);
+
+    weather_scene_gif_ = lv_gif_create(panel);
+    lv_gif_set_src(weather_scene_gif_, &qd_weather_cloudy_scene);
+    lv_obj_set_size(weather_scene_gif_, 142, 84);
+    lv_obj_align(weather_scene_gif_, LV_ALIGN_TOP_LEFT, 12, 22);
+    lv_obj_set_style_bg_opa(weather_scene_gif_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(weather_scene_gif_, 0, 0);
+    lv_obj_add_flag(weather_scene_gif_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(weather_scene_gif_);
 
     // Shared weather pulse animation
     lv_anim_t anim;
@@ -1411,9 +1458,19 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_exec_cb(&anim, ObjOpaCb);
     lv_anim_start(&anim);
+
+    lv_anim_t storm_anim;
+    lv_anim_init(&storm_anim);
+    lv_anim_set_var(&storm_anim, weather_storm_[0]);
+    lv_anim_set_values(&storm_anim, LV_OPA_10, LV_OPA_30);
+    lv_anim_set_time(&storm_anim, 420);
+    lv_anim_set_playback_time(&storm_anim, 820);
+    lv_anim_set_repeat_count(&storm_anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_exec_cb(&storm_anim, ObjOpaCb);
+    lv_anim_start(&storm_anim);
     
     // Weather particle animation timer
-    weather_particle_timer_ = lv_timer_create(WeatherParticleCb, 200, this);
+    weather_particle_timer_ = lv_timer_create(WeatherParticleCb, 260, this);
     lv_timer_pause(weather_particle_timer_);
 
     weather_temp_label_ = label_en(panel, "-- C", &style_en);
@@ -1424,7 +1481,7 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     }
     lv_obj_set_width(weather_temp_label_, 142);
     lv_label_set_long_mode(weather_temp_label_, LV_LABEL_LONG_CLIP);
-    lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 12, 108);
+    lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 14, 112);
 
     weather_meta_label_ = label_en(panel, "Weather pending", &style_green);
     lv_obj_set_width(weather_meta_label_, 142);
@@ -1433,7 +1490,7 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     if (is_tupi_warm_theme()) {
         lv_obj_set_style_text_color(weather_meta_label_, COLOR_GREEN, 0);
     }
-    lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 12, 132);
+    lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 14, 134);
 
     ApplyWeatherVisual(-1);
 }
@@ -3306,45 +3363,86 @@ void DesktopUI::SetFcControllerCallback(std::function<void(uint8_t)> callback) {
 }
 
 void DesktopUI::ApplyWeatherVisual(int weather_code) {
+    current_weather_code_ = weather_code;
     const bool is_clear = weather_code == 0;
+    const bool is_fog = weather_code == 45 || weather_code == 48;
     const bool is_cloud = weather_code == 1 || weather_code == 2 || weather_code == 3 ||
-                          weather_code == 45 || weather_code == 48 || weather_code < 0;
+                          is_fog || weather_code < 0;
     const bool is_rain = (weather_code >= 51 && weather_code <= 67) ||
                          (weather_code >= 80 && weather_code <= 82);
     const bool is_snow = weather_code >= 71 && weather_code <= 77;
     const bool is_storm = weather_code >= 95;
+    const bool use_weather_scene = weather_scene_gif_ != nullptr;
 
-    set_weather_part_visible(weather_sun_, is_clear || weather_code == 1 || weather_code == 2);
+    int next_scene = 1;  // Default to cloudy while weather is pending.
+    const lv_image_dsc_t* scene_src = &qd_weather_cloudy_scene;
+    if (is_clear) {
+        next_scene = 0;
+        scene_src = &qd_weather_clear_scene;
+    } else if (is_storm) {
+        next_scene = 5;
+        scene_src = &qd_weather_storm_scene;
+    } else if (is_snow) {
+        next_scene = 3;
+        scene_src = &qd_weather_snow_scene;
+    } else if (is_rain) {
+        next_scene = 2;
+        scene_src = &qd_weather_rain_scene;
+    } else if (is_fog) {
+        next_scene = 4;
+        scene_src = &qd_weather_fog_scene;
+    }
+
+    if (weather_scene_gif_ && current_weather_scene_ != next_scene) {
+        lv_gif_set_src(weather_scene_gif_, scene_src);
+        lv_gif_restart(weather_scene_gif_);
+        current_weather_scene_ = next_scene;
+    }
+    set_weather_part_visible(weather_scene_gif_, use_weather_scene);
+
+    const bool show_sun = is_clear || weather_code == 1 || weather_code == 2;
+    set_weather_part_visible(weather_glow_, show_sun && !use_weather_scene);
+    set_weather_part_visible(weather_sun_, show_sun && !use_weather_scene);
+    for (auto* ray : weather_rays_) {
+        set_weather_part_visible(ray, show_sun && !is_storm && !use_weather_scene);
+    }
     if (weather_sun_) {
         lv_obj_set_style_opa(weather_sun_, is_clear ? LV_OPA_COVER : LV_OPA_50, 0);
     }
+    if (weather_glow_) {
+        lv_obj_set_style_opa(weather_glow_, is_clear ? LV_OPA_30 : LV_OPA_20, 0);
+    }
 
     const bool show_cloud = is_cloud || is_rain || is_snow || is_storm;
+    set_weather_part_visible(weather_cloud_shadow_, show_cloud && !use_weather_scene);
     for (auto* cloud : weather_cloud_) {
-        set_weather_part_visible(cloud, show_cloud);
+        set_weather_part_visible(cloud, show_cloud && !use_weather_scene);
+        if (cloud) {
+            lv_obj_set_style_opa(cloud, is_storm ? LV_OPA_80 : LV_OPA_COVER, 0);
+        }
     }
 
     for (auto* rain : weather_rain_) {
-        set_weather_part_visible(rain, is_rain || is_storm);
+        set_weather_part_visible(rain, (is_rain || is_storm) && !use_weather_scene);
     }
     for (auto* snow : weather_snow_) {
-        set_weather_part_visible(snow, is_snow);
+        set_weather_part_visible(snow, is_snow && !use_weather_scene);
     }
     for (auto* storm : weather_storm_) {
-        set_weather_part_visible(storm, is_storm);
+        set_weather_part_visible(storm, is_storm && !use_weather_scene);
     }
     
     // Start/stop particle animation based on weather
     if (weather_particle_timer_) {
-        if (is_clear || is_cloud) {
-            lv_timer_resume(weather_particle_timer_);
-        } else {
+        if (use_weather_scene) {
             lv_timer_pause(weather_particle_timer_);
+        } else {
+            lv_timer_resume(weather_particle_timer_);
         }
     }
 
-    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d storm=%d",
-             weather_code, is_clear, show_cloud, is_rain, is_snow, is_storm);
+    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d fog=%d storm=%d scene=%d",
+             weather_code, is_clear, show_cloud, is_rain, is_snow, is_fog, is_storm, next_scene);
 }
 
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {
@@ -3705,42 +3803,93 @@ void DesktopUI::ClockShadowCb(lv_timer_t* timer) {
 void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
     if (!self || !self->weather_sun_) return;
-    
-    // Simple particle effect: create small circles that float up
+
     lv_obj_t* parent = lv_obj_get_parent(self->weather_sun_);
     if (!parent) return;
-    
-    // Create a small particle
+
+    const int code = self->current_weather_code_;
+    const bool is_rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
+    const bool is_snow = code >= 71 && code <= 77;
+    const bool is_storm = code >= 95;
+    const bool is_clear = code == 0;
+    const bool storm_flash = is_storm && (esp_random() % 4 == 0);
+
     lv_obj_t* particle = lv_obj_create(parent);
     lv_obj_remove_style_all(particle);
-    lv_obj_set_size(particle, 4, 4);
+    const int16_t size = is_rain || is_storm ? 3 : (is_snow ? 6 : 4);
+    lv_obj_set_size(particle,
+                    storm_flash ? static_cast<int16_t>(18 + (esp_random() % 12)) : size,
+                    storm_flash ? 3 : (is_rain || is_storm ? 13 : size));
     lv_obj_set_style_radius(particle, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(particle, COLOR_GOLD, 0);
-    lv_obj_set_style_bg_opa(particle, LV_OPA_60, 0);
-    
-    // Random position near the icon.
-    int16_t x = 56 + (esp_random() % 54);
-    int16_t y = 28 + (esp_random() % 30);
+    lv_obj_set_style_bg_color(particle,
+                              storm_flash ? COLOR_GOLD :
+                              (is_rain || is_storm) ? COLOR_BLUE :
+                              (is_snow ? COLOR_CREAM : COLOR_GOLD), 0);
+    lv_obj_set_style_bg_opa(particle, storm_flash ? LV_OPA_80 : LV_OPA_60, 0);
+
+    int16_t x = 48 + (esp_random() % 70);
+    int16_t y = 54 + (esp_random() % 44);
+    int16_t end_y = y - 34;
+    int16_t end_x = x;
+    if (storm_flash) {
+        x = 56 + (esp_random() % 54);
+        y = 56 + (esp_random() % 30);
+        end_x = x + static_cast<int16_t>(4 + (esp_random() % 7));
+        end_y = y + static_cast<int16_t>((esp_random() % 9) - 4);
+        lv_obj_set_style_transform_rotation(particle, (esp_random() % 2) ? 270 : 620, 0);
+    } else if (is_storm) {
+        x = 42 + (esp_random() % 78);
+        y = 70 + (esp_random() % 20);
+        end_x = x + static_cast<int16_t>(4 + (esp_random() % 7));
+        end_y = y + static_cast<int16_t>(16 + (esp_random() % 10));
+        if (end_y > 104) end_y = 104;
+        lv_obj_set_style_transform_rotation(particle, 180, 0);
+    } else if (is_rain) {
+        x = 44 + (esp_random() % 74);
+        y = 74 + (esp_random() % 22);
+        end_x = x + 8;
+        end_y = y + 28;
+        if (end_y > 104) end_y = 104;
+        lv_obj_set_style_transform_rotation(particle, 180, 0);
+    } else if (is_snow) {
+        x = 42 + (esp_random() % 76);
+        y = 78 + (esp_random() % 20);
+        end_x = x + static_cast<int16_t>((esp_random() % 17) - 8);
+        end_y = y + 24;
+        if (end_y > 104) end_y = 104;
+    } else if (is_clear) {
+        x = 52 + (esp_random() % 58);
+        y = 34 + (esp_random() % 42);
+        end_y = y - 36;
+    }
     lv_obj_align(particle, LV_ALIGN_TOP_LEFT, x, y);
-    
-    // Float up animation
+
     lv_anim_t anim;
     lv_anim_init(&anim);
     lv_anim_set_var(&anim, particle);
-    lv_anim_set_values(&anim, y, y - 40);
-    lv_anim_set_time(&anim, 1500);
+    lv_anim_set_values(&anim, y, end_y);
+    lv_anim_set_time(&anim, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
     lv_anim_set_exec_cb(&anim, ObjYCb);
     lv_anim_set_ready_cb(&anim, [](lv_anim_t* a) {
         lv_obj_del(static_cast<lv_obj_t*>(a->var));
     });
     lv_anim_start(&anim);
-    
-    // Fade out
+
+    if (end_x != x) {
+        lv_anim_t drift;
+        lv_anim_init(&drift);
+        lv_anim_set_var(&drift, particle);
+        lv_anim_set_values(&drift, x, end_x);
+        lv_anim_set_time(&drift, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
+        lv_anim_set_exec_cb(&drift, ObjXCb);
+        lv_anim_start(&drift);
+    }
+
     lv_anim_t fade;
     lv_anim_init(&fade);
     lv_anim_set_var(&fade, particle);
     lv_anim_set_values(&fade, LV_OPA_60, LV_OPA_TRANSP);
-    lv_anim_set_time(&fade, 1500);
+    lv_anim_set_time(&fade, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
     lv_anim_set_exec_cb(&fade, ObjOpaCb);
     lv_anim_start(&fade);
 }

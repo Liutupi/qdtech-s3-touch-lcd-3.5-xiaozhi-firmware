@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.29 Weather Scene GIF Pack
+
+Scope:
+
+- Bumped firmware version to `1.7.29`.
+- Replaced the main-page weather module's low-quality LVGL primitive animation path with a GIF scene player for the QDTech board.
+- Enabled `LV_USE_GIF` and `LV_GIF_CACHE_DECODE_DATA` for `BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5`.
+- Added six warm-paper weather scene assets: clear, cloudy, rain, snow, fog, and storm.
+- Weather code mapping now selects a full animated scene: clear `0`, cloudy/pending `1`, rain `2`, snow `3`, fog `4`, storm `5`.
+- The bottom temperature and weather-summary labels remain separate from the 142x84 animated scene area so the animation does not cover text.
+- The older LVGL shape-based weather objects remain as a fallback path, but the normal QDTech build now uses the GIF scene player.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f920`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x1706e0`, about 24%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.29`, QDTech startup, `Desktop UI created`, saved WiFi reconnect, MQTT connection, and `Application: STATE: idle`.
+- Weather logs confirmed default/pending `scene=1` and live Zhongshan storm weather switching to `scene=5`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`: `483dd14a036b6b66861729889a6525286be102287b47d48a555e3679d85f06e1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`: `9c7170cc4e8a73beb1a73b094a6dae216ae2558b6ed48746b1d821fe2e446557`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`: `e5d99dab73860a5834c6c9f7d560f02a50846dc4fc0b968aba501913046063ed`
+- Follow-up: visually inspect all six scenes on the physical LCD when the weather code changes or by forcing weather codes in test builds; if the asset pack grows again, watch app partition space.
+
 ## 2026-06-23: v1.7.28 GitHub OTA Proxy Fallback
 
 Scope:
