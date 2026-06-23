@@ -26,6 +26,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.25 (2026-06-21): FC/NES dynamic ROM names restored to broad Puhui font coverage
 - v1.7.26 (2026-06-22): GitHub OTA firmware-download buffers enlarged for long release-asset redirects
 - v1.7.27 (2026-06-23): Added Tupi Warm theme and restored its weather card to the proven Classic weather animation layout
+- v1.7.28 (2026-06-23): GitHub Release asset OTA fallback via proxy-prefixed download URLs after direct GitHub TLS connection failures
 
 ## Confirmed Hardware From Source
 
@@ -246,3 +247,4 @@ For photos:
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.
 - QDTech releases should publish `full.bin`, `firmware.zip`, and standalone `app.bin` assets; the on-device updater consumes the `*-app.bin` asset from the latest GitHub Release.
+- From `v1.7.28` onward, if the direct GitHub Release asset download fails, OTA tries proxy-prefixed download URLs for the same `browser_download_url`. Older firmware still needs a one-time USB flash to get this fallback.

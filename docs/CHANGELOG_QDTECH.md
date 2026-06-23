@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.28 GitHub OTA Proxy Fallback
+
+Scope:
+
+- Bumped firmware version to `1.7.28`.
+- Fixed the observed Settings OTA failure where the board could detect the latest GitHub Release but timed out when opening the GitHub Release asset download URL.
+- Serial logs proved the failure was `ESP_ERR_HTTP_CONNECT` before any image data was downloaded or written, so the app image and OTA partition were not the root cause.
+- Added firmware-download URL candidates: direct GitHub first, then `https://ghfast.top/` plus the original GitHub URL, then `https://gh-proxy.com/` plus the original GitHub URL.
+- Added attempt logging so future captures show whether the updater is using direct or proxy download.
+- Added one retry to GitHub Release metadata fetch before showing Check failed.
+- Bootstrap note: firmware already running `v1.7.27` or older does not have this fallback and may still require one USB flash to `v1.7.28`.
+
+Verification:
+
+- `curl -L -I` from the development PC confirmed `ghfast.top` and `gh-proxy.com` returned `200 OK` with the correct `Content-Length` for the `v1.7.27` app asset; `gh.llkk.cc` returned `403` and was not added.
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x3d7e10`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2281f0`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.28`, QDTech board startup, `Desktop UI created`, saved WiFi reconnect, `Ota: Current version: 1.7.28`, MQTT connection, weather update, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`: `8cddf5b367c5dfb108840127743ae208bdcc2f34e20b3e44e3d0a5468cd1a029`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`: `777be58c569dce64035b66363da943e97109b082eafed0a2bd34f1d2906a7806`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`: `5e6b9fb0df401a7a4ddc65f110624dbab3917467eca3a260bd86db884f75821f`
+- Follow-up: verify a real on-device OTA from `v1.7.28` to a later release and confirm the proxy fallback path succeeds when direct GitHub asset download fails.
+
 ## 2026-06-23: v1.7.27 Tupi Warm Theme And Weather Layout Reuse
 
 Scope:

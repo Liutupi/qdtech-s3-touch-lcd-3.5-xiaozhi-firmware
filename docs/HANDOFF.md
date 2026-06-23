@@ -72,7 +72,33 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.27 Tupi Warm Theme And Weather Layout Reuse
+## Latest Runtime Notes: 2026-06-23 v1.7.28 GitHub OTA Proxy Fallback
+
+- Latest release target is `v1.7.28`.
+- User reported that a board on `v1.7.26` could detect `v1.7.27`, but pressing Update failed and appeared to restart/return without updating.
+- Serial capture on `COM14` showed the exact failure:
+  - `FirmwareUpdate: firmware update ready current=1.7.26 latest=1.7.27`
+  - `Ota: Upgrading firmware from https://github.com/Liutupi/.../qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`
+  - `Ota: Writing to partition ota_1 at offset 0x700000`
+  - `esp-tls: Failed to open new connection in specified timeout`
+  - `HTTP_CLIENT: Connection failed, sock < 0`
+  - `Ota: Failed to open firmware HTTP connection: ESP_ERR_HTTP_CONNECT`
+  - The app returned to `STATE: idle`; no panic or partition-write failure was captured.
+- Root cause: the Settings updater could read GitHub Release metadata intermittently, but the ESP32 could not reliably open the GitHub Release asset download URL from this network. This is a GitHub connectivity/proxy problem, not a bad app image or OTA partition problem.
+- Fix: firmware downloads now try the original GitHub asset URL first, then fall back to proxy-prefixed URLs using `https://ghfast.top/` and `https://gh-proxy.com/` for `https://github.com/...` assets. The log prints direct/proxy attempt numbers.
+- Release metadata fetch now retries once before reporting Check failed.
+- Important bootstrap limitation: boards already running `v1.7.27` or older do not contain this fallback logic, so they may still need one USB flash to `v1.7.28`. OTA releases after this baseline should be able to use the proxy fallback.
+- Build verification passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x3d7e10`, smallest app partition is `0x600000`, and free app space is `0x2281f0`, about 36%.
+- Flashed successfully to the currently connected board on `COM14` at 921600 baud.
+- Captured boot logs confirmed `App version: 1.7.28`, QDTech startup, `Desktop UI created`, saved WiFi reconnect, `Ota: Current version: 1.7.28`, MQTT connection, weather update, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`: `8cddf5b367c5dfb108840127743ae208bdcc2f34e20b3e44e3d0a5468cd1a029`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`: `777be58c569dce64035b66363da943e97109b082eafed0a2bd34f1d2906a7806`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`: `5e6b9fb0df401a7a4ddc65f110624dbab3917467eca3a260bd86db884f75821f`
+- Follow-up: publish a later test release from `v1.7.28` or newer and verify the serial log reaches `Firmware download attempt 2/3: proxy` when direct GitHub asset download times out.
+
+## Previous Runtime Notes: 2026-06-23 v1.7.27 Tupi Warm Theme And Weather Layout Reuse
 
 - Latest release target is `v1.7.27`.
 - User approved a third warm paper theme direction built around the `nothing impossible / tupi` brand mark.
