@@ -85,6 +85,8 @@ Observed boot/runtime facts after flashing:
   - `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`: `c5b910059161cfbeeb31fe036bf8890d90b16c656be04696406103c89c7c1bd0`
   - `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`: `bb5e40f3bc0391a4c6c5323dc08bfe3c08b891d72c0acbed4dd2549f1e6b6b65`
   - `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`: `be346268722b679b9157601667e9e2cfc3c0ba3a8c7862d0b8b1764554f22125`
+- Hardware OTA verification from the `v1.7.32` bootstrap build to `v1.7.33` still failed. The new split removed the cache assertion and stack overflow, but the TLS/proxy stream failed with `esp-aes: Failed to allocate memory`; later retries could not allocate enough internal RAM for the flash worker after the failed TLS attempt.
+- Next debugging pivot: reduce internal RAM pressure before the firmware HTTP connection opens, stop/deinit more services for the whole OTA window, or move release delivery away from HTTPS GitHub/proxy streaming to a lower-memory transport.
 
 ## Previous Runtime Notes: 2026-06-23 v1.7.32 OTA Low-Internal-RAM Upgrade Fit
 
