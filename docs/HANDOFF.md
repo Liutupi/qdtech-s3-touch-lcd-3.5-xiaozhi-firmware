@@ -72,9 +72,22 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.31 OTA Check/Upgrade Task Split
+## Latest Runtime Notes: 2026-06-23 v1.7.32 OTA Low-Internal-RAM Upgrade Fit
 
-- Latest release target is `v1.7.31`.
+- Latest release target is `v1.7.32`.
+- Follow-up OTA testing proved `v1.7.31` could check GitHub and create the upgrade task, but the 6144-byte internal upgrade stack left too little internal heap for the OTA image header and download buffer.
+- The new fit is a 4096-byte internal upgrade stack plus 1024-byte HTTP firmware download buffer.
+- `COM14` was USB-flashed with a `v1.7.31` bootstrap build containing these reductions before preparing `v1.7.32`.
+- `v1.7.32` build passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48f980`, smallest app partition is `0x600000`, and free app space is `0x170680`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.32-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.32-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.32-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-app.bin`: `2a5cb26b3587c79356a8ac033a7a3d07acfd136d879eb11919336d468801c248`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-firmware.zip`: `a94bace312395293d5b96c3395a9e4fa1e741145af7000e5eb4e03521902e10a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-full.bin`: `e3f1230680314d43ff71f5e1b79a4197293cf8380e1a1964672da722d1524e73`
+
+## Previous Runtime Notes: 2026-06-23 v1.7.31 OTA Check/Upgrade Task Split
+
+- Release target was `v1.7.31`.
 - Follow-up testing found that `v1.7.30` was still too strict: it forced the 10KB firmware check task into internal RAM, but the live board usually had only about 7KB largest internal block, so check task creation failed before it could find the release.
 - The corrected split is: firmware check task uses PSRAM stack because it only fetches/parses GitHub release metadata; firmware upgrade task uses internal stack because it writes flash.
 - If an upgrade task cannot get an internal stack, the updater shows `No internal RAM` and refuses the unsafe fallback.

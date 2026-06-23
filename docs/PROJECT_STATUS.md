@@ -27,6 +27,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.26 (2026-06-22): GitHub OTA firmware-download buffers enlarged for long release-asset redirects
 - v1.7.27 (2026-06-23): Added Tupi Warm theme and restored its weather card to the proven Classic weather animation layout
 - v1.7.28 (2026-06-23): GitHub Release asset OTA fallback via proxy-prefixed download URLs after direct GitHub TLS connection failures
+- v1.7.32 (2026-06-23): Settings OTA upgrade reduces internal stack and firmware HTTP buffer so header/download buffers fit in low internal RAM
 - v1.7.31 (2026-06-23): Settings OTA check uses a PSRAM stack while flash-writing upgrade uses an internal stack, fixing the task-create failure found during v1.7.30 testing
 - v1.7.30 (2026-06-23): Settings OTA writes now run from internal RAM task/buffers, fixing the cache-freeze assertion seen when v1.7.28 tried to install a GitHub Release asset
 - v1.7.29 (2026-06-23): Main-page weather module uses a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm

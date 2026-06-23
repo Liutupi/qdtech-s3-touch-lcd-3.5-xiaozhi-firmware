@@ -114,7 +114,7 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
     }
 
     const bool is_upgrade = action == TaskAction::Upgrade;
-    const uint32_t stack_size = is_upgrade ? 6144 : 10240;
+    const uint32_t stack_size = is_upgrade ? 4096 : 10240;
     const char* task_name = action == TaskAction::Check ? "fw_check" : "fw_upgrade";
     ESP_LOGI(TAG, "firmware task create action=%d free_internal=%u largest_internal=%u",
              static_cast<int>(action),

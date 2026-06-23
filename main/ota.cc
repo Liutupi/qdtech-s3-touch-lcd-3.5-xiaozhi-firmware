@@ -26,7 +26,7 @@
 
 #define TAG "Ota"
 
-static constexpr int kFirmwareHttpBufferSize = 2048;
+static constexpr int kFirmwareHttpBufferSize = 1024;
 static constexpr const char* kFirmwareDownloadProxyPrefixes[] = {
     "https://ghfast.top/",
     "https://gh-proxy.com/",
