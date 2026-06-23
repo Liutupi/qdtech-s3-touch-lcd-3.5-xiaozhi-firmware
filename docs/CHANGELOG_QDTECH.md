@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-23: v1.7.30 OTA Internal-RAM Write Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.30`.
+- Fixed the Settings OTA crash captured on a new board running `v1.7.28`.
+- Runtime logs proved this was not a GitHub/proxy reachability problem: direct GitHub timed out, proxy download succeeded, and the crash happened after `New firmware version: 1.7.29` while OTA flash writing began.
+- Root cause: the firmware upgrade task was created in PSRAM first. ESP-IDF disables cache during flash erase/write, so a PSRAM task stack is unsafe and triggers `s_task_stack_is_sane_when_cache_frozen()`.
+- The firmware upgrade task now uses an internal-RAM stack first.
+- OTA image header accumulation no longer uses `std::string`; the header buffer is allocated from internal RAM.
+- OTA HTTP download buffer moved from task stack to internal heap, so `esp_ota_write()` always receives internal-RAM data.
+- Bootstrap note: boards already running `v1.7.28` cannot fix this exact OTA crash by OTA, because the crashing updater is the old app. They need one USB flash to `v1.7.29` or newer before future OTA updates are reliable.
+
+Verification:
+
+- Captured failing board logs on `COM14`: current app `1.7.28`, release asset selected, direct GitHub connection timed out, proxy selected, `New firmware version: 1.7.29`, then ESP-IDF cache-freeze stack assertion and reboot.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f850`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x1707b0`, about 24%.
+- USB-flashed the fixed `1.7.29` bootstrap build to the new board on `COM14`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`: `476ebaa1ea9afa1fad285e815a754d4815c94bd4e3fc552006fa54e9331ed620`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`: `0e780c5bfdeb7fd3e490af80e82cffe7152380f8e2ae26ef4731409646cab58a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`: `b3a33e954bde02dec6cd96297dcbd544f692e6c8e4cdcab076effb015723a598`
+- Follow-up verification target: publish `v1.7.30`, then test on-device OTA from the fixed `1.7.29` bootstrap build to `v1.7.30`.
+
 ## 2026-06-23: v1.7.29 Weather Scene GIF Pack
 
 Scope:

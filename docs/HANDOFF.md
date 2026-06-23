@@ -72,7 +72,24 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.29 Weather Scene GIF Pack
+## Latest Runtime Notes: 2026-06-23 v1.7.30 OTA Internal-RAM Write Fix
+
+- Latest release target is `v1.7.30`.
+- A new board running `v1.7.28` reproduced the Settings OTA failure on `COM14`.
+- Captured log sequence: the board selected the GitHub Release app asset, direct GitHub download timed out, proxy download was selected, the image header was read as the newer version, and then ESP-IDF asserted in `esp_cache_freeze_caches_disable_interrupts` during OTA flash-write handling.
+- This proves the blocker was not simply lack of GitHub access. The proxy path was already able to reach the app image.
+- Root cause: the firmware upgrade task used a PSRAM stack first. Flash erase/write disables cache, so code running with a PSRAM task stack can trip `s_task_stack_is_sane_when_cache_frozen()`.
+- Fix: create firmware update tasks with an internal-RAM stack first, reduce the upgrade stack to fit the observed internal largest block, move the OTA HTTP download buffer from stack to internal heap, and replace the OTA image-header `std::string` accumulation with an internal-RAM fixed header buffer.
+- Bootstrap limitation: boards already on `v1.7.28` need one USB flash because the old updater crashes before it can install the fixed updater. After flashing `v1.7.29` or newer once, future OTA updates use the fixed path.
+- `COM14` was USB-flashed with the fixed `v1.7.29` bootstrap build before preparing `v1.7.30`.
+- `v1.7.30` build passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48f850`, smallest app partition is `0x600000`, and free app space is `0x1707b0`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`: `476ebaa1ea9afa1fad285e815a754d4815c94bd4e3fc552006fa54e9331ed620`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`: `0e780c5bfdeb7fd3e490af80e82cffe7152380f8e2ae26ef4731409646cab58a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`: `b3a33e954bde02dec6cd96297dcbd544f692e6c8e4cdcab076effb015723a598`
+
+## Previous Runtime Notes: 2026-06-23 v1.7.29 Weather Scene GIF Pack
 
 - Latest release target is `v1.7.29`.
 - User rejected the LVGL primitive weather animation quality, especially the storm effect, and asked for a richer/惊艳 visual approach.

@@ -6,6 +6,7 @@
 #include <cJSON.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
@@ -371,7 +372,21 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
     ESP_LOGI(TAG, "Writing to partition %s at offset 0x%lx", update_partition->label, update_partition->address);
     bool image_header_checked = false;
-    std::string image_header;
+    constexpr size_t kRequiredHeaderSize =
+        sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t);
+    auto header_free = [](uint8_t* ptr) {
+        if (ptr) {
+            heap_caps_free(ptr);
+        }
+    };
+    std::unique_ptr<uint8_t, decltype(header_free)> image_header(
+        static_cast<uint8_t*>(heap_caps_malloc(kRequiredHeaderSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+        header_free);
+    if (!image_header) {
+        ESP_LOGE(TAG, "No internal memory for OTA image header");
+        return;
+    }
+    size_t image_header_size = 0;
 
     int status_code = 0;
     int content_length = 0;
@@ -422,12 +437,26 @@ void Ota::Upgrade(const std::string& firmware_url) {
         return;
     }
 
-    char buffer[2048];
+    auto buffer_free = [](char* ptr) {
+        if (ptr) {
+            heap_caps_free(ptr);
+        }
+    };
+    std::unique_ptr<char, decltype(buffer_free)> buffer(
+        static_cast<char*>(heap_caps_malloc(kFirmwareHttpBufferSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+        buffer_free);
+    if (!buffer) {
+        ESP_LOGE(TAG, "No internal memory for OTA download buffer");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return;
+    }
+
     bool ota_begun = false;
     size_t total_read = 0, recent_read = 0;
     auto last_calc_time = esp_timer_get_time();
     while (true) {
-        int ret = esp_http_client_read(client, buffer, sizeof(buffer));
+        int ret = esp_http_client_read(client, buffer.get(), kFirmwareHttpBufferSize);
         if (ret < 0) {
             ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
             esp_http_client_close(client);
@@ -458,16 +487,20 @@ void Ota::Upgrade(const std::string& firmware_url) {
         }
 
         if (!image_header_checked) {
-            image_header.append(buffer, ret);
-            constexpr size_t kRequiredHeaderSize =
-                sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t);
-            if (image_header.size() < kRequiredHeaderSize) {
+            const size_t copy_len = std::min(
+                static_cast<size_t>(ret),
+                kRequiredHeaderSize - image_header_size);
+            if (copy_len > 0) {
+                memcpy(image_header.get() + image_header_size, buffer.get(), copy_len);
+                image_header_size += copy_len;
+            }
+            if (image_header_size < kRequiredHeaderSize) {
                 continue;
             }
 
             esp_app_desc_t new_app_info;
             memcpy(&new_app_info,
-                   image_header.data() + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t),
+                   image_header.get() + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t),
                    sizeof(esp_app_desc_t));
             ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
 
@@ -489,7 +522,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
             image_header_checked = true;
             ota_begun = true;
-            auto err = esp_ota_write(update_handle, image_header.data(), image_header.size());
+            auto err = esp_ota_write(update_handle, image_header.get(), image_header_size);
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to write OTA header data: %s", esp_err_to_name(err));
                 esp_ota_abort(update_handle);
@@ -497,7 +530,18 @@ void Ota::Upgrade(const std::string& firmware_url) {
                 esp_http_client_cleanup(client);
                 return;
             }
-            std::string().swap(image_header);
+            image_header.reset();
+            const size_t remaining_len = static_cast<size_t>(ret) - copy_len;
+            if (remaining_len > 0) {
+                err = esp_ota_write(update_handle, buffer.get() + copy_len, remaining_len);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to write OTA buffered data: %s", esp_err_to_name(err));
+                    esp_ota_abort(update_handle);
+                    esp_http_client_close(client);
+                    esp_http_client_cleanup(client);
+                    return;
+                }
+            }
             continue;
         }
 
@@ -508,7 +552,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
             return;
         }
 
-        auto err = esp_ota_write(update_handle, buffer, ret);
+        auto err = esp_ota_write(update_handle, buffer.get(), ret);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to write OTA data: %s", esp_err_to_name(err));
             esp_ota_abort(update_handle);

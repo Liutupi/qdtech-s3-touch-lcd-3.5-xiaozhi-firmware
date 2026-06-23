@@ -113,7 +113,7 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
         return;
     }
 
-    constexpr uint32_t stack_size = 10240;
+    const uint32_t stack_size = action == TaskAction::Upgrade ? 6144 : 10240;
     const char* task_name = action == TaskAction::Check ? "fw_check" : "fw_upgrade";
     ESP_LOGI(TAG, "firmware task create action=%d free_internal=%u largest_internal=%u",
              static_cast<int>(action),
@@ -122,12 +122,12 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
 
     BaseType_t ret = xTaskCreateWithCaps(
         TaskWrapper, task_name, stack_size, arg, 2, &task_handle_,
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     if (ret == pdPASS) {
         return;
     }
 
-    ESP_LOGW(TAG, "firmware task PSRAM create failed ret=%ld, trying internal memory",
+    ESP_LOGW(TAG, "firmware task internal create failed ret=%ld, trying default memory",
              static_cast<long>(ret));
     task_handle_ = nullptr;
     ret = xTaskCreate(TaskWrapper, task_name, stack_size, arg, 2, &task_handle_);
