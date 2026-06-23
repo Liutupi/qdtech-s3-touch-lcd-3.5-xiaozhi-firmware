@@ -113,7 +113,8 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
         return;
     }
 
-    const uint32_t stack_size = action == TaskAction::Upgrade ? 6144 : 10240;
+    const bool is_upgrade = action == TaskAction::Upgrade;
+    const uint32_t stack_size = is_upgrade ? 6144 : 10240;
     const char* task_name = action == TaskAction::Check ? "fw_check" : "fw_upgrade";
     ESP_LOGI(TAG, "firmware task create action=%d free_internal=%u largest_internal=%u",
              static_cast<int>(action),
@@ -122,13 +123,22 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
 
     BaseType_t ret = xTaskCreateWithCaps(
         TaskWrapper, task_name, stack_size, arg, 2, &task_handle_,
-        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        is_upgrade ? (MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) : (MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (ret == pdPASS) {
         return;
     }
 
-    ESP_LOGW(TAG, "firmware task internal create failed ret=%ld, trying default memory",
+    ESP_LOGW(TAG, "firmware task preferred create failed ret=%ld, trying default memory",
              static_cast<long>(ret));
+    if (is_upgrade) {
+        delete arg;
+        task_handle_ = nullptr;
+        busy_.store(false, std::memory_order_release);
+        SetUi("No internal RAM", true, false);
+        ESP_LOGE(TAG, "firmware upgrade task requires internal stack");
+        return;
+    }
+
     task_handle_ = nullptr;
     ret = xTaskCreate(TaskWrapper, task_name, stack_size, arg, 2, &task_handle_);
     if (ret != pdPASS) {

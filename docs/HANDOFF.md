@@ -72,9 +72,23 @@ Observed boot/runtime facts after flashing:
 - PhotoService now allocates its 6144-byte task stack from PSRAM first and logs internal-memory diagnostics; a boot self-test confirmed SD mount and repeated 480x320 JPEG decode after the black-screen repair.
 - Weather API may return 429 or 502; the firmware should keep running and retain cached data when available.
 
-## Latest Runtime Notes: 2026-06-23 v1.7.30 OTA Internal-RAM Write Fix
+## Latest Runtime Notes: 2026-06-23 v1.7.31 OTA Check/Upgrade Task Split
 
-- Latest release target is `v1.7.30`.
+- Latest release target is `v1.7.31`.
+- Follow-up testing found that `v1.7.30` was still too strict: it forced the 10KB firmware check task into internal RAM, but the live board usually had only about 7KB largest internal block, so check task creation failed before it could find the release.
+- The corrected split is: firmware check task uses PSRAM stack because it only fetches/parses GitHub release metadata; firmware upgrade task uses internal stack because it writes flash.
+- If an upgrade task cannot get an internal stack, the updater shows `No internal RAM` and refuses the unsafe fallback.
+- `COM14` was USB-flashed with the fixed `v1.7.30` bootstrap build before preparing `v1.7.31`.
+- `v1.7.31` build passed with `idf.py -B build-qdtech build`; `xiaozhi.bin` size is `0x48f980`, smallest app partition is `0x600000`, and free app space is `0x170680`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.31-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.31-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.31-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-app.bin`: `a49538f4186d84cbaf049d5c29c444addce142320306bd0bbb498d93a6f1d5fd`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-firmware.zip`: `d6f84cfcb9103f3df0859007c35163e8764edbd457e6dcc0c82f283163318608`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-full.bin`: `c8b7bbd5ad5e5b863da67f70f4273a452bd12b0590b3e3c725832a32d62e0f0c`
+
+## Previous Runtime Notes: 2026-06-23 v1.7.30 OTA Internal-RAM Write Fix
+
+- Release target was `v1.7.30`.
 - A new board running `v1.7.28` reproduced the Settings OTA failure on `COM14`.
 - Captured log sequence: the board selected the GitHub Release app asset, direct GitHub download timed out, proxy download was selected, the image header was read as the newer version, and then ESP-IDF asserted in `esp_cache_freeze_caches_disable_interrupts` during OTA flash-write handling.
 - This proves the blocker was not simply lack of GitHub access. The proxy path was already able to reach the app image.
