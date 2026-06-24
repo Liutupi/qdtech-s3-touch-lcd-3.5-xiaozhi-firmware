@@ -3393,10 +3393,14 @@ void DesktopUI::ApplyWeatherVisual(int weather_code) {
         scene_src = &qd_weather_fog_scene;
     }
 
-    if (weather_scene_gif_ && current_weather_scene_ != next_scene) {
-        lv_gif_set_src(weather_scene_gif_, scene_src);
+    const bool scene_changed = current_weather_scene_ != next_scene;
+    if (weather_scene_gif_) {
+        if (scene_changed) {
+            lv_gif_set_src(weather_scene_gif_, scene_src);
+            current_weather_scene_ = next_scene;
+        }
         lv_gif_restart(weather_scene_gif_);
-        current_weather_scene_ = next_scene;
+        lv_obj_invalidate(weather_scene_gif_);
     }
     set_weather_part_visible(weather_scene_gif_, use_weather_scene);
 
@@ -3441,8 +3445,9 @@ void DesktopUI::ApplyWeatherVisual(int weather_code) {
         }
     }
 
-    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d fog=%d storm=%d scene=%d",
-             weather_code, is_clear, show_cloud, is_rain, is_snow, is_fog, is_storm, next_scene);
+    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d fog=%d storm=%d scene=%d changed=%d",
+             weather_code, is_clear, show_cloud, is_rain, is_snow, is_fog, is_storm, next_scene,
+             scene_changed ? 1 : 0);
 }
 
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {

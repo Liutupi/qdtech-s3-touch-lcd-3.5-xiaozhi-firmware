@@ -35,14 +35,41 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-23 in the macOS workspace:
+Last verified on 2026-06-24 in the Windows workspace:
 
-- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
-- User remote branch: `qdtech-new/main`
-- Last verified update: 2026-06-23 code quality optimization, SD card radio config, FC stability fixes
-- Build directory used for board verification: `build`
-- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+- User remote branch: `origin/main`
+- Last verified update: 2026-06-24 v1.7.42 configurable Caiyun realtime weather with Open-Meteo fallback
+- Build directory used for board verification: `build-qdtech`
+- Serial port used during the last device flash: `COM14`
+
+## Latest Runtime Notes: 2026-06-24 v1.7.42 Weather Accuracy
+
+Scope:
+
+- Bumped firmware version to `1.7.42`.
+- Weather refresh remains fast at 5 minutes after the previous weather-animation fix.
+- Weather GIF scenes are restarted/invalidated on every weather update, not only when the weather category changes.
+- Weather UI updates now wait longer for the LVGL lock and log a warning if a refresh is skipped.
+- Added Caiyun realtime weather as the preferred source for China weather accuracy.
+- Caiyun token is not hardcoded because this GitHub repository is public. It is stored locally in NVS under `weather_cfg/caiyun_token`.
+- Added MCP tool `self.weather.set_caiyun_token` to write the token locally and trigger a weather refresh.
+- If the token is missing or Caiyun fails, the service falls back to the existing Open-Meteo request.
+
+Verification:
+
+- Built successfully on Windows with ESP-IDF 5.5 using `idf.py -B build-qdtech build`.
+- App-only flashed to `COM14` at `0x100000`, preserving WiFi/NVS.
+- Board booted `App version: 1.7.42`.
+- Release assets prepared in `dist/v1.7.42/`:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.42-app.bin`, SHA256 `E42E28BFF9DC702136D63FDF2422BA15076B9871018C731E7FAE65F1757DEF84`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.42-full.bin`, SHA256 `94AADB720C72E40389B8BA1CEDACF342F1D15986CAC481DF208B56F1E2E2BAA2`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.42-firmware.zip`, SHA256 `4B0DE3656CC90D278DC9F638797AB6CE3A36393A2842896521DD91980AD7884F`
+- Pre-sanitized hardware test with the user-provided Caiyun token proved the new source path:
+  - `weather ok source=caiyun 35 C Zhongshan Cloudy 14:14 skycon=CLOUDY code=3 updated=14:14`
+  - `DesktopUI: Weather visual code=3 clear=0 cloud=1 rain=0 snow=0 fog=0 storm=0 scene=1 changed=0`
+- The public source and release must not include the real Caiyun token. Configure it on-device through `self.weather.set_caiyun_token` after flashing if Caiyun accuracy is needed.
 
 ## Latest Runtime Notes: 2026-06-23 Code Quality & SD Card Radio
 

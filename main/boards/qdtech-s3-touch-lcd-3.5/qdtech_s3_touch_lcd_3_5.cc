@@ -989,6 +989,17 @@ private:
                 }
                 return std::string("Weather location updated to ") + city + " (" + latitude + ", " + longitude + ").";
             });
+        mcp_server.AddTool("self.weather.set_caiyun_token",
+            "Set Caiyun weather token for more accurate China weather. Token is stored locally on the device.",
+            PropertyList({
+                Property("token", kPropertyTypeString),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto token = properties["token"].value<std::string>();
+                if (!time_weather_service_.SetCaiyunToken(token)) {
+                    return std::string("Invalid Caiyun token.");
+                }
+                return std::string("Caiyun weather token updated.");
+            });
         mcp_server.AddTool("self.radio.get_status",
             "Get radio status.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {

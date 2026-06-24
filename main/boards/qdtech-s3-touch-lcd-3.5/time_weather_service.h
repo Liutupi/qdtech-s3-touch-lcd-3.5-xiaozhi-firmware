@@ -12,6 +12,7 @@ class TimeWeatherService {
 public:
     void Start(DesktopUI* ui);
     bool SetLocation(const std::string& city, const std::string& latitude, const std::string& longitude);
+    bool SetCaiyunToken(const std::string& token);
     void RequestRefresh(bool retry_weather);
     
 private:

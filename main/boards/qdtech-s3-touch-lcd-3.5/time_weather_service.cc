@@ -314,6 +314,72 @@ static DailyCardKind BuildDailyCardText(const tm& info, char* title, size_t titl
     return DailyCardKind::Quote;
 }
 
+static int CaiyunSkyconToWeatherCode(const char* skycon) {
+    if (!skycon) {
+        return -1;
+    }
+    if (strcmp(skycon, "CLEAR_DAY") == 0 || strcmp(skycon, "CLEAR_NIGHT") == 0) {
+        return 0;
+    }
+    if (strcmp(skycon, "PARTLY_CLOUDY_DAY") == 0 || strcmp(skycon, "PARTLY_CLOUDY_NIGHT") == 0) {
+        return 2;
+    }
+    if (strcmp(skycon, "CLOUDY") == 0) {
+        return 3;
+    }
+    if (strcmp(skycon, "LIGHT_HAZE") == 0 || strcmp(skycon, "MODERATE_HAZE") == 0 ||
+        strcmp(skycon, "HEAVY_HAZE") == 0 || strcmp(skycon, "FOG") == 0) {
+        return 45;
+    }
+    if (strcmp(skycon, "LIGHT_RAIN") == 0) {
+        return 61;
+    }
+    if (strcmp(skycon, "MODERATE_RAIN") == 0) {
+        return 63;
+    }
+    if (strcmp(skycon, "HEAVY_RAIN") == 0) {
+        return 65;
+    }
+    if (strcmp(skycon, "STORM_RAIN") == 0) {
+        return 82;
+    }
+    if (strcmp(skycon, "LIGHT_SNOW") == 0 || strcmp(skycon, "MODERATE_SNOW") == 0 ||
+        strcmp(skycon, "HEAVY_SNOW") == 0 || strcmp(skycon, "STORM_SNOW") == 0) {
+        return 73;
+    }
+    if (strcmp(skycon, "DUST") == 0 || strcmp(skycon, "SAND") == 0 || strcmp(skycon, "WIND") == 0) {
+        return 45;
+    }
+    return -1;
+}
+
+static const char* CaiyunSkyconDesc(const char* skycon) {
+    if (!skycon) {
+        return "Weather";
+    }
+    if (strstr(skycon, "CLEAR")) return "Sunny";
+    if (strstr(skycon, "PARTLY_CLOUDY") || strcmp(skycon, "CLOUDY") == 0) return "Cloudy";
+    if (strstr(skycon, "HAZE")) return "Haze";
+    if (strcmp(skycon, "FOG") == 0) return "Fog";
+    if (strstr(skycon, "RAIN")) return "Rain";
+    if (strstr(skycon, "SNOW")) return "Snow";
+    if (strcmp(skycon, "DUST") == 0 || strcmp(skycon, "SAND") == 0) return "Dust";
+    if (strcmp(skycon, "WIND") == 0) return "Wind";
+    return "Weather";
+}
+
+static void FormatServerTime(int64_t server_time, char* output, size_t output_size) {
+    if (!output || output_size == 0) {
+        return;
+    }
+    time_t timestamp = static_cast<time_t>(server_time);
+    tm info = {};
+    localtime_r(&timestamp, &info);
+    if (info.tm_year >= (2024 - 1900)) {
+        snprintf(output, output_size, "%02d:%02d", info.tm_hour, info.tm_min);
+    }
+}
+
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
     if (!task_handle_) {
@@ -367,6 +433,20 @@ bool TimeWeatherService::SetLocation(const std::string& city, const std::string&
     return true;
 }
 
+bool TimeWeatherService::SetCaiyunToken(const std::string& token) {
+    if (token.empty() || token.size() > 96) {
+        return false;
+    }
+    Settings settings("weather_cfg", true);
+    settings.SetString("caiyun_token", token);
+    weather_refresh_requested_.store(true);
+    if (task_handle_) {
+        xTaskNotifyGive(task_handle_);
+    }
+    ESP_LOGI(TAG, "caiyun weather token updated");
+    return true;
+}
+
 void TimeWeatherService::RequestRefresh(bool retry_weather) {
     refresh_requested_.store(true);
     if (retry_weather) {
@@ -382,7 +462,7 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 }
 
 void TimeWeatherService::Task() {
-    static constexpr int kWeatherRefreshSeconds = 3600;
+    static constexpr int kWeatherRefreshSeconds = 300;
     static constexpr int kWeatherRetrySeconds = 10;
     static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
@@ -580,13 +660,111 @@ static esp_err_t HttpEventHandler(esp_http_client_event_t* evt) {
 bool TimeWeatherService::FetchWeather() {
     WeatherLocation location = {};
     LoadWeatherLocation(&location);
+
+    char response[WEATHER_RESPONSE_SIZE] = {};
+    static constexpr int kWeatherFetchAttempts = 2;
+    esp_err_t err = ESP_FAIL;
+    int status = 0;
+
+    Settings weather_settings("weather_cfg", false);
+    std::string caiyun_token = weather_settings.GetString("caiyun_token", "");
+    if (!caiyun_token.empty()) {
+        char caiyun_url[256];
+        snprintf(caiyun_url, sizeof(caiyun_url),
+                 "https://api.caiyunapp.com/v2.5/%s/%.4f,%.4f/realtime.json?unit=metric:v2",
+                 caiyun_token.c_str(), location.longitude, location.latitude);
+
+        esp_http_client_config_t caiyun_config = {};
+        caiyun_config.url = caiyun_url;
+        caiyun_config.timeout_ms = 5000;
+        caiyun_config.event_handler = HttpEventHandler;
+        caiyun_config.user_data = response;
+        caiyun_config.buffer_size = 1024;
+        caiyun_config.crt_bundle_attach = esp_crt_bundle_attach;
+
+        for (int attempt = 1; attempt <= kWeatherFetchAttempts; ++attempt) {
+            response[0] = 0;
+            esp_http_client_handle_t client = esp_http_client_init(&caiyun_config);
+            if (!client) {
+                ESP_LOGW(TAG, "caiyun weather http init failed attempt=%d", attempt);
+                err = ESP_ERR_NO_MEM;
+            } else {
+                esp_http_client_set_header(client, "Accept", "application/json");
+                err = esp_http_client_perform(client);
+                status = esp_http_client_get_status_code(client);
+                esp_http_client_cleanup(client);
+            }
+
+            if (err == ESP_OK && status >= 200 && status < 300 && response[0] != 0) {
+                break;
+            }
+
+            ESP_LOGW(TAG, "caiyun weather fetch failed attempt=%d err=%s status=%d",
+                     attempt, esp_err_to_name(err), status);
+            if (attempt < kWeatherFetchAttempts) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+        }
+
+        if (err == ESP_OK && status >= 200 && status < 300 && response[0] != 0) {
+            cJSON* root = cJSON_Parse(response);
+            cJSON* result = root ? cJSON_GetObjectItem(root, "result") : NULL;
+            cJSON* realtime = result ? cJSON_GetObjectItem(result, "realtime") : NULL;
+            cJSON* temp = realtime ? cJSON_GetObjectItem(realtime, "temperature") : NULL;
+            cJSON* skycon = realtime ? cJSON_GetObjectItem(realtime, "skycon") : NULL;
+            cJSON* server_time = root ? cJSON_GetObjectItem(root, "server_time") : NULL;
+            cJSON* status_text = root ? cJSON_GetObjectItem(root, "status") : NULL;
+
+            if (cJSON_IsString(status_text) && strcmp(status_text->valuestring, "ok") == 0 &&
+                cJSON_IsNumber(temp) && cJSON_IsString(skycon)) {
+                char temp_text[16];
+                char summary[96];
+                const int weather_code = CaiyunSkyconToWeatherCode(skycon->valuestring);
+                snprintf(temp_text, sizeof(temp_text), "%d C", (int)lround(temp->valuedouble));
+                last_update_[0] = 0;
+                if (cJSON_IsNumber(server_time)) {
+                    FormatServerTime((int64_t)server_time->valuedouble, last_update_, sizeof(last_update_));
+                }
+                if (last_update_[0] == 0) {
+                    time_t now = 0;
+                    tm info = {};
+                    time(&now);
+                    localtime_r(&now, &info);
+                    if (info.tm_year >= (2024 - 1900)) {
+                        snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+                    }
+                }
+                snprintf(summary, sizeof(summary), "%s %s %s",
+                         location.city, CaiyunSkyconDesc(skycon->valuestring), last_update_);
+
+                snprintf(last_temperature_, sizeof(last_temperature_), "%s", temp_text);
+                snprintf(last_summary_, sizeof(last_summary_), "%s", summary);
+                last_weather_code_ = weather_code;
+                last_weather_valid_ = true;
+                SetWeatherSafe(temp_text, summary, weather_code);
+
+                ESP_LOGI(TAG, "weather ok source=caiyun %s %s skycon=%s code=%d updated=%s",
+                         temp_text, summary, skycon->valuestring, weather_code, last_update_);
+                cJSON_Delete(root);
+                return true;
+            }
+
+            ESP_LOGW(TAG, "caiyun weather parse failed: %.96s", response);
+            cJSON_Delete(root);
+        } else {
+            ESP_LOGW(TAG, "caiyun weather unavailable, fallback open-meteo status=%d err=%s",
+                     status, esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGI(TAG, "caiyun weather token not configured, using open-meteo");
+    }
     
     char url[256];
     snprintf(url, sizeof(url),
              "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
              location.latitude, location.longitude);
     
-    char response[WEATHER_RESPONSE_SIZE] = {};
+    response[0] = 0;
     esp_http_client_config_t config = {};
     config.url = url;
     config.timeout_ms = 3000;
@@ -594,9 +772,8 @@ bool TimeWeatherService::FetchWeather() {
     config.user_data = response;
     config.buffer_size = 1024;
     
-    static constexpr int kWeatherFetchAttempts = 2;
-    esp_err_t err = ESP_FAIL;
-    int status = 0;
+    err = ESP_FAIL;
+    status = 0;
     for (int attempt = 1; attempt <= kWeatherFetchAttempts; ++attempt) {
         response[0] = 0;
         esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -631,6 +808,7 @@ bool TimeWeatherService::FetchWeather() {
     cJSON* current = root ? cJSON_GetObjectItem(root, "current") : NULL;
     cJSON* temp = current ? cJSON_GetObjectItem(current, "temperature_2m") : NULL;
     cJSON* code = current ? cJSON_GetObjectItem(current, "weather_code") : NULL;
+    cJSON* current_time = current ? cJSON_GetObjectItem(current, "time") : NULL;
     
     if (!cJSON_IsNumber(temp) || !cJSON_IsNumber(code)) {
         ESP_LOGW(TAG, "weather parse failed: %.96s", response);
@@ -642,12 +820,23 @@ bool TimeWeatherService::FetchWeather() {
     char temp_text[16];
     char summary[96];
     snprintf(temp_text, sizeof(temp_text), "%d C", (int)lround(temp->valuedouble));
-    time_t now = 0;
-    tm info = {};
-    time(&now);
-    localtime_r(&now, &info);
-    if (info.tm_year >= (2024 - 1900)) {
-        snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+    last_update_[0] = 0;
+    bool has_source_time = false;
+    if (cJSON_IsString(current_time) && current_time->valuestring) {
+        const char* clock = strchr(current_time->valuestring, 'T');
+        if (clock && strlen(clock + 1) >= 5) {
+            snprintf(last_update_, sizeof(last_update_), "%.*s", 5, clock + 1);
+            has_source_time = true;
+        }
+    }
+    if (!has_source_time) {
+        time_t now = 0;
+        tm info = {};
+        time(&now);
+        localtime_r(&now, &info);
+        if (info.tm_year >= (2024 - 1900)) {
+            snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+        }
     }
     snprintf(summary, sizeof(summary), "%s %s %s", location.city, WeatherDesc(code->valueint), last_update_);
     
@@ -677,9 +866,12 @@ void TimeWeatherService::SetWeatherSafe(const char* temperature, const char* sum
     if (!desktop_ui_) {
         return;
     }
-    if (lvgl_port_lock(100)) {
+    if (lvgl_port_lock(1000)) {
         desktop_ui_->SetWeather(temperature, summary, weather_code);
         lvgl_port_unlock();
+    } else {
+        ESP_LOGW(TAG, "weather UI update skipped: lvgl lock timeout temp=%s code=%d",
+                 temperature ? temperature : "--", weather_code);
     }
 }
 
