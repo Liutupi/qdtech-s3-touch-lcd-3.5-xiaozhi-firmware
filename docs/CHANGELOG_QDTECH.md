@@ -2,35 +2,6 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
-## 2026-06-24: v1.7.42 Configurable Caiyun Weather Source
-
-Scope:
-
-- Bumped firmware version to `1.7.42`.
-- Added Caiyun realtime weather as the preferred weather provider for China weather accuracy.
-- Added Open-Meteo fallback so weather still works when Caiyun is not configured or unavailable.
-- Added `self.weather.set_caiyun_token` MCP tool; the token is stored locally in NVS and is intentionally not committed to this public repository.
-- Weather scene GIFs restart on every weather update, not only when the mapped scene changes.
-- Weather UI updates now wait up to 1000 ms for the LVGL lock and log skipped updates.
-
-Verification:
-
-- Built successfully with `idf.py -B build-qdtech build`.
-- App-only flashed to `COM14` with `python -m esptool ... 0x100000 build-qdtech\xiaozhi.bin`.
-- Boot log confirmed `App version: 1.7.42`.
-- Release assets prepared:
-  - `qdtech-s3-touch-lcd-3.5-v1.7.42-app.bin`: `E42E28BFF9DC702136D63FDF2422BA15076B9871018C731E7FAE65F1757DEF84`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.42-full.bin`: `94AADB720C72E40389B8BA1CEDACF342F1D15986CAC481DF208B56F1E2E2BAA2`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.42-firmware.zip`: `4B0DE3656CC90D278DC9F638797AB6CE3A36393A2842896521DD91980AD7884F`
-- Caiyun path was validated before source sanitization:
-  - `weather ok source=caiyun 35 C Zhongshan Cloudy 14:14 skycon=CLOUDY code=3 updated=14:14`
-  - `DesktopUI: Weather visual code=3 clear=0 cloud=1 rain=0 snow=0 fog=0 storm=0 scene=1 changed=0`
-
-Notes:
-
-- The GitHub repository is public. Do not commit real weather API tokens or publish firmware binaries that intentionally embed a user's private token.
-- Configure the token on-device with `self.weather.set_caiyun_token` after flashing if Caiyun accuracy is required.
-
 ## 2026-06-23: v1.7.39 Settings OTA Verified End-to-End
 
 Scope:
