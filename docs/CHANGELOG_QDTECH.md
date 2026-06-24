@@ -12,12 +12,16 @@ Scope:
 - Bumped firmware version to `1.7.43` so boards already running `1.7.42` can OTA forward to the no-Caiyun stable line.
 - The GitHub Release `v1.7.42` should be deleted because it contains the withdrawn Caiyun firmware assets.
 
-Verification plan:
+Verification:
 
 - Build the QDTech target. Result: `xiaozhi.bin` size `0x492650`, smallest app partition `0x600000`, free `0x16d9b0`.
-- Publish GitHub Release `v1.7.43` with app, full, and zip assets.
-- Verify the latest GitHub Release no longer exposes the `v1.7.42` Caiyun assets.
-- On hardware, confirm boot does not crash and weather uses the Open-Meteo fallback behavior.
+- Published GitHub Release `v1.7.43` with app, full, and zip assets.
+- Deleted the withdrawn GitHub Release `v1.7.42` and its tag.
+- USB app-only flashed `v1.7.43` to `COM13`, preserving WiFi/NVS.
+- Boot log confirmed `App version: 1.7.43`.
+- Weather returned through the restored Open-Meteo path: `weather ok 34 C Zhongshan Storm 15:34 code=95 updated=15:34`.
+- MQTT connected and the application reached `STATE: idle`.
+- No assert, backtrace, or reboot was observed during the post-flash monitor window.
 - Release asset SHA256:
   - `qdtech-s3-touch-lcd-3.5-v1.7.43-app.bin`: `0AB583C0B731A373B6E66D25D066AC14C2D1B96F7D3CF625F63139D360F2EA08`
   - `qdtech-s3-touch-lcd-3.5-v1.7.43-firmware.zip`: `F74A81A7866724288E9A24A646497540F7B576FA88E9BC76BABF6BF07742D30A`

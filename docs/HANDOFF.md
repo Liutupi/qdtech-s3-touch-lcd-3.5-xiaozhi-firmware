@@ -54,6 +54,15 @@ Last verified on 2026-06-23 in the macOS workspace:
 - `v1.7.42` GitHub Release assets should be removed so new boards do not install the withdrawn Caiyun firmware.
 - `v1.7.43` remains numerically newer than `v1.7.42` so boards already flashed with Caiyun firmware can OTA forward to the no-Caiyun stable line.
 - Build passed on Windows with `idf.py -B build-qdtech build`: `xiaozhi.bin` `0x492650`, smallest app partition `0x600000`, free `0x16d9b0`.
+- GitHub Release `v1.7.42` and tag were deleted after the rollback because that release contained the withdrawn Caiyun firmware.
+- GitHub Release `v1.7.43` was published with app, full, and zip assets.
+- Hardware verification on `COM13` after app-only flashing:
+  - Boot log confirmed `App version: 1.7.43`.
+  - WiFi reconnected to IP `192.168.4.177`.
+  - SNTP synchronized.
+  - Weather returned through the restored Open-Meteo path: `weather ok 34 C Zhongshan Storm 15:34 code=95 updated=15:34`.
+  - MQTT connected and the application reached `STATE: idle`.
+  - No assert, backtrace, or reboot was observed during the post-flash monitor window.
 - Release assets prepared in `releases/v1.7.43/`:
   - `qdtech-s3-touch-lcd-3.5-v1.7.43-app.bin`, SHA256 `0AB583C0B731A373B6E66D25D066AC14C2D1B96F7D3CF625F63139D360F2EA08`.
   - `qdtech-s3-touch-lcd-3.5-v1.7.43-firmware.zip`, SHA256 `F74A81A7866724288E9A24A646497540F7B576FA88E9BC76BABF6BF07742D30A`.
