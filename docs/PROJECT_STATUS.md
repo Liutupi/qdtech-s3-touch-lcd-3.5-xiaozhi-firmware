@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-23
+Date: 2026-06-24
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -33,6 +33,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.30 (2026-06-23): Settings OTA writes now run from internal RAM task/buffers, fixing the cache-freeze assertion seen when v1.7.28 tried to install a GitHub Release asset
 - v1.7.29 (2026-06-23): Main-page weather module uses a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm
 - v1.7.40 (2026-06-23): Code quality optimization, SD card radio.json support, FC stability fixes, thread safety improvements
+- v1.7.43 (2026-06-24): Rolled back the withdrawn Caiyun weather integration and restored the no-token Open-Meteo weather path for stable multi-board OTA
 
 ## Confirmed Hardware From Source
 

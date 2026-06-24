@@ -2,6 +2,27 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-24: v1.7.43 Roll Back Caiyun Weather
+
+Scope:
+
+- Reverted the `v1.7.42` configurable Caiyun weather source.
+- Restored the stable weather path to the previous Open-Meteo HTTP implementation.
+- Removed the on-device Caiyun token MCP/config workflow from the firmware surface so multi-board OTA does not depend on per-device private weather tokens.
+- Bumped firmware version to `1.7.43` so boards already running `1.7.42` can OTA forward to the no-Caiyun stable line.
+- The GitHub Release `v1.7.42` should be deleted because it contains the withdrawn Caiyun firmware assets.
+
+Verification plan:
+
+- Build the QDTech target. Result: `xiaozhi.bin` size `0x492650`, smallest app partition `0x600000`, free `0x16d9b0`.
+- Publish GitHub Release `v1.7.43` with app, full, and zip assets.
+- Verify the latest GitHub Release no longer exposes the `v1.7.42` Caiyun assets.
+- On hardware, confirm boot does not crash and weather uses the Open-Meteo fallback behavior.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-app.bin`: `0AB583C0B731A373B6E66D25D066AC14C2D1B96F7D3CF625F63139D360F2EA08`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-firmware.zip`: `F74A81A7866724288E9A24A646497540F7B576FA88E9BC76BABF6BF07742D30A`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-full.bin`: `36A5D0C43D20804F03E2FEBA55806C6D45A4D7976883AFDF0489DE44B7913EAA`
+
 ## 2026-06-23: v1.7.39 Settings OTA Verified End-to-End
 
 Scope:

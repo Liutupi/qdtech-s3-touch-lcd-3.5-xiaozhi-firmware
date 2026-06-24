@@ -44,6 +44,21 @@ Last verified on 2026-06-23 in the macOS workspace:
 - Build directory used for board verification: `build`
 - Serial port used during the last device flash: `/dev/cu.usbmodem212401`
 
+## Latest Runtime Notes: 2026-06-24 v1.7.43 Caiyun Rollback
+
+- Latest release target is `v1.7.43`.
+- This release intentionally removes the `v1.7.42` Caiyun weather integration.
+- Reason: the Caiyun token had to live in each device's local config, so a fleet of boards could not receive the token purely through OTA, and live testing showed weather sync became unstable on the current network path.
+- Weather should use the previous stable Open-Meteo HTTP fetch path in `time_weather_service.cc`.
+- Do not reintroduce a private weather API token into the public firmware release unless there is a repo-safe, multi-board provisioning plan.
+- `v1.7.42` GitHub Release assets should be removed so new boards do not install the withdrawn Caiyun firmware.
+- `v1.7.43` remains numerically newer than `v1.7.42` so boards already flashed with Caiyun firmware can OTA forward to the no-Caiyun stable line.
+- Build passed on Windows with `idf.py -B build-qdtech build`: `xiaozhi.bin` `0x492650`, smallest app partition `0x600000`, free `0x16d9b0`.
+- Release assets prepared in `releases/v1.7.43/`:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-app.bin`, SHA256 `0AB583C0B731A373B6E66D25D066AC14C2D1B96F7D3CF625F63139D360F2EA08`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-firmware.zip`, SHA256 `F74A81A7866724288E9A24A646497540F7B576FA88E9BC76BABF6BF07742D30A`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-full.bin`, SHA256 `36A5D0C43D20804F03E2FEBA55806C6D45A4D7976883AFDF0489DE44B7913EAA`.
+
 ## Latest Runtime Notes: 2026-06-23 Code Quality & SD Card Radio
 
 ### Code Quality Optimizations (P0-P2)
