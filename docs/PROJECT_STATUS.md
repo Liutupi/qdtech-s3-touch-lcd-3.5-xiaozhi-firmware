@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-25
+Date: 2026-06-26
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -36,6 +36,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.43 (2026-06-24): Rolled back the withdrawn Caiyun weather integration and restored the no-token Open-Meteo weather path for stable multi-board OTA
 - v1.7.44 (2026-06-25): Added persistent profile/weather config plumbing, a verified WiFi phone config page/API, automatic city geocoding, Chinese weather text rendering, memory-guarded BLE prototype code, and a fixed main-page logo/name brand layout
 - v1.7.45 (2026-06-25): Brand text auto-wrap for long text, weather refresh on page switch, BLE compilation fix
+- v1.7.46 (2026-06-26): Broader Chinese UI font coverage, stable Phone Web IP/status display, delayed/retried Phone Web startup, strongest-BSSID WiFi preference, cleaned brand earth GIF, and refined Open-Meteo weather accuracy using rain/cloud/humidity context
 
 ## Confirmed Hardware From Source
 

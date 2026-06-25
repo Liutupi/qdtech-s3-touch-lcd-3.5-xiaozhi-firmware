@@ -39,6 +39,16 @@ LV_IMAGE_DECLARE(qd_weather_rain_scene);
 LV_IMAGE_DECLARE(qd_weather_snow_scene);
 LV_IMAGE_DECLARE(qd_weather_fog_scene);
 LV_IMAGE_DECLARE(qd_weather_storm_scene);
+LV_IMAGE_DECLARE(qd_brand_earth);
+
+static const lv_font_t* qd_cn_font_16() {
+    return &font_puhui_16_4;
+}
+
+static const lv_font_t* qd_cn_font_20() {
+    // Puhui has broader Chinese coverage than the compact LXGW subsets.
+    return &font_puhui_16_4;
+}
 
 // Theme palette
 enum class UiTheme : uint8_t {
@@ -287,7 +297,7 @@ static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4,
         }
 
         lv_obj_t* sub = label_en(parent, profile.owner.c_str(), &style_muted);
-        lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(sub, qd_cn_font_16(), 0);
         fit_brand_label(sub, 180, true);
         lv_obj_align_to(sub, brand, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 3);
         if (owner_label) {
@@ -979,8 +989,11 @@ void DesktopUI::Create() {
     lv_obj_set_style_bg_color(root, COLOR_BG, 0);
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
     brand_label_count_ = 0;
+    brand_earth_gif_ = nullptr;
     memset(brand_logo_labels_, 0, sizeof(brand_logo_labels_));
     memset(brand_owner_labels_, 0, sizeof(brand_owner_labels_));
+    memset(status_bar_time_labels_, 0, sizeof(status_bar_time_labels_));
+    memset(status_bar_battery_labels_, 0, sizeof(status_bar_battery_labels_));
 
     CreateMainPage(root);
     CreateAppsPage(root);
@@ -1274,11 +1287,25 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     add_gesture_bubble(main_page_);
 
     // Brand
+    auto attach_brand_earth = [this](lv_obj_t* logo, int16_t x_offset = 6, int16_t y_offset = 7) {
+        if (!logo) {
+            return;
+        }
+        brand_earth_gif_ = lv_gif_create(main_page_);
+        lv_gif_set_src(brand_earth_gif_, &qd_brand_earth);
+        lv_obj_set_size(brand_earth_gif_, 46, 46);
+        lv_obj_set_style_bg_opa(brand_earth_gif_, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(brand_earth_gif_, 0, 0);
+        lv_obj_align_to(brand_earth_gif_, logo, LV_ALIGN_OUT_RIGHT_MID, x_offset, y_offset);
+        add_gesture_bubble(brand_earth_gif_);
+    };
+
     if (is_tupi_warm_theme()) {
         lv_obj_t* logo = nullptr;
         lv_obj_t* owner = nullptr;
         create_brand_mark(main_page_, 20, 10, &logo, &owner);
         RegisterBrandLabels(logo, owner);
+        attach_brand_earth(logo, 6, 7);
 
         lv_obj_t* wifi = label_en(main_page_, "WiFi", &style_en);
         lv_obj_set_style_text_font(wifi, &lv_font_montserrat_14, 0);
@@ -1299,18 +1326,20 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
         lv_obj_t* owner = nullptr;
         create_brand_mark(main_page_, 20, 4, &logo, &owner);
         RegisterBrandLabels(logo, owner);
+        attach_brand_earth(logo, 6, 7);
     } else {
         const auto profile = QdLoadUserProfile();
         lv_obj_t* brand_a = label_en(main_page_, profile.logo.c_str(), &style_en);
-        lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(brand_a, qd_cn_font_20(), 0);
         fit_brand_label(brand_a, 170, false);
         lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
 
         lv_obj_t* brand_b = label_en(main_page_, profile.owner.c_str(), &style_gold);
-        lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(brand_b, qd_cn_font_16(), 0);
         fit_brand_label(brand_b, 170, true);
         lv_obj_align_to(brand_b, brand_a, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 4);
         RegisterBrandLabels(brand_a, brand_b);
+        attach_brand_earth(brand_a, 6, 7);
     }
 
     CreateBigTime(main_page_);
@@ -1322,7 +1351,7 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 52, 174);
 
     week_label_ = label_en(main_page_, "MON", &style_green);
-    lv_obj_set_style_text_font(week_label_, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(week_label_, qd_cn_font_20(), 0);
     lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 178, 174);
 
     if (is_tupi_warm_theme()) {
@@ -1330,7 +1359,7 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
         lv_obj_set_style_text_font(date_label_, &lv_font_montserrat_20, 0);
         lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 60, 165);
         lv_obj_set_style_text_color(week_label_, COLOR_GREEN, 0);
-        lv_obj_set_style_text_font(week_label_, &qd_font_lxgw_20, 0);
+        lv_obj_set_style_text_font(week_label_, qd_cn_font_20(), 0);
         lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 182, 164);
     }
 
@@ -2131,7 +2160,7 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
 
     lv_obj_t* card_today_cn = label_en(today_card, "\xE4\xBB\x8A""\xE6\x97\xA5", &style_gold);
     lv_obj_set_style_text_font(card_today_cn,
-                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+                               is_cat_theme() ? qd_cn_font_20() : qd_cn_font_16(), 0);
     lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 18 : 22);
 
     lv_obj_t* card_today_en = label_en(today_card, "TODAY", &style_muted);
@@ -2149,7 +2178,7 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_set_style_text_color(calendar_card_weekday_label_,
                                 themed_color(LV_COLOR_MAKE(0x2e, 0x21, 0x18), COLOR_TEXT), 0);
     lv_obj_set_style_text_font(calendar_card_weekday_label_,
-                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+                               is_cat_theme() ? qd_cn_font_20() : qd_cn_font_16(), 0);
     lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, is_cat_theme() ? 160 : 164);
 
     calendar_card_date_label_ = label_en(today_card, "---- / --", &style_gold);
@@ -2661,9 +2690,9 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     settings_weather_value_ = label_en(weather_row, "Zhongshan", &style_muted);
     lv_obj_set_width(settings_weather_value_, 260);
     lv_label_set_long_mode(settings_weather_value_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(settings_weather_value_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_weather_value_, qd_cn_font_16(), 0);
     lv_obj_align(settings_weather_value_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
-    settings_ble_status_label_ = label_en(weather_row, "BLE idle", &style_green);
+    settings_ble_status_label_ = label_en(weather_row, settings_ble_status_.c_str(), &style_green);
     lv_obj_set_width(settings_ble_status_label_, 116);
     lv_label_set_long_mode(settings_ble_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(settings_ble_status_label_, LV_TEXT_ALIGN_RIGHT, 0);
@@ -2685,7 +2714,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_width(settings_profile_logo_value_, 210);
     lv_label_set_long_mode(settings_profile_logo_value_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(settings_profile_logo_value_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(settings_profile_logo_value_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_profile_logo_value_, qd_cn_font_16(), 0);
     lv_obj_align(settings_profile_logo_value_, LV_ALIGN_TOP_RIGHT, -14, 11);
     lv_obj_t* owner_label = label_en(profile_row, "Owner", &style_en);
     lv_obj_align(owner_label, LV_ALIGN_BOTTOM_LEFT, 14, -11);
@@ -2693,7 +2722,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_width(settings_profile_owner_value_, 230);
     lv_label_set_long_mode(settings_profile_owner_value_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(settings_profile_owner_value_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(settings_profile_owner_value_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_profile_owner_value_, qd_cn_font_16(), 0);
     lv_obj_align(settings_profile_owner_value_, LV_ALIGN_BOTTOM_RIGHT, -14, -12);
 
     lv_obj_t* wifi_sync_row = lv_obj_create(settings_content_);
@@ -2703,7 +2732,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_clear_flag(wifi_sync_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* wifi_sync_label = label_en(wifi_sync_row, "Phone Web", &style_en);
     lv_obj_align(wifi_sync_label, LV_ALIGN_TOP_LEFT, 14, 8);
-    settings_wifi_config_status_label_ = label_en(wifi_sync_row, "WiFi config idle", &style_muted);
+    settings_wifi_config_status_label_ = label_en(wifi_sync_row, settings_wifi_config_status_.c_str(), &style_muted);
     lv_obj_set_width(settings_wifi_config_status_label_, 260);
     lv_label_set_long_mode(settings_wifi_config_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(settings_wifi_config_status_label_, &lv_font_montserrat_12, 0);
@@ -3625,14 +3654,16 @@ void DesktopUI::SetSystemVolume(int value) {
 }
 
 void DesktopUI::SetBluetoothConfigStatus(const char* status) {
+    settings_ble_status_ = status ? status : "BLE idle";
     if (settings_ble_status_label_) {
-        lv_label_set_text(settings_ble_status_label_, status ? status : "BLE idle");
+        lv_label_set_text(settings_ble_status_label_, settings_ble_status_.c_str());
     }
 }
 
 void DesktopUI::SetWifiConfigStatus(const char* status) {
+    settings_wifi_config_status_ = status ? status : "WiFi config idle";
     if (settings_wifi_config_status_label_) {
-        lv_label_set_text(settings_wifi_config_status_label_, status ? status : "WiFi config idle");
+        lv_label_set_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
     }
 }
 
@@ -3758,6 +3789,13 @@ void DesktopUI::RefreshSettingsControls() {
         snprintf(text, sizeof(text), "%s (%s, %s)",
                  weather.city.c_str(), weather.latitude.c_str(), weather.longitude.c_str());
         lv_label_set_text(settings_weather_value_, text);
+    }
+
+    if (settings_wifi_config_status_label_) {
+        lv_label_set_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
+    }
+    if (settings_ble_status_label_) {
+        lv_label_set_text(settings_ble_status_label_, settings_ble_status_.c_str());
     }
 }
 

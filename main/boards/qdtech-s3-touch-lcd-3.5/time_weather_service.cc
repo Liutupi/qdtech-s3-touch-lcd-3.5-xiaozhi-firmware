@@ -24,7 +24,9 @@
 #include "wifi_station.h"
 
 static const char* TAG = "TimeWeather";
-static constexpr size_t WEATHER_RESPONSE_SIZE = 1536;
+static constexpr size_t WEATHER_RESPONSE_SIZE = 2048;
+static constexpr size_t kWeatherMinInternalFree = 5 * 1024;
+static constexpr size_t kWeatherMinLargestInternalBlock = 4 * 1024;
 
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
     char* end = nullptr;
@@ -37,6 +39,50 @@ static bool ParseCoordinate(const std::string& text, double min_value, double ma
     }
     *value = parsed;
     return true;
+}
+
+static double JsonNumberOr(cJSON* object, const char* key, double fallback) {
+    cJSON* item = object ? cJSON_GetObjectItem(object, key) : nullptr;
+    return cJSON_IsNumber(item) ? item->valuedouble : fallback;
+}
+
+static int JsonIntOr(cJSON* object, const char* key, int fallback) {
+    cJSON* item = object ? cJSON_GetObjectItem(object, key) : nullptr;
+    return cJSON_IsNumber(item) ? item->valueint : fallback;
+}
+
+static bool ExtractWeatherTime(cJSON* current, char* out, size_t out_size) {
+    cJSON* time = current ? cJSON_GetObjectItem(current, "time") : nullptr;
+    if (!cJSON_IsString(time) || !time->valuestring || !out || out_size < 6) {
+        return false;
+    }
+    const char* t = time->valuestring;
+    const char* hour = strchr(t, 'T');
+    if (!hour || strlen(hour) < 6) {
+        return false;
+    }
+    snprintf(out, out_size, "%.5s", hour + 1);
+    return true;
+}
+
+static int RefineOpenMeteoCode(int raw_code, double precipitation, double rain,
+                               double showers, int cloud_cover) {
+    const double wet = fmax(precipitation, fmax(rain, showers));
+    if (raw_code >= 95 && wet < 0.1) {
+        return cloud_cover >= 70 ? 3 : (cloud_cover >= 35 ? 2 : 1);
+    }
+    if ((raw_code >= 51 && raw_code <= 67) || (raw_code >= 80 && raw_code <= 82)) {
+        if (wet < 0.1) {
+            return cloud_cover >= 70 ? 3 : 2;
+        }
+    }
+    if (raw_code == 0 && cloud_cover >= 80) {
+        return 3;
+    }
+    if (raw_code == 0 && cloud_cover >= 45) {
+        return 2;
+    }
+    return raw_code;
 }
 
 void TimeWeatherService::LoadLocationCacheFromNvs() {
@@ -407,6 +453,7 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 void TimeWeatherService::Task() {
     static constexpr int kWeatherRefreshSeconds = 3600;
     static constexpr int kWeatherRetrySeconds = 10;
+    static constexpr int kWeatherLowMemoryRetrySeconds = 60;
     static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
     int retry_ticks = kWeatherRetrySeconds;
@@ -418,8 +465,10 @@ void TimeWeatherService::Task() {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     ESP_LOGI(TAG, "WiFi connected, starting time weather service");
-    StartSntp();
     ShowCachedWeather("Weather sync");
+    WaitApplicationReady();
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    StartSntp();
     
     while (true) {
         // 启动SNTP
@@ -434,12 +483,15 @@ void TimeWeatherService::Task() {
         }
         
         // 获取天气
+        const int retry_limit = weather_low_memory_deferred_
+                                    ? kWeatherLowMemoryRetrySeconds
+                                    : kWeatherRetrySeconds;
         if (weather_ticks >= kWeatherRefreshSeconds) {
             ShowCachedWeather("Weather sync");
             weather_ok = FetchWeather();
             weather_ticks = 0;
             retry_ticks = 0;
-        } else if (!weather_ok && retry_ticks >= kWeatherRetrySeconds) {
+        } else if (!weather_ok && retry_ticks >= retry_limit) {
             ShowCachedWeather("Weather retry");
             weather_ok = FetchWeather();
             retry_ticks = 0;
@@ -488,7 +540,10 @@ void TimeWeatherService::Task() {
                 UpdateTime();
                 clock_ticks = 0;
             }
-            if (!weather_ok && retry_ticks >= kWeatherRetrySeconds) {
+            const int wake_retry_limit = weather_low_memory_deferred_
+                                             ? kWeatherLowMemoryRetrySeconds
+                                             : kWeatherRetrySeconds;
+            if (!weather_ok && retry_ticks >= wake_retry_limit) {
                 break;
             }
         }
@@ -605,8 +660,21 @@ static esp_err_t HttpEventHandler(esp_http_client_event_t* evt) {
 }
 
 bool TimeWeatherService::FetchWeather() {
+    weather_low_memory_deferred_ = false;
     if (Application::GetInstance().IsExternalAudioActive()) {
         ESP_LOGW(TAG, "Skip weather fetch while external audio is active");
+        return false;
+    }
+
+    const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (free_internal < kWeatherMinInternalFree ||
+        largest_internal < kWeatherMinLargestInternalBlock) {
+        ESP_LOGW(TAG, "skip weather fetch, low internal memory free=%u largest=%u",
+                 static_cast<unsigned>(free_internal),
+                 static_cast<unsigned>(largest_internal));
+        weather_low_memory_deferred_ = true;
+        ShowCachedWeather("Weather low memory");
         return false;
     }
 
@@ -617,7 +685,7 @@ bool TimeWeatherService::FetchWeather() {
     
     char url[256];
     snprintf(url, sizeof(url),
-             "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
+             "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
              latitude, longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
@@ -672,27 +740,44 @@ bool TimeWeatherService::FetchWeather() {
         ShowCachedWeather("Weather parse");
         return false;
     }
+
+    const int raw_code = code->valueint;
+    const double precipitation = JsonNumberOr(current, "precipitation", 0.0);
+    const double rain = JsonNumberOr(current, "rain", 0.0);
+    const double showers = JsonNumberOr(current, "showers", 0.0);
+    const int cloud_cover = JsonIntOr(current, "cloud_cover", -1);
+    const int humidity = JsonIntOr(current, "relative_humidity_2m", -1);
+    const int refined_code = RefineOpenMeteoCode(raw_code, precipitation, rain, showers, cloud_cover);
     
     char temp_text[16];
     char summary[96];
     snprintf(temp_text, sizeof(temp_text), "%d C", (int)lround(temp->valuedouble));
-    time_t now = 0;
-    tm info = {};
-    time(&now);
-    localtime_r(&now, &info);
-    if (info.tm_year >= (2024 - 1900)) {
-        snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+    if (!ExtractWeatherTime(current, last_update_, sizeof(last_update_))) {
+        time_t now = 0;
+        tm info = {};
+        time(&now);
+        localtime_r(&now, &info);
+        if (info.tm_year >= (2024 - 1900)) {
+            snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
+        }
     }
-    snprintf(summary, sizeof(summary), "%s %s %s", city.c_str(), WeatherDesc(code->valueint), last_update_);
+    if (humidity >= 0 && cloud_cover >= 0) {
+        snprintf(summary, sizeof(summary), "%s %s %s H%d%% C%d%%",
+                 city.c_str(), WeatherDesc(refined_code), last_update_, humidity, cloud_cover);
+    } else {
+        snprintf(summary, sizeof(summary), "%s %s %s", city.c_str(), WeatherDesc(refined_code), last_update_);
+    }
     
     snprintf(last_temperature_, sizeof(last_temperature_), "%s", temp_text);
     snprintf(last_summary_, sizeof(last_summary_), "%s", summary);
-    last_weather_code_ = code->valueint;
+    last_weather_code_ = refined_code;
     last_weather_valid_ = true;
-    SetWeatherSafe(temp_text, summary, code->valueint);
+    SetWeatherSafe(temp_text, summary, refined_code);
     
     cJSON_Delete(root);
-    ESP_LOGI(TAG, "weather ok %s %s code=%d updated=%s", temp_text, summary, code->valueint, last_update_);
+    ESP_LOGI(TAG, "weather ok %s %s raw=%d refined=%d rain=%.2f cloud=%d humidity=%d updated=%s",
+             temp_text, summary, raw_code, refined_code, fmax(precipitation, fmax(rain, showers)),
+             cloud_cover, humidity, last_update_);
     return true;
 }
 
@@ -756,11 +841,15 @@ const char* TimeWeatherService::WeekdayName(int wday) {
 }
 
 const char* TimeWeatherService::WeatherDesc(int code) {
-    if (code == 0) return "Sunny";
-    if (code == 1 || code == 2 || code == 3) return "Cloudy";
-    if (code == 45 || code == 48) return "Fog";
-    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "Rain";
-    if (code >= 71 && code <= 77) return "Snow";
-    if (code >= 95) return "Storm";
-    return "Weather";
+    if (code == 0) return "晴";
+    if (code == 1) return "少云";
+    if (code == 2) return "多云";
+    if (code == 3) return "阴";
+    if (code == 45 || code == 48) return "雾";
+    if (code >= 51 && code <= 57) return "毛毛雨";
+    if (code >= 61 && code <= 67) return "雨";
+    if (code >= 80 && code <= 82) return "阵雨";
+    if (code >= 71 && code <= 77) return "雪";
+    if (code >= 95) return "雷雨";
+    return "天气";
 }

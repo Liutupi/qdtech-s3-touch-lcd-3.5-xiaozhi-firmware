@@ -2,11 +2,21 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.44 WiFi Phone Config Sync Follow-Up
+## Current Active Task: v1.7.46 Release Follow-Up
 
 Current state:
 
-- Firmware base is merged through `v1.7.43`.
+- Firmware base is merged through `v1.7.46`.
+- 2026-06-26 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
+- Latest release build result: `xiaozhi.bin` `0x4a55b0`, smallest app partition `0x600000`, free `0x15aa50` (about 23%).
+- Release assets are in `releases/v1.7.46/`: app bin, full merged bin, and firmware zip.
+- The main page uses the final accepted brand earth GIF direction: earth-only, transparent, `46x46`, no satellite, no latitude/longitude grid lines, and a clean blue-white rim.
+- Dynamic Chinese UI text now uses the broader Puhui font where user/weather/calendar strings previously risked missing glyphs.
+- WiFi reconnect prefers the strong remembered BSSID when absent; latest validation connected to `liutupi` BSSID `fc:94:35:08:0a:e8` at about `-16` RSSI.
+- Phone Web starts after a delay and retries when memory is temporarily tight. Latest verified URL was `http://192.168.4.177/`.
+- Weather now fetches humidity, precipitation, rain, showers, cloud cover, and API timestamp in addition to temperature/weather code.
+- Live Zhongshan validation corrected a misleading Open-Meteo thunderstorm code: `raw=95 refined=3 rain=0.00 cloud=97 humidity=95`, displaying `阴` instead of false `Storm`.
+- Theme switching was re-tested after clearing cached status-bar label pointers; Cat theme rebuild no longer crashes in the observed run.
 - 2026-06-25 local build/flash with WiFi phone profile/weather config sync and the main-page brand overlap fix passed from a temporary no-space project copy.
 - Latest pre-release hardware build result: `xiaozhi.bin` `0x4ce350`, smallest app partition `0x600000`, free `0x131cb0` (20%).
 - Settings now shows phone web sync status, BLE sync status, the current custom text logo, owner name, and weather city.
@@ -54,6 +64,9 @@ Current state:
 
 Next work:
 
+- Publish the `v1.7.46` release assets to GitHub Releases if they have not been attached yet.
+- Verify Settings OTA from a board running `v1.7.45` to `v1.7.46`.
+- If the user wants more accurate China-local weather, add a provider priority path: local Caiyun token present -> Caiyun realtime; missing token or fetch failure -> current refined Open-Meteo fallback. Do not commit a private token.
 - Polish the WiFi phone page UX and optionally add a QR code or clearer on-device URL display.
 - Consider adding a city search preview/confirmation if users often enter ambiguous city names.
 - Consider a detail/edit screen for full long logo/name text if ellipsis is not sufficient.

@@ -2,6 +2,36 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.46 Font, Phone Web, Brand Earth, And Weather Accuracy
+
+Scope:
+
+- Bumped firmware version to `1.7.46`.
+- Routed dynamic Chinese text through broader Puhui font coverage where previous Montserrat/LXGW-subset usage could miss glyphs.
+- Added the final accepted main-page brand earth GIF: `46x46`, transparent background, earth-only, no satellite, no grid lines, clean blue-white rim.
+- Stabilized WiFi reconnect by preferring the strongest saved BSSID when the remembered-BSSID flag is absent.
+- Delayed Phone Web startup after WiFi connect and added retry behavior when internal memory is temporarily low.
+- Cached Phone Web/BLE status strings so Settings continues showing the IP/status after refresh or theme rebuild.
+- Lowered weather/HTTP low-memory guards carefully enough to avoid the repeated `weather low memory` loop while preserving reboot safety.
+- Fixed a theme-switch crash by clearing cached status-bar label pointers before recreating LVGL pages.
+- Improved weather accuracy on the Open-Meteo fallback by requesting precipitation, rain, showers, cloud cover, humidity, and API time, then refining raw weather codes before display.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build`; final `xiaozhi.bin` size `0x4a55b0`, app partition free `0x15aa50` (about 23%).
+- Built merged firmware with `idf.py -B build-qdtech merge-bin`; merged image size `0x5a55b0`.
+- Flashed to `COM13`; boot reached WiFi, MQTT, idle state, weather, and Phone Web.
+- Live weather validation corrected a misleading thunderstorm code:
+
+```text
+weather ok 28 C 中山 阴 00:30 H95% C97% raw=95 refined=3 rain=0.00 cloud=97 humidity=95 updated=00:30
+```
+
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-app.bin`: `108CFA46D5E7C2EC8E79A835872B5A9F83E79F5713B950A4B33C8FCDE3B9AFCB`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-firmware.zip`: `266BDA638EAD530B616D9EE74B60365CF0C34FE4D64BF10786648E723BE234F6`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-full.bin`: `5857F4E0447481C6523079A9F073CABE6821E61F7C4933F707643E6F409A7C7B`
+
 ## 2026-06-25: v1.7.44 Phone WiFi Profile, Weather Config, And Brand Layout Fix
 
 Scope:

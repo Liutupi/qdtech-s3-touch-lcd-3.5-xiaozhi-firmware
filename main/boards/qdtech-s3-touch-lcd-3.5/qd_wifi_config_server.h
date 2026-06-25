@@ -10,6 +10,7 @@
 class QdWifiConfigServer {
 public:
     void Start(DesktopUI* ui, TimeWeatherService* weather_service);
+    bool IsRunning() const { return server_ != nullptr; }
     std::string Status() const { return status_; }
 
 private:

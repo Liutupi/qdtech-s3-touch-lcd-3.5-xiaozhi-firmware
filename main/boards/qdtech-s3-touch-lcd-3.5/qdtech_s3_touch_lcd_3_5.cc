@@ -34,6 +34,7 @@
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 #include <esp_timer.h>
+#include <nvs.h>
 #include <wifi_station.h>
 
 #define TAG "QDtech35"
@@ -669,9 +670,9 @@ public:
     }
 
     void StartNetwork() override {
+        EnsureStrongestBssidDefault();
         WifiBoard::StartNetwork();
-        InitializeWifiConfigServer();
-        InitializeBleConfig();
+        ScheduleDeferredNetworkServices();
         
         // WiFi 连接后启动时间天气服�?
         if (!time_weather_started_ && display_) {
@@ -1162,6 +1163,73 @@ private:
         wifi_config_server_.Start(desktop_ui, &time_weather_service_);
     }
 
+    void EnsureStrongestBssidDefault() {
+        nvs_handle_t nvs;
+        esp_err_t err = nvs_open("wifi", NVS_READWRITE, &nvs);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "open wifi NVS failed for BSSID default: %s", esp_err_to_name(err));
+            return;
+        }
+
+        uint8_t remember_bssid = 0;
+        err = nvs_get_u8(nvs, "remember_bssid", &remember_bssid);
+        if (err == ESP_ERR_NVS_NOT_FOUND) {
+            err = nvs_set_u8(nvs, "remember_bssid", 1);
+            if (err == ESP_OK) {
+                err = nvs_commit(nvs);
+            }
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "Defaulted WiFi BSSID memory on");
+            } else {
+                ESP_LOGW(TAG, "save WiFi BSSID default failed: %s", esp_err_to_name(err));
+            }
+        } else if (err != ESP_OK) {
+            ESP_LOGW(TAG, "read WiFi BSSID default failed: %s", esp_err_to_name(err));
+        }
+        nvs_close(nvs);
+    }
+
+    void ScheduleDeferredNetworkServices() {
+        if (network_services_started_) {
+            return;
+        }
+        if (!network_services_timer_) {
+            esp_timer_create_args_t timer_args = {
+                .callback = [](void* arg) {
+                    static_cast<QdtechS3TouchLcd35Board*>(arg)->StartDeferredNetworkServices();
+                },
+                .arg = this,
+                .dispatch_method = ESP_TIMER_TASK,
+                .name = "qd_net_services",
+                .skip_unhandled_events = true,
+            };
+            ESP_ERROR_CHECK(esp_timer_create(&timer_args, &network_services_timer_));
+        }
+        if (esp_timer_is_active(network_services_timer_)) {
+            ESP_ERROR_CHECK(esp_timer_stop(network_services_timer_));
+        }
+        ESP_ERROR_CHECK(esp_timer_start_once(network_services_timer_, 25000000));
+        ESP_LOGI(TAG, "Deferred phone config services scheduled");
+    }
+
+    void StartDeferredNetworkServices() {
+        if (network_services_started_) {
+            return;
+        }
+        InitializeWifiConfigServer();
+        if (!wifi_config_server_.IsRunning()) {
+            ESP_ERROR_CHECK(esp_timer_start_once(network_services_timer_, 60000000));
+            ESP_LOGW(TAG, "Deferred phone web not ready, retry scheduled");
+            return;
+        }
+        if (!ble_config_started_) {
+            InitializeBleConfig();
+            ble_config_started_ = true;
+        }
+        network_services_started_ = true;
+        ESP_LOGI(TAG, "Deferred phone config services started");
+    }
+
     bool DrawFcFrame(QdtechLandscapeDisplay* qd_display, const uint16_t* pixels,
                      uint16_t width, uint16_t height) {
         if (!qd_display || !pixels || width == 0 || height == 0 || height > 240) {
@@ -1233,6 +1301,9 @@ private:
     uint16_t* fc_scaled_frame_ = nullptr;
     size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;
+    bool network_services_started_ = false;
+    bool ble_config_started_ = false;
+    esp_timer_handle_t network_services_timer_ = nullptr;
 };
 
 DECLARE_BOARD(QdtechS3TouchLcd35Board);

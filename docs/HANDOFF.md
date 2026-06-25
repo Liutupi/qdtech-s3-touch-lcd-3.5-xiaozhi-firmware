@@ -35,14 +35,61 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-25 in the macOS workspace:
+Last verified on 2026-06-26 in the Windows workspace:
 
-- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-25 v1.7.45 brand text auto-wrap and weather refresh on page switch
+- Last verified update: 2026-06-26 v1.7.46 Chinese font coverage, WiFi/Phone Web stability, brand earth GIF, and refined weather accuracy
 - Build directory used for board verification: `build-qdtech`
-- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+- Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.46 Font, Phone Web, Brand Earth, And Weather Accuracy
+
+Scope:
+
+- Bumped firmware version to `1.7.46`.
+- Improved Chinese text rendering by routing dynamic user/weather/calendar labels through the broader Puhui font instead of narrow Latin/LXGW subsets.
+- Added a small transparent rotating earth GIF next to the top-left main-page brand mark. Final accepted direction is earth-only, `46x46`, no satellite, no latitude/longitude grid lines, and a clean blue-white rim to avoid dirty yellow edge artifacts.
+- Stabilized slow WiFi reconnect behavior by enabling the remembered strongest BSSID path when absent, so the board prefers the strong `liutupi` AP instead of weak same-SSID APs.
+- Delayed Phone Web startup after WiFi and added retry behavior when internal RAM is temporarily too low.
+- Lowered guarded HTTP/weather internal-memory thresholds carefully enough to avoid the previous `weather low memory` loop while keeping the device from rebooting.
+- Fixed Settings page Phone Web IP persistence by caching and restoring the displayed WiFi config status across UI refresh/theme rebuilds.
+- Fixed a theme-rebuild crash by clearing cached status-bar time/battery label pointers before recreating LVGL pages.
+- Improved weather accuracy on the existing Open-Meteo fallback path by fetching humidity, precipitation, rain, showers, cloud cover, and API timestamp in addition to temperature/weather code.
+- Refined misleading Open-Meteo thunderstorm codes: if raw code is storm/rain but actual precipitation is `0.00`, the UI now downgrades to cloudy/overcast based on cloud cover instead of showing false `Storm`.
+
+Verification:
+
+- Build passed with `idf.py -B build-qdtech build`.
+- Merge image passed with `idf.py -B build-qdtech merge-bin`.
+- Final `xiaozhi.bin` size: `0x4a55b0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x15aa50`, about 23%.
+- Flashed successfully to `COM13`.
+- Boot/runtime logs confirmed:
+  - `App "xiaozhi" version: 1.7.46` during CMake configure.
+  - Strong WiFi AP selected: `bssid = fc:94:35:08:0a:e8`, RSSI about `-16`.
+  - IP address: `192.168.4.177`.
+  - MQTT connected and app reached `STATE: idle`.
+  - Phone Web deferred startup succeeded: `Deferred phone config services started`.
+  - Theme switch to Cat rebuilt UI without the previous status-bar pointer crash.
+  - Weather refinement worked on live Zhongshan data:
+
+```text
+weather ok 28 C 中山 阴 00:30 H95% C97% raw=95 refined=3 rain=0.00 cloud=97 humidity=95 updated=00:30
+```
+
+- Release assets prepared in `releases/v1.7.46/`:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-app.bin`, SHA256 `108CFA46D5E7C2EC8E79A835872B5A9F83E79F5713B950A4B33C8FCDE3B9AFCB`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-firmware.zip`, SHA256 `266BDA638EAD530B616D9EE74B60365CF0C34FE4D64BF10786648E723BE234F6`.
+  - `qdtech-s3-touch-lcd-3.5-v1.7.46-full.bin`, SHA256 `5857F4E0447481C6523079A9F073CABE6821E61F7C4933F707643E6F409A7C7B`.
+
+Known issues and next weather direction:
+
+- Open-Meteo remains the token-free fallback. It is stable and publish-safe, but China-local weather can still be less accurate than domestic providers.
+- The preferred higher-accuracy China option is Caiyun realtime weather because it has finer local granularity, but its token must be provisioned locally and must not be committed to this public repository.
+- A future safe design is provider priority: local Caiyun token present -> Caiyun realtime; no token or fetch failure -> Open-Meteo refined fallback.
 
 ## Latest Runtime Notes: 2026-06-25 v1.7.45 Brand Text Auto-Wrap And Weather Refresh
 

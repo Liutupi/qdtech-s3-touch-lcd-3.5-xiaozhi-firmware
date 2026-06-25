@@ -17,7 +17,7 @@
 static const char* TAG = "QdWifiConfig";
 
 namespace {
-static constexpr size_t kMinHttpInternalFree = 10 * 1024;
+static constexpr size_t kMinHttpInternalFree = 7 * 1024;
 static constexpr size_t kMinHttpLargestBlock = 4 * 1024;
 static constexpr size_t kMaxPostBody = 768;
 static constexpr size_t kGeoResponseSize = 1536;
@@ -234,13 +234,16 @@ void QdWifiConfigServer::Start(DesktopUI* ui, TimeWeatherService* weather_servic
 
     QdLoadUserProfile();
     QdLoadWeatherConfig();
+    const std::string config_url = GetConfigUrl();
+    SetStatus(config_url.c_str());
 
     const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     const size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_LOGI(TAG, "http memory check free_internal=%u largest_internal=%u",
              static_cast<unsigned>(free_internal), static_cast<unsigned>(largest_internal));
     if (free_internal < kMinHttpInternalFree || largest_internal < kMinHttpLargestBlock) {
-        SetStatus("WiFi config low memory");
+        const std::string waiting = config_url + " waiting";
+        SetStatus(waiting.c_str());
         return;
     }
 
@@ -279,7 +282,7 @@ void QdWifiConfigServer::Start(DesktopUI* ui, TimeWeatherService* weather_servic
     config_post.user_ctx = this;
     httpd_register_uri_handler(server_, &config_post);
 
-    SetStatus(GetConfigUrl().c_str());
+    SetStatus(config_url.c_str());
 }
 
 void QdWifiConfigServer::SetStatus(const char* status) {

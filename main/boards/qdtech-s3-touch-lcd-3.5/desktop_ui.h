@@ -122,6 +122,7 @@ private:
     lv_obj_t* weather_horizon_ = nullptr;
     lv_obj_t* weather_temp_label_ = nullptr;
     lv_obj_t* weather_meta_label_ = nullptr;
+    lv_obj_t* brand_earth_gif_ = nullptr;
     lv_obj_t* brand_logo_labels_[8] = {};
     lv_obj_t* brand_owner_labels_[8] = {};
     size_t brand_label_count_ = 0;
@@ -222,6 +223,8 @@ private:
     lv_obj_t* settings_weather_value_ = nullptr;
     lv_obj_t* settings_wifi_config_status_label_ = nullptr;
     lv_obj_t* settings_ble_status_label_ = nullptr;
+    std::string settings_wifi_config_status_ = "WiFi config idle";
+    std::string settings_ble_status_ = "BLE idle";
 
     // Network page elements
     lv_obj_t* network_list_container_ = nullptr;
