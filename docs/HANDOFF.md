@@ -37,12 +37,56 @@ Important files:
 
 Last verified on 2026-06-25 in the macOS workspace:
 
-- Workspace: `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `/Users/tupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-25 v1.7.44 phone WiFi profile/weather config sync and main-page brand overlap fix
-- Build directory used for local verification: `/tmp/qdtech_firmware_copy/build-qdtech-s3`
+- Last verified update: 2026-06-25 v1.7.45 brand text auto-wrap and weather refresh on page switch
+- Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+
+## Latest Runtime Notes: 2026-06-25 v1.7.45 Brand Text Auto-Wrap And Weather Refresh
+
+Scope:
+
+- Bumped firmware version to `1.7.45`.
+- Fixed brand text (logo) auto-wrap for long text in Tupi Warm theme.
+- Fixed weather refresh when returning to main page from other pages.
+- Added BLE config service header include fix for compilation.
+
+Changes:
+
+1. **Brand text auto-wrap (`desktop_ui.cc`)**
+   - Changed `fit_brand_label()` from `LV_LABEL_LONG_DOT` (truncation) to `LV_LABEL_LONG_WRAP` (auto-wrap)
+   - Added `max_height` limit of 2 lines to prevent overflow
+   - Owner name now dynamically positions below brand text using `lv_obj_align_to()`
+
+2. **Weather refresh on page switch (`time_weather_service.cc`)**
+   - When returning to main page, `weather_ticks` is now set to `kWeatherRefreshSeconds` to force weather refresh
+   - This ensures weather data is updated instead of just showing cached data
+
+3. **BLE compilation fix (`qd_ble_config_service.cc`, `main/CMakeLists.txt`)**
+   - Added conditional compilation for BLE headers with `#if CONFIG_BT_NIMBLE_ENABLED`
+   - Added fallback `BLE_ATT_ERR_UNLIKELY` definition when BLE is not enabled
+   - Added NimBLE include paths in CMakeLists.txt for proper compilation
+
+Verification:
+
+- Build passed with `idf.py -B build-qdtech build`
+- `xiaozhi.bin` size: `0x4eae70`
+- Smallest app partition: `0x600000`
+- Free app partition space: `0x115190`, about 18%
+- Flashed successfully to `/dev/cu.usbmodem212401` at 921600 baud
+- Post-flash logs confirmed:
+  - `App version: 1.7.45`
+  - WiFi connected
+  - Desktop UI created
+  - Weather fetch attempted on page switch
+  - Brand text wraps correctly for long text
+
+Known issues:
+
+- Weather fetch may timeout (`ESP_ERR_HTTP_EAGAIN`) when AFE audio processing is active
+- This is a resource contention issue, not a code bug
 
 ## Latest Runtime Notes: 2026-06-25 v1.7.44 Phone WiFi Profile And Weather Config Sync
 

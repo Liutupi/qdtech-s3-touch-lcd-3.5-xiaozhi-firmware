@@ -8,6 +8,10 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "sdkconfig.h"
+
+#if CONFIG_BT_NIMBLE_ENABLED
+#include "host/ble_att.h"
 #include "host/ble_gap.h"
 #include "host/ble_gatt.h"
 #include "host/ble_hs.h"
@@ -17,7 +21,10 @@
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
-#include "sdkconfig.h"
+#else
+// Fallback definitions when BLE is not enabled
+#define BLE_ATT_ERR_UNLIKELY 0x0e
+#endif
 
 static const char* TAG = "QdBleConfig";
 

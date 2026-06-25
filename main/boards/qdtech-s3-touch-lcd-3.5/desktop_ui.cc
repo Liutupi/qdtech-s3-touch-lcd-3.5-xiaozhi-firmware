@@ -214,11 +214,14 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
 
 static void fit_brand_label(lv_obj_t* label, int16_t width, bool owner) {
     const lv_font_t* font = lv_obj_get_style_text_font(label, 0);
-    const int16_t height = font ? (lv_font_get_line_height(font) + 2) : 20;
-    lv_obj_set_size(label, width, height);
-    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    const int16_t line_height = font ? (lv_font_get_line_height(font) + 2) : 20;
+    // Use WRAP mode to allow multi-line display for long text
+    lv_obj_set_width(label, width);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_line_space(label, 0, 0);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    // Set max height for 2 lines
+    lv_obj_set_style_max_height(label, line_height * 2, 0);
     if (owner) {
         lv_obj_set_style_text_color(label,
                                     is_tupi_warm_theme() ? COLOR_GREEN :
@@ -3888,7 +3891,7 @@ void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
     battery_level_ = valid ? std::max(0, std::min(100, level)) : -1;
     battery_charging_ = charging;
 
-    char text[12];
+    char text[16];
     if (battery_level_ < 0) {
         snprintf(text, sizeof(text), "--%%");
     } else if (charging) {

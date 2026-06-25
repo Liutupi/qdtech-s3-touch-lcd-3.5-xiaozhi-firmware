@@ -462,6 +462,10 @@ void TimeWeatherService::Task() {
                 }
                 if (refresh_update || weather_refresh) {
                     UpdateTime();
+                    // Force weather refresh when returning to main page
+                    if (refresh_update) {
+                        weather_ticks = kWeatherRefreshSeconds;
+                    }
                     ShowCachedWeather(weather_ok ? "Weather sync" : "Weather retry");
                     if (weather_refresh && !weather_ok) {
                         retry_ticks = kWeatherRetrySeconds;

@@ -268,6 +268,17 @@ idf_component_register(SRCS ${SOURCES}
 	                    WHOLE_ARCHIVE
 	                    )
 
+# Add NimBLE include paths for BLE config service
+if(CONFIG_BT_NIMBLE_ENABLED)
+    target_include_directories(${COMPONENT_LIB} PRIVATE
+        ${IDF_PATH}/components/bt/host/nimble/nimble/nimble/host/include
+        ${IDF_PATH}/components/bt/host/nimble/nimble/nimble/include
+        ${IDF_PATH}/components/bt/host/nimble/nimble/nimble/host/services/gap/include
+        ${IDF_PATH}/components/bt/host/nimble/nimble/nimble/host/services/gatt/include
+        ${IDF_PATH}/components/bt/host/nimble/porting/nimble/include
+    )
+endif()
+
 # 使用 target_compile_definitions 来定义 BOARD_TYPE, BOARD_NAME
 # 如果 BOARD_NAME 为空，则使用 BOARD_TYPE
 if(NOT BOARD_NAME)

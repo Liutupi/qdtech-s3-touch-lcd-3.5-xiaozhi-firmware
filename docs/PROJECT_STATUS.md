@@ -35,6 +35,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.40 (2026-06-23): Code quality optimization, SD card radio.json support, FC stability fixes, thread safety improvements
 - v1.7.43 (2026-06-24): Rolled back the withdrawn Caiyun weather integration and restored the no-token Open-Meteo weather path for stable multi-board OTA
 - v1.7.44 (2026-06-25): Added persistent profile/weather config plumbing, a verified WiFi phone config page/API, automatic city geocoding, Chinese weather text rendering, memory-guarded BLE prototype code, and a fixed main-page logo/name brand layout
+- v1.7.45 (2026-06-25): Brand text auto-wrap for long text, weather refresh on page switch, BLE compilation fix
 
 ## Confirmed Hardware From Source
 
