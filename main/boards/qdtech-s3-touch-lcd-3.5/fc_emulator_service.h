@@ -1,7 +1,6 @@
 #pragma once
 
 #include "desktop_ui.h"
-#include "nes_bus.h"
 #include "lvgl.h"
 
 #include <atomic>
@@ -48,7 +47,7 @@ private:
     sdmmc_card_t* card_ = nullptr;
     std::vector<std::string> roms_;
     std::vector<std::pair<std::string, std::string>> rom_aliases_;
-    size_t selected_index_ = 0;
+    std::atomic<size_t> selected_index_{0};
     uint32_t frame_counter_ = 0;
     uint32_t produced_frame_counter_ = 0;
     uint32_t last_perf_frame_counter_ = 0;
@@ -57,15 +56,13 @@ private:
     Frame frames_[2];
     uint8_t frame_slot_ = 0;
     int64_t last_frame_publish_us_ = 0;
-    std::vector<int16_t> audio_output_buffer_;
     uint32_t audio_frame_counter_ = 0;
     int64_t last_audio_log_us_ = 0;
 
-    NesBus nes_bus_;
-    bool nes_initialized_ = false;
+    uint8_t last_logged_controller_state_ = 0xff;
+
     std::atomic<uint8_t> controller_state_{0};
     std::atomic<uint32_t> controller_release_tick_{0};
-    uint8_t last_logged_controller_state_ = 0xff;
 
     static void TaskWrapper(void* arg);
     static int NofrendoFrameThunk(const uint16_t* pixels, uint16_t width, uint16_t height, void* user);
@@ -80,9 +77,6 @@ private:
     bool LoadRomAliasFile(const char* path);
     bool ValidateSelectedRom();
     void RunNofrendoRom();
-    bool LoadNesRom();
-    bool RunNesFrame();
-    bool RenderFrame(Frame& frame, bool update_pixels);
     void FreeFrame(Frame& frame);
     void ClearFrames();
     void PublishState(const char* title, const char* detail);
@@ -96,4 +90,5 @@ private:
     std::string BuildRomList() const;
 
     DirectFrameCallback direct_frame_cb_;
+    std::vector<int16_t> audio_output_buf_;
 };

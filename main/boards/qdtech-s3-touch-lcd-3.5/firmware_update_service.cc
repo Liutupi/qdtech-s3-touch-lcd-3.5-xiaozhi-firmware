@@ -113,7 +113,7 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
         return;
     }
 
-    constexpr uint32_t stack_size = 10240;
+    const uint32_t stack_size = 10240;
     const char* task_name = action == TaskAction::Check ? "fw_check" : "fw_upgrade";
     ESP_LOGI(TAG, "firmware task create action=%d free_internal=%u largest_internal=%u",
              static_cast<int>(action),
@@ -127,7 +127,7 @@ void FirmwareUpdateService::StartTask(TaskAction action) {
         return;
     }
 
-    ESP_LOGW(TAG, "firmware task PSRAM create failed ret=%ld, trying internal memory",
+    ESP_LOGW(TAG, "firmware task preferred create failed ret=%ld, trying default memory",
              static_cast<long>(ret));
     task_handle_ = nullptr;
     ret = xTaskCreate(TaskWrapper, task_name, stack_size, arg, 2, &task_handle_);
@@ -215,30 +215,45 @@ void FirmwareUpdateService::CheckLatest() {
 
 bool FirmwareUpdateService::FetchLatestRelease(std::string* version, std::string* firmware_url) {
     ReleaseHttpBuffer buffer;
-    buffer.data.reserve(8192);
+    esp_err_t err = ESP_FAIL;
+    int status = 0;
 
-    esp_http_client_config_t config = {};
-    config.url = kLatestReleaseUrl;
-    config.timeout_ms = 12000;
-    config.event_handler = ReleaseHttpEventHandler;
-    config.user_data = &buffer;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-    config.buffer_size = 1024;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        buffer = ReleaseHttpBuffer{};
+        buffer.data.reserve(8192);
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        ESP_LOGE(TAG, "release http init failed");
-        return false;
+        esp_http_client_config_t config = {};
+        config.url = kLatestReleaseUrl;
+        config.timeout_ms = 12000;
+        config.event_handler = ReleaseHttpEventHandler;
+        config.user_data = &buffer;
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+        config.buffer_size = 1024;
+
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (!client) {
+            ESP_LOGE(TAG, "release http init failed");
+            return false;
+        }
+
+        const esp_app_desc_t* app_desc = esp_app_get_description();
+        std::string user_agent = std::string(BOARD_NAME "/") + (app_desc ? app_desc->version : "unknown");
+        esp_http_client_set_header(client, "User-Agent", user_agent.c_str());
+        esp_http_client_set_header(client, "Accept", "application/vnd.github+json");
+
+        err = esp_http_client_perform(client);
+        status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+        if (err == ESP_OK && status >= 200 && status < 300 && !buffer.data.empty() && !buffer.truncated) {
+            break;
+        }
+
+        ESP_LOGW(TAG, "release fetch attempt %d failed err=%s status=%d len=%u truncated=%d",
+                 attempt + 1, esp_err_to_name(err), status,
+                 static_cast<unsigned>(buffer.data.size()), buffer.truncated ? 1 : 0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
 
-    const esp_app_desc_t* app_desc = esp_app_get_description();
-    std::string user_agent = std::string(BOARD_NAME "/") + (app_desc ? app_desc->version : "unknown");
-    esp_http_client_set_header(client, "User-Agent", user_agent.c_str());
-    esp_http_client_set_header(client, "Accept", "application/vnd.github+json");
-
-    esp_err_t err = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
     if (err != ESP_OK || status < 200 || status >= 300 || buffer.data.empty() || buffer.truncated) {
         ESP_LOGE(TAG, "release fetch failed err=%s status=%d len=%u truncated=%d",
                  esp_err_to_name(err), status, static_cast<unsigned>(buffer.data.size()),
@@ -316,6 +331,7 @@ void FirmwareUpdateService::RunUpgrade() {
     }
 
     Board::GetInstance().SetPowerSaveMode(false);
+    app.PrepareForFirmwareUpgrade();
     AudioCodec* codec = Board::GetInstance().GetAudioCodec();
     bool restore_input = false;
     bool restore_output = false;
@@ -343,6 +359,8 @@ void FirmwareUpdateService::RunUpgrade() {
         codec->EnableOutput(restore_output);
     }
     app.SetDeviceState(kDeviceStateIdle);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    app.Reboot();
 }
 
 void FirmwareUpdateService::SetUi(const char* status, bool update_available, bool busy, int progress) {

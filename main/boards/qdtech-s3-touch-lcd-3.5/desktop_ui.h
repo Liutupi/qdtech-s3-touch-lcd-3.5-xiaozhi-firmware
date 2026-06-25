@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <string>
 
 enum class DesktopPage {
     MAIN,
@@ -36,8 +37,10 @@ public:
     void SetDailyQuote(const char* quote);
     void SetDailyCard(const char* date, const char* title, const char* body);
     void SetNetworkStatus(const char* status);
+    void SetBatteryStatus(int level, bool charging, bool valid);
     void SetDefaultNetwork(size_t index);
     void SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress);
+    void CycleTheme();
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
     void SetRadioState(const char* station, const char* state, const char* meta);
@@ -50,6 +53,10 @@ public:
     void SetFocusMode(bool work_mode);
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
+    void SetWifiConfigStatus(const char* status);
+    void SetBluetoothConfigStatus(const char* status);
+    void ReloadUserProfile();
+    void RefreshSettingsControls();
     void SetMainPageCallback(std::function<void()> callback);
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
@@ -103,26 +110,41 @@ private:
     lv_obj_t* clock_colon_dots_[2] = {};
     lv_obj_t* date_label_ = nullptr;
     lv_obj_t* week_label_ = nullptr;
+    lv_obj_t* weather_glow_ = nullptr;
     lv_obj_t* weather_sun_ = nullptr;
+    lv_obj_t* weather_rays_[6] = {};
+    lv_obj_t* weather_cloud_shadow_ = nullptr;
     lv_obj_t* weather_cloud_[3] = {};
-    lv_obj_t* weather_rain_[3] = {};
-    lv_obj_t* weather_snow_[3] = {};
-    lv_obj_t* weather_storm_[2] = {};
+    lv_obj_t* weather_rain_[6] = {};
+    lv_obj_t* weather_snow_[6] = {};
+    lv_obj_t* weather_storm_[4] = {};
+    lv_obj_t* weather_scene_gif_ = nullptr;
+    lv_obj_t* weather_horizon_ = nullptr;
     lv_obj_t* weather_temp_label_ = nullptr;
     lv_obj_t* weather_meta_label_ = nullptr;
+    lv_obj_t* brand_logo_labels_[8] = {};
+    lv_obj_t* brand_owner_labels_[8] = {};
+    size_t brand_label_count_ = 0;
     lv_obj_t* daily_card_date_label_ = nullptr;
     lv_obj_t* daily_card_title_label_ = nullptr;
     lv_obj_t* quote_label_ = nullptr;
     lv_obj_t* network_status_label_ = nullptr;
     lv_obj_t* status_bar_time_labels_[4] = {};
+    lv_obj_t* status_bar_battery_labels_[6] = {};
+    int battery_level_ = -1;
+    bool battery_charging_ = false;
     lv_obj_t* calendar_app_status_label_ = nullptr;
     std::function<void()> main_page_callback_;
     int current_hour_ = -1;
     int current_minute_ = -1;
+    void RegisterBrandLabels(lv_obj_t* logo, lv_obj_t* owner);
+    void RefreshBrandLabels();
     
     // Animation elements
     lv_obj_t* daily_card_panel_ = nullptr;
     lv_timer_t* weather_particle_timer_ = nullptr;
+    int current_weather_code_ = -1;
+    int current_weather_scene_ = -1;
 
     // Photo page elements
     lv_obj_t* photo_image_a_ = nullptr;
@@ -192,6 +214,14 @@ private:
     lv_obj_t* settings_firmware_status_label_ = nullptr;
     lv_obj_t* settings_firmware_button_ = nullptr;
     lv_obj_t* settings_firmware_button_label_ = nullptr;
+    lv_obj_t* settings_theme_value_ = nullptr;
+    lv_obj_t* settings_theme_button_ = nullptr;
+    lv_obj_t* settings_theme_button_label_ = nullptr;
+    lv_obj_t* settings_profile_logo_value_ = nullptr;
+    lv_obj_t* settings_profile_owner_value_ = nullptr;
+    lv_obj_t* settings_weather_value_ = nullptr;
+    lv_obj_t* settings_wifi_config_status_label_ = nullptr;
+    lv_obj_t* settings_ble_status_label_ = nullptr;
 
     // Network page elements
     lv_obj_t* network_list_container_ = nullptr;
@@ -216,7 +246,7 @@ private:
     lv_obj_t* xiaozhi_hint_label_ = nullptr;
 
     // Animation state
-    const char* emotion_ = "neutral";
+    std::string emotion_ = "neutral";
     uint32_t anim_tick_ = 0;
     float pupil_offset_x_ = 0;
     float pupil_offset_y_ = 0;
@@ -244,7 +274,6 @@ private:
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
-    void RefreshSettingsControls();
     bool HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x);
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
@@ -255,6 +284,7 @@ private:
     void SetFacePart(lv_obj_t* obj, int x, int y, int w, int h, int radius);
 
     static void ObjOpaCb(void* obj, int32_t value);
+    static void ObjXCb(void* obj, int32_t value);
     static void ObjYCb(void* obj, int32_t value);
     static void ColonTimerCb(lv_timer_t* timer);
     static void FaceTimerCb(lv_timer_t* timer);

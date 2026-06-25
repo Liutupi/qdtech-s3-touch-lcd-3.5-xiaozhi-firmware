@@ -9,6 +9,8 @@
 #include "fc_emulator_service.h"
 #include "firmware_update_service.h"
 #include "photo_service.h"
+#include "qd_ble_config_service.h"
+#include "qd_wifi_config_server.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
 
@@ -17,6 +19,11 @@
 #include <cstring>
 #include <string>
 
+#include <esp_adc/adc_cali.h>
+#include <esp_adc/adc_cali_scheme.h>
+#include <esp_adc/adc_oneshot.h>
+#include <esp_sleep.h>
+#include <driver/rtc_io.h>
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
@@ -203,6 +210,20 @@ public:
         return true;
     }
 
+    bool DrawLandscapeRgb565PreSwapped(int x, int y, int width, int height, const uint16_t* pixels,
+                                        uint32_t timeout_ms = 20) {
+        if (!pixels || width <= 0 || height <= 0 || x < 0 || y < 0 ||
+            x + width > DISPLAY_WIDTH || y + height > DISPLAY_HEIGHT) {
+            return false;
+        }
+        if (!lvgl_port_lock(timeout_ms)) {
+            return false;
+        }
+        DrawLandscapeRgb565LockedPreSwapped(x, y, width, height, pixels);
+        lvgl_port_unlock();
+        return true;
+    }
+
 private:
     DesktopUI desktop_ui_;
 
@@ -256,6 +277,41 @@ private:
                 for (int x = 0; x < trans_width; x++) {
                     uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
                     color = (color << 8) | (color >> 8);
+                    transfer_buffer_[x * height + (height - y - 1)] = color;
+                }
+            }
+
+            const int draw_x_start = DISPLAY_HEIGHT - y_end - 1;
+            const int draw_x_end = DISPLAY_HEIGHT - y_start - 1;
+            const int draw_y_start = x_start_tmp;
+            const int draw_y_end = x_end_tmp;
+
+            xSemaphoreTake(transfer_done_, 0);
+            ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_, draw_x_start, draw_y_start, draw_x_end + 1, draw_y_end + 1, transfer_buffer_));
+            xSemaphoreTake(transfer_done_, pdMS_TO_TICKS(1000));
+            x_start_tmp += trans_width;
+        }
+    }
+
+    void DrawLandscapeRgb565LockedPreSwapped(int x_start, int y_start, int width, int height,
+                                              const uint16_t* color_map) {
+        const int x_end = x_start + width - 1;
+        const int y_end = y_start + height - 1;
+        constexpr int transfer_pixels = DISPLAY_WIDTH * DISPLAY_HEIGHT / 10;
+
+        int max_width = transfer_pixels / height;
+        if (max_width < 1) {
+            max_width = 1;
+        }
+
+        int x_start_tmp = x_start;
+        while (x_start_tmp <= x_end) {
+            const int trans_width = std::min(max_width, x_end - x_start_tmp + 1);
+            const int x_end_tmp = x_start_tmp + trans_width - 1;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < trans_width; x++) {
+                    uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
                     transfer_buffer_[x * height + (height - y - 1)] = color;
                 }
             }
@@ -423,9 +479,161 @@ private:
     int64_t last_bus_reset_us_ = 0;
 };
 
+class QdtechBatteryMonitor {
+public:
+    ~QdtechBatteryMonitor() {
+        if (timer_) {
+            esp_timer_stop(timer_);
+            esp_timer_delete(timer_);
+        }
+        if (cali_handle_) {
+            adc_cali_delete_scheme_curve_fitting(cali_handle_);
+        }
+        if (adc_handle_) {
+            adc_oneshot_del_unit(adc_handle_);
+        }
+    }
+
+    void Start(DesktopUI* ui) {
+        ui_ = ui;
+        adc_oneshot_unit_init_cfg_t init_config = {
+            .unit_id = BATTERY_ADC_UNIT,
+            .ulp_mode = ADC_ULP_MODE_DISABLE,
+        };
+        esp_err_t err = adc_oneshot_new_unit(&init_config, &adc_handle_);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "battery adc init failed err=%s", esp_err_to_name(err));
+            return;
+        }
+
+        adc_oneshot_chan_cfg_t chan_config = {
+            .atten = BATTERY_ADC_ATTEN,
+            .bitwidth = BATTERY_ADC_BITWIDTH,
+        };
+        err = adc_oneshot_config_channel(adc_handle_, BATTERY_ADC_CHANNEL, &chan_config);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "battery adc channel config failed err=%s", esp_err_to_name(err));
+            return;
+        }
+
+        adc_cali_curve_fitting_config_t cali_config = {
+            .unit_id = BATTERY_ADC_UNIT,
+            .chan = BATTERY_ADC_CHANNEL,
+            .atten = BATTERY_ADC_ATTEN,
+            .bitwidth = BATTERY_ADC_BITWIDTH,
+        };
+        err = adc_cali_create_scheme_curve_fitting(&cali_config, &cali_handle_);
+        cali_enabled_ = err == ESP_OK;
+        if (!cali_enabled_) {
+            ESP_LOGW(TAG, "battery adc calibration unavailable err=%s", esp_err_to_name(err));
+        }
+
+        ReadAndPublish();
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                static_cast<QdtechBatteryMonitor*>(arg)->ReadAndPublish();
+            },
+            .arg = this,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "qd_battery",
+            .skip_unhandled_events = true,
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &timer_));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(timer_, 5000000));
+    }
+
+    bool GetLevel(int& level, bool& charging, bool& discharging) const {
+        if (!valid_) {
+            return false;
+        }
+        level = level_;
+        charging = false;
+        discharging = true;
+        return true;
+    }
+
+private:
+    static int VoltageToLevel(int mv) {
+        const struct {
+            int mv;
+            int level;
+        } points[] = {
+            {3300, 0},
+            {3600, 20},
+            {3700, 40},
+            {3800, 60},
+            {3950, 80},
+            {4200, 100},
+        };
+        if (mv <= points[0].mv) {
+            return 0;
+        }
+        if (mv >= points[5].mv) {
+            return 100;
+        }
+        for (int i = 0; i < 5; ++i) {
+            if (mv >= points[i].mv && mv < points[i + 1].mv) {
+                const float ratio = static_cast<float>(mv - points[i].mv) /
+                    static_cast<float>(points[i + 1].mv - points[i].mv);
+                return points[i].level + static_cast<int>(ratio * (points[i + 1].level - points[i].level));
+            }
+        }
+        return 0;
+    }
+
+    void ReadAndPublish() {
+        if (!adc_handle_) {
+            return;
+        }
+        int raw_sum = 0;
+        int mv_sum = 0;
+        int samples = 0;
+        for (int i = 0; i < 8; ++i) {
+            int raw = 0;
+            if (adc_oneshot_read(adc_handle_, BATTERY_ADC_CHANNEL, &raw) != ESP_OK) {
+                continue;
+            }
+            int mv = 0;
+            if (cali_enabled_) {
+                if (adc_cali_raw_to_voltage(cali_handle_, raw, &mv) != ESP_OK) {
+                    continue;
+                }
+            } else {
+                mv = raw * 3100 / 4095;
+            }
+            raw_sum += raw;
+            mv_sum += mv;
+            ++samples;        }
+        if (samples <= 0) {
+            return;
+        }
+        const int raw_avg = raw_sum / samples;
+        const int adc_mv = mv_sum / samples;
+        voltage_mv_ = adc_mv * BATTERY_VOLTAGE_DIVIDER;
+        level_ = VoltageToLevel(voltage_mv_);
+        valid_ = true;
+        ESP_LOGI(TAG, "battery adc raw=%d adc_mv=%d battery_mv=%d level=%d%% gpio=%d cal=%d",
+                 raw_avg, adc_mv, voltage_mv_, level_, BATTERY_ADC_GPIO, cali_enabled_);
+
+        if (ui_ && lvgl_port_lock(0)) {
+            ui_->SetBatteryStatus(level_, false, true);
+            lvgl_port_unlock();
+        }
+    }
+
+    DesktopUI* ui_ = nullptr;
+    adc_oneshot_unit_handle_t adc_handle_ = nullptr;
+    adc_cali_handle_t cali_handle_ = nullptr;
+    esp_timer_handle_t timer_ = nullptr;
+    bool cali_enabled_ = false;
+    bool valid_ = false;
+    int voltage_mv_ = 0;
+    int level_ = 0;
+};
+
 class QdtechS3TouchLcd35Board : public WifiBoard {
 public:
-    QdtechS3TouchLcd35Board() : boot_button_(BOOT_BUTTON_GPIO) {
+    QdtechS3TouchLcd35Board() : boot_button_(BOOT_BUTTON_GPIO, false, 2000, 0) {
         InitializeI2c();
         InitializeSpi();
         InitializeLcdDisplay();
@@ -436,6 +644,7 @@ public:
         InitializePhotos();
         InitializeFcEmulator();
         InitializeFirmwareUpdate();
+        InitializeBattery();
         GetBacklight()->RestoreBrightness();
     }
 
@@ -455,10 +664,16 @@ public:
         return &backlight;
     }
 
+    bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {
+        return battery_monitor_.GetLevel(level, charging, discharging);
+    }
+
     void StartNetwork() override {
         WifiBoard::StartNetwork();
+        InitializeWifiConfigServer();
+        InitializeBleConfig();
         
-        // WiFi 连接后启动时间天气服务
+        // WiFi 连接后启动时间天气服�?
         if (!time_weather_started_ && display_) {
             auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
             time_weather_service_.Start(qd_display->GetDesktopUI());
@@ -674,13 +889,85 @@ private:
     }
 
     void InitializeButtons() {
+        boot_button_.OnPressDown([]() {
+            ESP_LOGI(TAG, "BOOT press down");
+        });
+        boot_button_.OnPressUp([]() {
+            ESP_LOGI(TAG, "BOOT press up");
+        });
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting || app.GetDeviceState() == kDeviceStateWifiConfiguring) {
+                ESP_LOGI(TAG, "BOOT click ignored during startup/config to keep saved WiFi");
+                return;
             }
             app.ToggleChatState();
         });
+        boot_button_.OnLongPress([this]() {
+            EnterDeepSleep();
+        });
+
+        gpio_set_pull_mode(BOOT_BUTTON_GPIO, GPIO_PULLUP_ONLY);
+        esp_timer_create_args_t timer_args = {
+            .callback = [](void* arg) {
+                static_cast<QdtechS3TouchLcd35Board*>(arg)->PollBootPowerButton();
+            },
+            .arg = this,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "boot_power",
+            .skip_unhandled_events = true,
+        };
+        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &boot_power_timer_));
+        ESP_ERROR_CHECK(esp_timer_start_periodic(boot_power_timer_, 50000));
+    }
+
+    void PollBootPowerButton() {
+        if (entering_deep_sleep_) {
+            return;
+        }
+        const bool pressed = gpio_get_level(BOOT_BUTTON_GPIO) == 0;
+        const int64_t now_ms = esp_timer_get_time() / 1000;
+        if (pressed && !boot_power_pressed_) {
+            boot_power_pressed_ = true;
+            boot_power_long_handled_ = false;
+            boot_power_press_start_ms_ = now_ms;
+            ESP_LOGI(TAG, "BOOT gpio down");
+        } else if (!pressed && boot_power_pressed_) {
+            boot_power_pressed_ = false;
+            ESP_LOGI(TAG, "BOOT gpio up duration=%dms", static_cast<int>(now_ms - boot_power_press_start_ms_));
+        } else if (pressed && !boot_power_long_handled_ && now_ms - boot_power_press_start_ms_ >= 2500) {
+            boot_power_long_handled_ = true;
+            ESP_LOGI(TAG, "BOOT gpio long press duration=%dms", static_cast<int>(now_ms - boot_power_press_start_ms_));
+            EnterDeepSleep();
+        }
+    }
+
+    void EnterDeepSleep() {
+        if (entering_deep_sleep_) {
+            return;
+        }
+        entering_deep_sleep_ = true;
+        ESP_LOGI(TAG, "BOOT long press: preparing deep sleep, release BOOT to power off");
+        if (boot_power_timer_) {
+            esp_timer_stop(boot_power_timer_);
+        }
+        GetBacklight()->SetBrightness(0, false);
+
+        const int64_t wait_start_ms = esp_timer_get_time() / 1000;
+        while (gpio_get_level(BOOT_BUTTON_GPIO) == 0) {
+            if ((esp_timer_get_time() / 1000) - wait_start_ms > 10000) {
+                ESP_LOGW(TAG, "BOOT still held after 10s; entering deep sleep anyway may wake immediately");
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        ESP_LOGI(TAG, "BOOT released: entering deep sleep, wake on GPIO%d low", BOOT_BUTTON_GPIO);
+        rtc_gpio_pullup_en(BOOT_BUTTON_GPIO);
+        rtc_gpio_pulldown_dis(BOOT_BUTTON_GPIO);
+        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(BOOT_BUTTON_GPIO, 0));
+        esp_deep_sleep_start();
     }
 
     void InitializeTools() {
@@ -843,12 +1130,36 @@ private:
         });
     }
 
+    void InitializeBattery() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        battery_monitor_.Start(desktop_ui);
+    }
+
     void InitializeFirmwareUpdate() {
         if (!display_) {
             return;
         }
         auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
         FirmwareUpdateService::GetInstance().Start(desktop_ui);
+    }
+
+    void InitializeBleConfig() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        ble_config_service_.Start(desktop_ui, &time_weather_service_);
+    }
+
+    void InitializeWifiConfigServer() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        wifi_config_server_.Start(desktop_ui, &time_weather_service_);
     }
 
     bool DrawFcFrame(QdtechLandscapeDisplay* qd_display, const uint16_t* pixels,
@@ -858,7 +1169,7 @@ private:
         }
 
         if (width == 256 && height == 240) {
-            constexpr uint16_t target_width = 320;
+            constexpr uint16_t target_width = 256;
             constexpr uint16_t target_height = 240;
             constexpr size_t target_pixels = target_width * target_height;
 
@@ -873,24 +1184,15 @@ private:
                 if (!fc_scaled_frame_) {
                     ESP_LOGW(TAG, "FC scale buffer alloc failed, draw original frame");
                     const int fallback_x = (DISPLAY_WIDTH - width) / 2;
-                    return qd_display->DrawLandscapeRgb565(fallback_x, 0, width, height, pixels);
+                    return qd_display->DrawLandscapeRgb565PreSwapped(fallback_x, 0, width, height, pixels);
                 }
                 fc_scaled_pixels_ = target_pixels;
             }
 
-            const uint32_t x_step = (static_cast<uint32_t>(width) << 16) / target_width;
-            for (uint16_t y = 0; y < target_height; ++y) {
-                const uint16_t* src = pixels + y * width;
-                uint16_t* dst = fc_scaled_frame_ + y * target_width;
-                uint32_t src_x_acc = 0;
-                for (uint16_t x = 0; x < target_width; ++x) {
-                    dst[x] = src[src_x_acc >> 16];
-                    src_x_acc += x_step;
-                }
-            }
+            memcpy(fc_scaled_frame_, pixels, target_pixels * sizeof(uint16_t));
 
-            return qd_display->DrawLandscapeRgb565((DISPLAY_WIDTH - target_width) / 2, 0,
-                                                   target_width, target_height, fc_scaled_frame_);
+            const int x = (DISPLAY_WIDTH - target_width) / 2;
+            return qd_display->DrawLandscapeRgb565PreSwapped(x, 0, target_width, target_height, fc_scaled_frame_);
         }
 
         if (width > DISPLAY_WIDTH || height > 240) {
@@ -898,7 +1200,7 @@ private:
         }
         const int x = (DISPLAY_WIDTH - width) / 2;
         const int y = (240 - height) / 2;
-        return qd_display->DrawLandscapeRgb565(x, y, width, height, pixels);
+        return qd_display->DrawLandscapeRgb565PreSwapped(x, y, width, height, pixels);
     }
 
     Button boot_button_;
@@ -906,6 +1208,11 @@ private:
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
+    esp_timer_handle_t boot_power_timer_ = nullptr;
+    bool boot_power_pressed_ = false;
+    bool boot_power_long_handled_ = false;
+    bool entering_deep_sleep_ = false;
+    int64_t boot_power_press_start_ms_ = 0;
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
     bool touch_cached_down_ = false;
@@ -916,10 +1223,13 @@ private:
     uint16_t touch_start_y_ = 0;
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
+    QdtechBatteryMonitor battery_monitor_;
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
+    QdBleConfigService ble_config_service_;
+    QdWifiConfigServer wifi_config_server_;
     uint16_t* fc_scaled_frame_ = nullptr;
     size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;

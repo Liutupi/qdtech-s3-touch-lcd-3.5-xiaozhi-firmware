@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-19
+Date: 2026-06-25
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -17,7 +17,24 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.16 (2026-06-19): Apps page reference-style visual polish and centered Network WiFi icon
 - v1.7.17 (2026-06-19): Main-page daily card lunar festival support, including 2026 Dragon Boat Festival
 - v1.7.18 (2026-06-19): FC emulator Nofrendo APU audio routed to ES8311 output
-- v1.7.19 (2026-06-19): FC playability stabilization, protocol suspension while FC is active, and rollback of unstable PSRAM SRAM/VRAM experiment
+- v1.7.19 (2026-06-20): Real QDTech battery ADC monitor plus first BOOT/GPIO0 deep-sleep soft-power implementation
+- v1.7.20 (2026-06-20): BOOT soft-power waits for key release before deep sleep so the same long press does not immediately wake the board
+- v1.7.21 (2026-06-20): BOOT startup clicks no longer clear saved WiFi after wake
+- v1.7.22 (2026-06-21): GitHub OTA download/write path tolerates missing content length and short first TLS chunks
+- v1.7.23 (2026-06-21): Persisted Classic/Cat theme switcher with Cat-style pink UI, brand mark, main clock, daily-card cat, and XiaoZhi face polish
+- v1.7.24 (2026-06-21): Shared LXGW WenKai UI font subset for Classic and Cat fixed Chinese UI text
+- v1.7.25 (2026-06-21): FC/NES dynamic ROM names restored to broad Puhui font coverage
+- v1.7.26 (2026-06-22): GitHub OTA firmware-download buffers enlarged for long release-asset redirects
+- v1.7.27 (2026-06-23): Added Tupi Warm theme and restored its weather card to the proven Classic weather animation layout
+- v1.7.28 (2026-06-23): GitHub Release asset OTA fallback via proxy-prefixed download URLs after direct GitHub TLS connection failures
+- v1.7.33 (2026-06-23): Settings OTA uses a PSRAM-stack HTTPS task plus an internal-RAM flash worker so TLS and esp_ota_write no longer fight over one internal task stack
+- v1.7.32 (2026-06-23): Settings OTA upgrade reduces internal stack and firmware HTTP buffer so header/download buffers fit in low internal RAM
+- v1.7.31 (2026-06-23): Settings OTA check uses a PSRAM stack while flash-writing upgrade uses an internal stack, fixing the task-create failure found during v1.7.30 testing
+- v1.7.30 (2026-06-23): Settings OTA writes now run from internal RAM task/buffers, fixing the cache-freeze assertion seen when v1.7.28 tried to install a GitHub Release asset
+- v1.7.29 (2026-06-23): Main-page weather module uses a six-scene GIF animation pack for clear, cloudy, rain, snow, fog, and storm
+- v1.7.40 (2026-06-23): Code quality optimization, SD card radio.json support, FC stability fixes, thread safety improvements
+- v1.7.43 (2026-06-24): Rolled back the withdrawn Caiyun weather integration and restored the no-token Open-Meteo weather path for stable multi-board OTA
+- v1.7.44 (2026-06-25): Added persistent profile/weather config plumbing, a verified WiFi phone config page/API, automatic city geocoding, Chinese weather text rendering, memory-guarded BLE prototype code, and a fixed main-page logo/name brand layout
 
 ## Confirmed Hardware From Source
 
@@ -44,6 +61,7 @@ From `main/boards/qdtech-s3-touch-lcd-3.5/config.h`:
 - Audio and touch I2C: SDA GPIO38, SCL GPIO39.
 - PA pin: GPIO1, inverted enable.
 - Boot button: GPIO0.
+- Battery voltage ADC: ADC1_CH7 / GPIO8 with x2 divider, calibrated in firmware when available.
 
 Anything not confirmed by source should be treated as unknown until checked against hardware schematics.
 
@@ -75,6 +93,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - XiaoZhi voice stack remains the core application.
 - Landscape LVGL display with QDTech board-specific flush path.
 - Touch tap/swipe polling for desktop navigation.
+- Persisted Settings -> Appearance -> Theme switcher with `Classic`, `Cat`, and `Tupi Warm` themes.
 - Unified navigation hierarchy:
   - Main left swipe opens Apps.
   - Apps right swipe returns to Main.
@@ -112,7 +131,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Nofrendo is the active emulator path; see `docs/HANDOFF.md` and `docs/CHANGELOG_QDTECH.md` for current hardware-test evidence and remaining risks.
 - Time display through SNTP.
 - Weather fetch with cached last successful data.
-- Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states.
+- Main-page weather visuals map current weather codes to clear, cloudy, rain, snow, and storm states. Tupi Warm intentionally reuses the proven Classic weather icon/particle layout while keeping the warm-paper palette.
 - Main-page daily card rotates date-linked local content:
   - lunar and fixed Gregorian festival first
   - history-on-this-day second
@@ -130,6 +149,22 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Persists brightness and volume changes when slider interaction finishes.
   - Bridges the current manual touch path to slider release and vertical content scrolling.
   - Keeps WiFi scan results and weather-location status in the same page.
+  - Shows phone-sync status plus the current custom text logo, owner name, and weather city.
+- WiFi phone configuration:
+  - Serves a local phone-friendly page at `http://<device-ip>/`.
+  - Provides `GET /config` and `POST /config` for `logo`, `name`/`owner`, `city`, `latitude`, and `longitude`.
+  - The user-facing form only requires the weather city; omitted coordinates are resolved automatically through Open-Meteo geocoding.
+  - Last hardware verification used `http://192.168.1.111/`.
+  - Stores values in NVS so they survive reboot.
+  - Uses RAM config caching and a PSRAM-stack HTTP task to fit the current low-internal-RAM runtime.
+  - Hardware POST verification with `city=中山` resolved `22.5231,113.3791`, logged `wifi config synced profile=1 weather=1`, refreshed weather, updated brand labels in place, and did not reboot.
+  - Hardware POST verification with `city=dongguan` resolved to `东莞市 23.0180,113.7487`; Chinese weather text rendered through a Chinese-capable font.
+- BLE phone configuration:
+  - Can advertise as `QDTech-Config` when the low-memory guard allows NimBLE startup.
+  - Accepts JSON writes for `logo`, `name`/`owner`, `city`, `latitude`, and `longitude`.
+  - Reads back the current profile/weather JSON for phone-side synchronization.
+  - Stores values in NVS so they survive reboot.
+  - Current hardware validation after WiFi startup skipped BLE with `BLE low memory` (`free_internal=14743`, `largest_internal=14336`) to avoid rebooting the board.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
 - Radio MCP tools:
@@ -238,3 +273,4 @@ For photos:
 - The Photos page is intentionally controlled only by gestures after entry; there is no visible Back or Refresh button on that page.
 - Photos has no hidden tap exit or refresh zone; use a horizontal swipe to leave it.
 - QDTech releases should publish `full.bin`, `firmware.zip`, and standalone `app.bin` assets; the on-device updater consumes the `*-app.bin` asset from the latest GitHub Release.
+- From `v1.7.28` onward, if the direct GitHub Release asset download fails, OTA tries proxy-prefixed download URLs for the same `browser_download_url`. Older firmware still needs a one-time USB flash to get this fallback.

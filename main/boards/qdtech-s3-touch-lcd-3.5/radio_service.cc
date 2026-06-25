@@ -4,22 +4,28 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <string>
 #include <vector>
 
 #include "application.h"
 #include "audio_codec.h"
 #include "board.h"
+#include "cJSON.h"
+#include "config.h"
 #include "desktop_ui.h"
+#include "driver/sdmmc_host.h"
 #include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "mp3dec.h"
+#include "sdmmc_cmd.h"
 #include "settings.h"
 #include "wifi_station.h"
 
@@ -47,81 +53,249 @@ enum class RadioCategory {
 };
 
 struct RadioStation {
-    const char* name;
-    const char* urls[3];
-    const char* codec;
+    std::string name;
+    std::string urls[3];
+    std::string codec;
     int bitrate_kbps;
     RadioCategory category;
     bool favorite;
 };
 
-static RadioStation kStations[] = {
-    // 全国性电台 (CNR)
-    {"CNR China Voice", {"https://lhttp.qtfm.cn/live/15318317/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
-    {"CNR Economic", {"https://lhttp.qingting.fm/live/15318569/64k.mp3", "https://lhttp.qtfm.cn/live/15318569/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
-    {"CNR Music", {"https://lhttp.qtfm.cn/live/15318497/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318497/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
-    {"CNR Traffic", {"https://lhttp.qtfm.cn/live/15318641/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318641/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
-    {"CNR Literature", {"https://lhttp.qtfm.cn/live/15318785/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318785/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
-    {"CNR Senior", {"https://lhttp.qtfm.cn/live/15318857/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318857/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL, false},
+static std::vector<RadioStation> kStations;
 
-    // 北京电台
-    {"Beijing News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
-    {"Beijing Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
-    {"Beijing Music", {"https://lhttp.qtfm.cn/live/4938/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING, false},
+static std::string Lower(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
+    return text;
+}
 
-    // 上海电台
-    {"Shanghai News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
-    {"Shanghai Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
-    {"Shanghai Music", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI, false},
+static RadioCategory ParseCategory(const char* cat) {
+    if (!cat) return RadioCategory::OTHER;
+    std::string c = Lower(cat);
+    if (c == "national" || c == "全国") return RadioCategory::NATIONAL;
+    if (c == "beijing" || c == "北京") return RadioCategory::BEIJING;
+    if (c == "shanghai" || c == "上海") return RadioCategory::SHANGHAI;
+    if (c == "guangdong" || c == "广东") return RadioCategory::GUANGDONG;
+    if (c == "zhejiang" || c == "浙江") return RadioCategory::ZHEJIANG;
+    if (c == "jiangsu" || c == "江苏") return RadioCategory::JIANGSU;
+    if (c == "sichuan" || c == "四川") return RadioCategory::SICHUAN;
+    if (c == "hunan" || c == "湖南") return RadioCategory::HUNAN;
+    if (c == "hubei" || c == "湖北") return RadioCategory::HUBEI;
+    if (c == "shandong" || c == "山东") return RadioCategory::SHANDONG;
+    if (c == "music" || c == "音乐") return RadioCategory::MUSIC;
+    if (c == "traffic" || c == "交通") return RadioCategory::TRAFFIC;
+    return RadioCategory::OTHER;
+}
 
-    // 广东电台
-    {"Guangzhou News", {"http://lhttp.qingting.fm/live/4848/64k.mp3", "https://lhttp.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
-    {"Guangzhou Traffic", {"http://lhttp.qingting.fm/live/4955/64k.mp3", "https://lhttp.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
-    {"Pearl River FM", {"http://lhttp.qingting.fm/live/1259/64k.mp3", "https://lhttp.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
-    {"Guangdong Music", {"http://lhttp.qingting.fm/live/1260/64k.mp3", "https://lhttp.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
-    {"Guangdong News", {"https://lhttp.qtfm.cn/live/471/64k.mp3", "https://lhttp-hw.qtfm.cn/live/471/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
-    {"Shenzhen FM971", {"http://lhttp.qingting.fm/live/1271/64k.mp3", "https://lhttp.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG, false},
+static void LoadBuiltinStations() {
+    if (!kStations.empty()) return;
+    
+    struct BuiltinStation {
+        const char* name;
+        const char* urls[3];
+        const char* codec;
+        int bitrate_kbps;
+        RadioCategory category;
+    };
+    
+    static const BuiltinStation builtin[] = {
+        {"CNR China Voice", {"https://lhttp.qtfm.cn/live/15318317/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"CNR Economic", {"https://lhttp.qingting.fm/live/15318569/64k.mp3", "https://lhttp.qtfm.cn/live/15318569/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"CNR Music", {"https://lhttp.qtfm.cn/live/15318497/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318497/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"CNR Traffic", {"https://lhttp.qtfm.cn/live/15318641/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318641/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"CNR Literature", {"https://lhttp.qtfm.cn/live/15318785/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318785/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"CNR Senior", {"https://lhttp.qtfm.cn/live/15318857/64k.mp3", "https://lhttp-hw.qtfm.cn/live/15318857/64k.mp3", nullptr}, "MP3", 64, RadioCategory::NATIONAL},
+        {"Beijing News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING},
+        {"Beijing Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING},
+        {"Beijing Music", {"https://lhttp.qtfm.cn/live/4938/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::BEIJING},
+        {"Shanghai News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI},
+        {"Shanghai Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI},
+        {"Shanghai Music", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANGHAI},
+        {"Guangzhou News", {"http://lhttp.qingting.fm/live/4848/64k.mp3", "https://lhttp.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Guangzhou Traffic", {"http://lhttp.qingting.fm/live/4955/64k.mp3", "https://lhttp.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Pearl River FM", {"http://lhttp.qingting.fm/live/1259/64k.mp3", "https://lhttp.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Guangdong Music", {"http://lhttp.qingting.fm/live/1260/64k.mp3", "https://lhttp.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Guangdong News", {"https://lhttp.qtfm.cn/live/471/64k.mp3", "https://lhttp-hw.qtfm.cn/live/471/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Shenzhen FM971", {"http://lhttp.qingting.fm/live/1271/64k.mp3", "https://lhttp.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::GUANGDONG},
+        {"Zhejiang Voice", {"https://lhttp.qtfm.cn/live/1223/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG},
+        {"Zhejiang Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG},
+        {"Zhejiang Music", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG},
+        {"Jiangsu News", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU},
+        {"Jiangsu Traffic", {"https://lhttp.qtfm.cn/live/4915/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU},
+        {"Sichuan News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN},
+        {"Sichuan Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN},
+        {"Hunan News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN},
+        {"Hunan Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN},
+        {"Hubei News", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI},
+        {"Hubei Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI},
+        {"Shandong News", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG},
+        {"Shandong Traffic", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG},
+        {"Music Radio", {"http://lhttp.qingting.fm/live/5022107/64k.mp3", "https://lhttp.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC},
+        {"Music FM", {"http://lhttp.qingting.fm/live/4938/64k.mp3", "https://lhttp.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC},
+        {"West Lake Voice", {"http://lhttp.qingting.fm/live/1223/64k.mp3", "https://lhttp.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC},
+        {"Traffic 959", {"http://lhttp.qingting.fm/live/5021381/64k.mp3", "https://lhttp.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC},
+        {"Business Radio", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC},
+        {"Night Radio", {"http://lhttp.qingting.fm/live/4915/64k.mp3", "https://lhttp.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::OTHER},
+    };
+    
+    for (const auto& s : builtin) {
+        RadioStation station;
+        station.name = s.name;
+        station.urls[0] = s.urls[0] ? s.urls[0] : "";
+        station.urls[1] = s.urls[1] ? s.urls[1] : "";
+        station.urls[2] = s.urls[2] ? s.urls[2] : "";
+        station.codec = s.codec;
+        station.bitrate_kbps = s.bitrate_kbps;
+        station.category = s.category;
+        station.favorite = false;
+        kStations.push_back(station);
+    }
+}
 
-    // 浙江电台
-    {"Zhejiang Voice", {"https://lhttp.qtfm.cn/live/1223/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
-    {"Zhejiang Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
-    {"Zhejiang Music", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::ZHEJIANG, false},
+static bool TryMountSdCard(uint8_t width, int max_freq_khz) {
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.max_freq_khz = max_freq_khz;
 
-    // 江苏电台
-    {"Jiangsu News", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU, false},
-    {"Jiangsu Traffic", {"https://lhttp.qtfm.cn/live/4915/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::JIANGSU, false},
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.width = width;
+    slot_config.clk = PHOTO_SDMMC_CLK_PIN;
+    slot_config.cmd = PHOTO_SDMMC_CMD_PIN;
+    slot_config.d0 = PHOTO_SDMMC_D0_PIN;
+    if (width >= 4) {
+        slot_config.d1 = PHOTO_SDMMC_D1_PIN;
+        slot_config.d2 = PHOTO_SDMMC_D2_PIN;
+        slot_config.d3 = PHOTO_SDMMC_D3_PIN;
+    } else {
+        slot_config.d1 = GPIO_NUM_NC;
+        slot_config.d2 = GPIO_NUM_NC;
+        slot_config.d3 = GPIO_NUM_NC;
+    }
+    slot_config.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-    // 四川电台
-    {"Sichuan News", {"https://lhttp.qtfm.cn/live/4848/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN, false},
-    {"Sichuan Traffic", {"https://lhttp.qtfm.cn/live/4955/64k.mp3", "https://lhttp-hw.qtfm.cn/live/4955/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SICHUAN, false},
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 0,
+    };
 
-    // 湖南电台
-    {"Hunan News", {"https://lhttp.qtfm.cn/live/1259/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN, false},
-    {"Hunan Traffic", {"https://lhttp.qtfm.cn/live/1260/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1260/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUNAN, false},
+    sdmmc_card_t* card = nullptr;
+    esp_err_t err = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "radio sd mount failed width=%d err=%s", width, esp_err_to_name(err));
+        return false;
+    }
+    ESP_LOGI(TAG, "radio sd mounted width=%d", width);
+    return true;
+}
 
-    // 湖北电台
-    {"Hubei News", {"https://lhttp.qtfm.cn/live/1271/64k.mp3", "https://lhttp-hw.qtfm.cn/live/1271/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI, false},
-    {"Hubei Traffic", {"https://lhttp.qtfm.cn/live/5021381/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::HUBEI, false},
+static bool EnsureSdCardMounted() {
+    DIR* existing = opendir("/sdcard");
+    if (existing) {
+        closedir(existing);
+        return true;
+    }
+    if (TryMountSdCard(PHOTO_SDMMC_BUS_WIDTH, 10000)) {
+        return true;
+    }
+    if (PHOTO_SDMMC_BUS_WIDTH != 1) {
+        return TryMountSdCard(1, 10000);
+    }
+    return false;
+}
 
-    // 山东电台
-    {"Shandong News", {"https://lhttp.qtfm.cn/live/5022107/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG, false},
-    {"Shandong Traffic", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::SHANDONG, false},
+static bool LoadStationsFromSdCard() {
+    if (!EnsureSdCardMounted()) {
+        ESP_LOGI(TAG, "SD card not available, using built-in stations");
+        return false;
+    }
+    
+    const char* path = "/sdcard/radio.json";
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        ESP_LOGI(TAG, "radio.json not found on SD card, using built-in stations");
+        return false;
+    }
+    
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    rewind(file);
+    
+    if (size <= 0 || size > 32768) {
+        fclose(file);
+        ESP_LOGW(TAG, "radio.json invalid size: %ld", size);
+        return false;
+    }
+    
+    char* buffer = static_cast<char*>(heap_caps_malloc(size + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!buffer) {
+        fclose(file);
+        ESP_LOGW(TAG, "radio.json alloc failed");
+        return false;
+    }
+    
+    size_t read = fread(buffer, 1, size, file);
+    fclose(file);
+    buffer[read] = '\0';
+    
+    cJSON* root = cJSON_Parse(buffer);
+    heap_caps_free(buffer);
+    
+    if (!root) {
+        ESP_LOGW(TAG, "radio.json parse failed");
+        return false;
+    }
+    
+    cJSON* stations = cJSON_GetObjectItem(root, "stations");
+    if (!cJSON_IsArray(stations)) {
+        cJSON_Delete(root);
+        ESP_LOGW(TAG, "radio.json missing stations array");
+        return false;
+    }
+    
+    kStations.clear();
+    int count = cJSON_GetArraySize(stations);
+    for (int i = 0; i < count && i < 128; ++i) {
+        cJSON* item = cJSON_GetArrayItem(stations, i);
+        if (!item) continue;
+        
+        cJSON* name = cJSON_GetObjectItem(item, "name");
+        cJSON* url = cJSON_GetObjectItem(item, "url");
+        cJSON* url2 = cJSON_GetObjectItem(item, "url2");
+        cJSON* url3 = cJSON_GetObjectItem(item, "url3");
+        cJSON* codec = cJSON_GetObjectItem(item, "codec");
+        cJSON* bitrate = cJSON_GetObjectItem(item, "bitrate");
+        cJSON* category = cJSON_GetObjectItem(item, "category");
+        
+        if (!cJSON_IsString(name) || !cJSON_IsString(url)) continue;
+        
+        RadioStation station;
+        station.name = name->valuestring;
+        station.urls[0] = url->valuestring;
+        station.urls[1] = cJSON_IsString(url2) ? url2->valuestring : "";
+        station.urls[2] = cJSON_IsString(url3) ? url3->valuestring : "";
+        station.codec = cJSON_IsString(codec) ? codec->valuestring : "MP3";
+        station.bitrate_kbps = cJSON_IsNumber(bitrate) ? bitrate->valueint : 64;
+        station.category = ParseCategory(cJSON_IsString(category) ? category->valuestring : nullptr);
+        station.favorite = false;
+        kStations.push_back(station);
+    }
+    
+    cJSON_Delete(root);
+    ESP_LOGI(TAG, "Loaded %d stations from radio.json", (int)kStations.size());
+    return !kStations.empty();
+}
 
-    // 音乐电台
-    {"Music Radio", {"http://lhttp.qingting.fm/live/5022107/64k.mp3", "https://lhttp.qtfm.cn/live/5022107/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
-    {"Music FM", {"http://lhttp.qingting.fm/live/4938/64k.mp3", "https://lhttp.qtfm.cn/live/4938/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
-    {"West Lake Voice", {"http://lhttp.qingting.fm/live/1223/64k.mp3", "https://lhttp.qtfm.cn/live/1223/64k.mp3", nullptr}, "MP3", 64, RadioCategory::MUSIC, false},
-
-    // 交通广播
-    {"Traffic 959", {"http://lhttp.qingting.fm/live/5021381/64k.mp3", "https://lhttp.qtfm.cn/live/5021381/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC, false},
-    {"Business Radio", {"https://lhttp.qtfm.cn/live/5022308/64k.mp3", "https://lhttp-hw.qtfm.cn/live/5022308/64k.mp3", nullptr}, "MP3", 64, RadioCategory::TRAFFIC, false},
-
-    // 其他电台
-    {"Night Radio", {"http://lhttp.qingting.fm/live/4915/64k.mp3", "https://lhttp.qtfm.cn/live/4915/64k.mp3", nullptr}, "MP3", 64, RadioCategory::OTHER, false},
-};
+static void EnsureStationsLoaded() {
+    if (!kStations.empty()) return;
+    if (!LoadStationsFromSdCard()) {
+        LoadBuiltinStations();
+    }
+}
 
 static int StationCount() {
-    return sizeof(kStations) / sizeof(kStations[0]);
+    EnsureStationsLoaded();
+    return static_cast<int>(kStations.size());
 }
 
 static const char* CategoryName(RadioCategory category) {
@@ -173,20 +347,17 @@ static int16_t Clamp16(int value) {
     return static_cast<int16_t>(value);
 }
 
-static std::string Lower(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return text;
-}
-
 void RadioService::Start(DesktopUI* desktop_ui) {
     desktop_ui_ = desktop_ui;
     if (started_) {
         return;
     }
     started_ = true;
-    std::fill_n(last_success_url_, sizeof(last_success_url_) / sizeof(last_success_url_[0]), -1);
+    
+    int count = StationCount();
+    ESP_LOGI(TAG, "RadioService::Start: %d stations loaded", count);
+    
+    last_success_url_.resize(count, -1);
     audio_focus_blocked_.store(IsXiaozhiAudioState(), std::memory_order_relaxed);
     queue_ = xQueueCreate(8, sizeof(Command));
     Application::GetInstance().RegisterDeviceStateCallback([this](DeviceState previous, DeviceState current) {
@@ -194,9 +365,15 @@ void RadioService::Start(DesktopUI* desktop_ui) {
     });
     LoadFavorites();
     LoadStationIndex();
-    xTaskCreate([](void* arg) {
+    
+    constexpr size_t kTaskStackWords = 6144 / sizeof(StackType_t);
+    BaseType_t ret = xTaskCreate([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
     }, "radio_service", 6144, this, 4, nullptr);
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "radio task create failed");
+    }
+    
     SetUi("Ready", "Tap Play");
 }
 
@@ -221,9 +398,13 @@ void RadioService::SaveFavorites() {
 void RadioService::LoadStationIndex() {
     Settings settings("radio_st", false);
     int index = settings.GetInt("last", 0);
-    if (index >= 0 && index < StationCount()) {
+    int count = StationCount();
+    if (count > 0 && index >= 0 && index < count) {
         station_index_ = index;
-        ESP_LOGI(TAG, "Loaded last station index=%d name=%s", station_index_, kStations[station_index_].name);
+        ESP_LOGI(TAG, "Loaded last station index=%d name=%s", station_index_, kStations[station_index_].name.c_str());
+    } else {
+        station_index_ = 0;
+        ESP_LOGW(TAG, "Invalid station index %d, reset to 0 (count=%d)", index, count);
     }
 }
 
@@ -261,7 +442,7 @@ int RadioService::GetStationCount() const {
 
 const char* RadioService::GetStationName(int index) const {
     if (index >= 0 && index < StationCount()) {
-        return kStations[index].name;
+        return kStations[index].name.c_str();
     }
     return "";
 }
@@ -274,7 +455,7 @@ const char* RadioService::GetStationCategory(int index) const {
 }
 
 void RadioService::PlayPause() {
-    ESP_LOGI(TAG, "PlayPause requested play_requested=%d", play_requested_);
+    ESP_LOGI(TAG, "PlayPause requested play_requested=%d", play_requested_.load(std::memory_order_relaxed));
     PostCommand(Command::PLAY_PAUSE);
 }
 
@@ -307,7 +488,7 @@ std::string RadioService::GetStatusJson() const {
     char json[192];
     snprintf(json, sizeof(json),
              "{\"station\":\"%s\",\"state\":\"%s\",\"codec\":\"%s\",\"bitrate_kbps\":%d}",
-             station.name, play_requested_ ? "playing" : "stopped", station.codec, station.bitrate_kbps);
+             station.name.c_str(), play_requested_ ? "playing" : "stopped", station.codec.c_str(), station.bitrate_kbps);
     return json;
 }
 
@@ -378,17 +559,29 @@ void RadioService::Task() {
 }
 
 void RadioService::HandleCommand(Command command) {
+    const int count = StationCount();
+    if (count <= 0) {
+        ESP_LOGW(TAG, "radio no stations available");
+        return;
+    }
+    
+    if (station_index_ < 0 || station_index_ >= count) {
+        station_index_ = 0;
+    }
+    
     switch (command) {
-        case Command::PLAY_PAUSE:
-            play_requested_ = !play_requested_;
-            stop_requested_ = !play_requested_;
+        case Command::PLAY_PAUSE: {
+            play_requested_ = !play_requested_.load(std::memory_order_relaxed);
+            stop_requested_ = !play_requested_.load(std::memory_order_relaxed);
             reconnect_attempt_ = 0;
-            if (!play_requested_) {
+            const bool playing = play_requested_.load(std::memory_order_relaxed);
+            if (!playing) {
                 Application::GetInstance().SetExternalAudioActive(false);
             }
-            SetUi(play_requested_ ? "Connecting" : "Paused", play_requested_ ? "Opening stream" : "Stopped");
-            ESP_LOGI(TAG, "radio %s station=%s", play_requested_ ? "play requested" : "paused", kStations[station_index_].name);
+            SetUi(playing ? "Connecting" : "Paused", playing ? "Opening stream" : "Stopped");
+            ESP_LOGI(TAG, "radio %s station=%s", playing ? "play requested" : "paused", kStations[station_index_].name.c_str());
             break;
+        }
         case Command::STOP:
             play_requested_ = false;
             stop_requested_ = true;
@@ -403,7 +596,7 @@ void RadioService::HandleCommand(Command command) {
             stop_requested_ = false;
             reconnect_attempt_ = 0;
             SetUi("Connecting", "Next station");
-            ESP_LOGI(TAG, "radio next station=%s", kStations[station_index_].name);
+            ESP_LOGI(TAG, "radio next station=%s", kStations[station_index_].name.c_str());
             break;
         case Command::PREV:
             NextStation(-1);
@@ -411,7 +604,7 @@ void RadioService::HandleCommand(Command command) {
             stop_requested_ = false;
             reconnect_attempt_ = 0;
             SetUi("Connecting", "Previous station");
-            ESP_LOGI(TAG, "radio previous station=%s", kStations[station_index_].name);
+            ESP_LOGI(TAG, "radio previous station=%s", kStations[station_index_].name.c_str());
             break;
         case Command::FOCUS_CHANGED:
             if (audio_focus_blocked_.load(std::memory_order_relaxed)) {
@@ -419,30 +612,40 @@ void RadioService::HandleCommand(Command command) {
                 SetUi("Paused", "XiaoZhi is using audio");
             } else if (play_requested_) {
                 SetUi("Connecting", "Audio focus restored");
-                ESP_LOGI(TAG, "radio audio focus restored, resume station=%s", kStations[station_index_].name);
+                ESP_LOGI(TAG, "radio audio focus restored, resume station=%s", kStations[station_index_].name.c_str());
             }
             break;
     }
 }
 
 void RadioService::PlayCurrentStation() {
+    const int count = StationCount();
+    if (count <= 0 || station_index_ < 0 || station_index_ >= count) {
+        SetUi("Error", "No station");
+        return;
+    }
+    
     const auto& station = kStations[station_index_];
     bool tried_any = false;
     stop_requested_ = false;
     int url_order[3] = {0, 1, 2};
-    if (last_success_url_[station_index_] > 0 && last_success_url_[station_index_] < 3) {
+    
+    if (station_index_ < static_cast<int>(last_success_url_.size()) && 
+        last_success_url_[station_index_] > 0 && last_success_url_[station_index_] < 3) {
         url_order[0] = last_success_url_[station_index_];
         url_order[1] = 0;
         url_order[2] = last_success_url_[station_index_] == 1 ? 2 : 1;
     }
+    
     for (int order = 0; order < 3 && play_requested_ && !stop_requested_; ++order) {
         if (audio_focus_blocked_.load(std::memory_order_relaxed)) {
             ESP_LOGI(TAG, "radio station open deferred by audio focus");
             return;
         }
         const int i = url_order[order];
-        const char* url = station.urls[i];
-        if (!url) {
+        if (i < 0 || i >= 3) continue;
+        const char* url = station.urls[i].c_str();
+        if (!url || url[0] == '\0') {
             continue;
         }
         tried_any = true;
@@ -482,7 +685,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
 
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "open failed station=%s url_index=%d err=%s url=%s", station.name, url_index, esp_err_to_name(err), url);
+        ESP_LOGW(TAG, "open failed station=%s url_index=%d err=%s url=%s", station.name.c_str(), url_index, esp_err_to_name(err), url);
         esp_http_client_cleanup(client);
         return false;
     }
@@ -491,14 +694,14 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
     int status = esp_http_client_get_status_code(client);
     if (status < 200 || status >= 400) {
         ESP_LOGW(TAG, "bad stream status station=%s url_index=%d status=%d len=%d url=%s",
-                 station.name, url_index, status, content_length, url);
+                 station.name.c_str(), url_index, status, content_length, url);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return false;
     }
 
     ESP_LOGI(TAG, "stream open station=%s url_index=%d status=%d len=%d url=%s",
-             station.name, url_index, status, content_length, url);
+             station.name.c_str(), url_index, status, content_length, url);
     SetUi("Buffering", "Filling buffer");
 
     HMP3Decoder decoder = MP3InitDecoder();
@@ -536,7 +739,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
         }
         if (ShouldYieldAudio()) {
             SetUi("Paused", "XiaoZhi is using audio");
-            ESP_LOGI(TAG, "radio yielded audio focus station=%s", station.name);
+            ESP_LOGI(TAG, "radio yielded audio focus station=%s", station.name.c_str());
             break;
         }
 
@@ -556,7 +759,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
                 vTaskDelay(pdMS_TO_TICKS(20));
                 break;
             }
-            ESP_LOGW(TAG, "stream read failed station=%s url_index=%d read=%d", station.name, url_index, read);
+            ESP_LOGW(TAG, "stream read failed station=%s url_index=%d read=%d", station.name.c_str(), url_index, read);
             stream_failed = true;
             break;
         }
@@ -573,7 +776,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
 
         int offset = MP3FindSyncWord(read_ptr, bytes_left);
         if (offset < 0) {
-            ESP_LOGW(TAG, "mp3 sync not found station=%s url_index=%d bytes=%d", station.name, url_index, bytes_left);
+            ESP_LOGW(TAG, "mp3 sync not found station=%s url_index=%d bytes=%d", station.name.c_str(), url_index, bytes_left);
             bytes_left = 0;
             read_ptr = read_buffer;
             SetUi("Buffering", "Finding sync");
@@ -588,7 +791,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
         }
         if (mp3_err != ERR_MP3_NONE) {
             ++decode_errors;
-            ESP_LOGW(TAG, "mp3 decode failed station=%s url_index=%d err=%d count=%d", station.name, url_index, mp3_err, decode_errors);
+            ESP_LOGW(TAG, "mp3 decode failed station=%s url_index=%d err=%d count=%d", station.name.c_str(), url_index, mp3_err, decode_errors);
             if (decode_errors > 20) {
                 SetUi("Reconnecting", "Decode errors");
                 break;
@@ -607,7 +810,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
         if (decoded_frames == 0) {
             last_success_url_[station_index_] = url_index;
             reconnect_attempt_ = 0;
-            ESP_LOGI(TAG, "radio remembered successful url station=%s url_index=%d", station.name, url_index);
+            ESP_LOGI(TAG, "radio remembered successful url station=%s url_index=%d", station.name.c_str(), url_index);
         }
         ++decoded_frames;
         if (decoded_frames == 1 || decoded_frames % 64 == 0) {
@@ -616,7 +819,7 @@ bool RadioService::PlayUrl(const char* url, int url_index) {
                      frame_info.bitrate / 1000, frame_info.samprate, static_cast<unsigned>(total_bytes / 1024));
             SetUi("Playing", detail);
             ESP_LOGI(TAG, "playing station=%s frames=%d rate=%d channels=%d total=%u KB",
-                     station.name, decoded_frames, frame_info.samprate, frame_info.nChans,
+                     station.name.c_str(), decoded_frames, frame_info.samprate, frame_info.nChans,
                      static_cast<unsigned>(total_bytes / 1024));
         }
     }
@@ -652,13 +855,23 @@ void RadioService::OnDeviceStateChanged(int previous_state, int current_state) {
     const bool was_blocked = audio_focus_blocked_.exchange(blocked, std::memory_order_relaxed);
     if (blocked != was_blocked) {
         ESP_LOGI(TAG, "audio focus %s by XiaoZhi state=%d play_requested=%d",
-                 blocked ? "blocked" : "released", current_state, play_requested_);
+                 blocked ? "blocked" : "released", current_state, play_requested_.load(std::memory_order_relaxed));
         PostCommand(Command::FOCUS_CHANGED);
     }
 }
 
 void RadioService::NextStation(int delta) {
-    station_index_ = (station_index_ + delta + StationCount()) % StationCount();
+    const int count = StationCount();
+    if (count <= 0) {
+        ESP_LOGW(TAG, "NextStation: no stations available");
+        return;
+    }
+    if (station_index_ < 0 || station_index_ >= count) {
+        station_index_ = 0;
+        ESP_LOGW(TAG, "NextStation: station_index_ was out of range, reset to 0");
+    }
+    station_index_ = (station_index_ + delta + count) % count;
+    ESP_LOGI(TAG, "NextStation: new index=%d count=%d name=%s", station_index_, count, kStations[station_index_].name.c_str());
     SaveStationIndex();
 }
 
@@ -668,9 +881,9 @@ void RadioService::SetUi(const char* state, const char* detail) {
     }
     const auto& station = kStations[station_index_];
     char meta[96];
-    snprintf(meta, sizeof(meta), "%s %d kbps  %s", station.codec, station.bitrate_kbps, detail ? detail : "");
+    snprintf(meta, sizeof(meta), "%s %d kbps  %s", station.codec.c_str(), station.bitrate_kbps, detail ? detail : "");
     if (lvgl_port_lock(100)) {
-        desktop_ui_->SetRadioState(station.name, state, meta);
+        desktop_ui_->SetRadioState(station.name.c_str(), state, meta);
         lvgl_port_unlock();
     }
 }
@@ -685,35 +898,34 @@ void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int s
         return;
     }
 
-    std::vector<int16_t> mono(frames);
+    pcm_mono_buf_.resize(frames);
     if (channels == 2) {
         for (int i = 0; i < frames; ++i) {
-            mono[i] = Clamp16(((int)pcm[i * 2] + (int)pcm[i * 2 + 1]) / 2);
+            pcm_mono_buf_[i] = Clamp16(((int)pcm[i * 2] + (int)pcm[i * 2 + 1]) / 2);
         }
     } else {
         for (int i = 0; i < frames; ++i) {
-            mono[i] = Clamp16((int)pcm[i] * 2);
+            pcm_mono_buf_[i] = Clamp16((int)pcm[i] * 2);
         }
     }
 
     auto* codec = Board::GetInstance().GetAudioCodec();
     const int out_rate = codec->output_sample_rate();
-    std::vector<int16_t> output;
     if (sample_rate == out_rate) {
-        output = std::move(mono);
+        pcm_output_buf_.swap(pcm_mono_buf_);
     } else {
         int out_frames = std::max(1, frames * out_rate / sample_rate);
-        output.resize(out_frames);
+        pcm_output_buf_.resize(out_frames);
         for (int i = 0; i < out_frames; ++i) {
             int64_t src_pos_q16 = (int64_t)i * sample_rate * 65536 / out_rate;
             int src_index = src_pos_q16 >> 16;
             int frac = src_pos_q16 & 0xffff;
             if (src_index >= frames - 1) {
-                output[i] = mono[frames - 1];
+                pcm_output_buf_[i] = pcm_mono_buf_[frames - 1];
             } else {
-                int a = mono[src_index];
-                int b = mono[src_index + 1];
-                output[i] = Clamp16((a * (65536 - frac) + b * frac) >> 16);
+                int a = pcm_mono_buf_[src_index];
+                int b = pcm_mono_buf_[src_index + 1];
+                pcm_output_buf_[i] = Clamp16((a * (65536 - frac) + b * frac) >> 16);
             }
         }
     }
@@ -721,5 +933,5 @@ void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int s
     if (!codec->output_enabled()) {
         codec->EnableOutput(true);
     }
-    codec->OutputData(output);
+    codec->OutputData(pcm_output_buf_);
 }

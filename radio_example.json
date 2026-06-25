@@ -1,0 +1,51 @@
+{
+  "stations": [
+    {
+      "name": "CNR China Voice",
+      "url": "https://lhttp.qtfm.cn/live/15318317/64k.mp3",
+      "url2": "https://lhttp-hw.qtfm.cn/live/15318317/64k.mp3",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "national"
+    },
+    {
+      "name": "Beijing News",
+      "url": "https://lhttp.qtfm.cn/live/4848/64k.mp3",
+      "url2": "https://lhttp-hw.qtfm.cn/live/4848/64k.mp3",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "beijing"
+    },
+    {
+      "name": "Shanghai News",
+      "url": "https://lhttp.qtfm.cn/live/1259/64k.mp3",
+      "url2": "https://lhttp-hw.qtfm.cn/live/1259/64k.mp3",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "shanghai"
+    },
+    {
+      "name": "Guangzhou News",
+      "url": "http://lhttp.qingting.fm/live/4848/64k.mp3",
+      "url2": "https://lhttp.qtfm.cn/live/4848/64k.mp3",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "guangdong"
+    },
+    {
+      "name": "Music Radio",
+      "url": "http://lhttp.qingting.fm/live/5022107/64k.mp3",
+      "url2": "https://lhttp.qtfm.cn/live/5022107/64k.mp3",
+      "codec": "MP3",
+      "bitrate": 64,
+      "category": "music"
+    },
+    {
+      "name": "My Custom Station",
+      "url": "http://example.com/stream.mp3",
+      "codec": "MP3",
+      "bitrate": 128,
+      "category": "other"
+    }
+  ]
+}

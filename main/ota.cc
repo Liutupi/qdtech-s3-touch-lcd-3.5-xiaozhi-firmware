@@ -6,6 +6,7 @@
 #include <cJSON.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <esp_ota_ops.h>
@@ -15,6 +16,9 @@
 #ifdef SOC_HMAC_SUPPORTED
 #include <esp_hmac.h>
 #endif
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
 
 #include <cctype>
 #include <cstring>
@@ -25,8 +29,144 @@
 
 #define TAG "Ota"
 
+static constexpr int kFirmwareHttpBufferSize = 1024;
+static constexpr const char* kFirmwareDownloadProxyPrefixes[] = {
+    "https://ghfast.top/",
+    "https://gh-proxy.com/",
+};
+
 struct FirmwareHttpHeaders {
     std::string location;
+};
+
+enum class OtaFlashCommand : uint8_t {
+    Begin,
+    Write,
+    End,
+    SetBoot,
+    Abort,
+    Stop,
+};
+
+struct OtaFlashWorkerContext {
+    SemaphoreHandle_t done = nullptr;
+    const esp_partition_t* partition = nullptr;
+    esp_ota_handle_t handle = 0;
+    uint8_t* staging_buffer = nullptr;
+    const uint8_t* data = nullptr;
+    size_t length = 0;
+    esp_err_t result = ESP_OK;
+    OtaFlashCommand command = OtaFlashCommand::Begin;
+};
+
+static void OtaFlashWorkerTask(void* arg) {
+    auto* ctx = static_cast<OtaFlashWorkerContext*>(arg);
+    while (true) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        switch (ctx->command) {
+            case OtaFlashCommand::Begin:
+                ctx->result = esp_ota_begin(ctx->partition, OTA_WITH_SEQUENTIAL_WRITES, &ctx->handle);
+                break;
+            case OtaFlashCommand::Write:
+                memcpy(ctx->staging_buffer, ctx->data, ctx->length);
+                ctx->result = esp_ota_write(ctx->handle, ctx->staging_buffer, ctx->length);
+                break;
+            case OtaFlashCommand::End:
+                ctx->result = esp_ota_end(ctx->handle);
+                ctx->handle = 0;
+                break;
+            case OtaFlashCommand::SetBoot:
+                ctx->result = esp_ota_set_boot_partition(ctx->partition);
+                break;
+            case OtaFlashCommand::Abort:
+                if (ctx->handle) {
+                    esp_ota_abort(ctx->handle);
+                    ctx->handle = 0;
+                }
+                ctx->result = ESP_OK;
+                break;
+            case OtaFlashCommand::Stop:
+                ctx->result = ESP_OK;
+                xSemaphoreGive(ctx->done);
+                vTaskDelete(nullptr);
+                return;
+        }
+        xSemaphoreGive(ctx->done);
+    }
+}
+
+class OtaFlashWorker {
+public:
+    explicit OtaFlashWorker(const esp_partition_t* partition) {
+        ctx_.partition = partition;
+        ctx_.done = xSemaphoreCreateBinary();
+        ctx_.staging_buffer = static_cast<uint8_t*>(
+            heap_caps_malloc(kFirmwareHttpBufferSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        ready_ = ctx_.done != nullptr && ctx_.staging_buffer != nullptr;
+        if (ready_) {
+            BaseType_t ret = xTaskCreateWithCaps(
+                OtaFlashWorkerTask, "ota_flash", 3072, &ctx_, 3, &task_,
+                MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            ready_ = ret == pdPASS;
+        }
+        if (!ready_) {
+            ESP_LOGE(TAG, "No internal memory for OTA flash worker free_internal=%u largest_internal=%u",
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        }
+    }
+
+    ~OtaFlashWorker() {
+        if (task_) {
+            Send(OtaFlashCommand::Stop);
+            task_ = nullptr;
+        }
+        if (ctx_.staging_buffer) {
+            heap_caps_free(ctx_.staging_buffer);
+        }
+        if (ctx_.done) {
+            vSemaphoreDelete(ctx_.done);
+        }
+    }
+
+    bool ready() const { return ready_; }
+
+    esp_err_t Begin() { return Send(OtaFlashCommand::Begin); }
+    esp_err_t Write(const void* data, size_t length) {
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        size_t offset = 0;
+        while (offset < length) {
+            const size_t chunk = std::min(static_cast<size_t>(kFirmwareHttpBufferSize), length - offset);
+            esp_err_t err = Send(OtaFlashCommand::Write, chunk, bytes + offset);
+            if (err != ESP_OK) {
+                return err;
+            }
+            offset += chunk;
+        }
+        return ESP_OK;
+    }
+    esp_err_t End() { return Send(OtaFlashCommand::End); }
+    esp_err_t SetBoot() { return Send(OtaFlashCommand::SetBoot); }
+    esp_err_t Abort() { return Send(OtaFlashCommand::Abort); }
+
+private:
+    esp_err_t Send(OtaFlashCommand command, size_t length = 0, const uint8_t* data = nullptr) {
+        if (!task_ || !ctx_.done) {
+            return ESP_ERR_INVALID_STATE;
+        }
+        ctx_.command = command;
+        ctx_.length = length;
+        ctx_.data = data;
+        xTaskNotifyGive(task_);
+        if (xSemaphoreTake(ctx_.done, pdMS_TO_TICKS(60000)) != pdTRUE) {
+            return ESP_ERR_TIMEOUT;
+        }
+        return ctx_.result;
+    }
+
+    OtaFlashWorkerContext ctx_;
+    TaskHandle_t task_ = nullptr;
+    bool ready_ = false;
 };
 
 static std::string ToLowerHeaderKey(const char* key) {
@@ -59,7 +199,8 @@ static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url
         config.timeout_ms = 30000;
         config.event_handler = FirmwareHttpEventHandler;
         config.user_data = &headers;
-        config.buffer_size = 1024;
+        config.buffer_size = kFirmwareHttpBufferSize;
+        config.buffer_size_tx = kFirmwareHttpBufferSize;
 
         esp_http_client_handle_t client = esp_http_client_init(&config);
         if (!client) {
@@ -89,7 +230,8 @@ static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url
                 ESP_LOGE(TAG, "Firmware redirect missing Location header");
                 return nullptr;
             }
-            ESP_LOGI(TAG, "Firmware redirect %d -> %s", fetched_status, headers.location.c_str());
+            ESP_LOGI(TAG, "Firmware redirect %d location_len=%u",
+                     fetched_status, static_cast<unsigned>(headers.location.size()));
             current_url = headers.location;
             continue;
         }
@@ -103,6 +245,24 @@ static esp_http_client_handle_t OpenFirmwareHttp(const std::string& firmware_url
     return nullptr;
 }
 
+static bool StartsWith(const std::string& text, const char* prefix) {
+    const size_t prefix_len = strlen(prefix);
+    return text.size() >= prefix_len && text.compare(0, prefix_len, prefix) == 0;
+}
+
+static std::vector<std::string> BuildFirmwareUrlCandidates(const std::string& firmware_url) {
+    std::vector<std::string> urls;
+    if (!StartsWith(firmware_url, "https://github.com/")) {
+        urls.push_back(firmware_url);
+        return urls;
+    }
+
+    for (const char* proxy_prefix : kFirmwareDownloadProxyPrefixes) {
+        urls.push_back(std::string(proxy_prefix) + firmware_url);
+    }
+    urls.push_back(firmware_url);
+    return urls;
+}
 
 Ota::Ota() {
 #ifdef ESP_EFUSE_BLOCK_USR_DATA
@@ -336,7 +496,6 @@ void Ota::MarkCurrentVersionValid() {
 
 void Ota::Upgrade(const std::string& firmware_url) {
     ESP_LOGI(TAG, "Upgrading firmware from %s", firmware_url.c_str());
-    esp_ota_handle_t update_handle = 0;
     auto update_partition = esp_ota_get_next_update_partition(NULL);
     if (update_partition == NULL) {
         ESP_LOGE(TAG, "Failed to get update partition");
@@ -345,12 +504,52 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
     ESP_LOGI(TAG, "Writing to partition %s at offset 0x%lx", update_partition->label, update_partition->address);
     bool image_header_checked = false;
-    std::string image_header;
+    constexpr size_t kRequiredHeaderSize =
+        sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t);
+    auto header_free = [](uint8_t* ptr) {
+        if (ptr) {
+            heap_caps_free(ptr);
+        }
+    };
+    std::unique_ptr<uint8_t, decltype(header_free)> image_header(
+        static_cast<uint8_t*>(heap_caps_malloc(kRequiredHeaderSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)),
+        header_free);
+    if (!image_header) {
+        ESP_LOGE(TAG, "No memory for OTA image header");
+        return;
+    }
+    size_t image_header_size = 0;
 
     int status_code = 0;
     int content_length = 0;
-    esp_http_client_handle_t client = OpenFirmwareHttp(firmware_url, &status_code, &content_length);
+    esp_http_client_handle_t client = nullptr;
+    const auto firmware_urls = BuildFirmwareUrlCandidates(firmware_url);
+    for (size_t i = 0; i < firmware_urls.size(); ++i) {
+        status_code = 0;
+        content_length = 0;
+        const bool using_proxy = firmware_urls[i] != firmware_url;
+        ESP_LOGI(TAG, "Firmware download attempt %u/%u: %s",
+                 static_cast<unsigned>(i + 1),
+                 static_cast<unsigned>(firmware_urls.size()),
+                 using_proxy ? "proxy" : "direct");
+        client = OpenFirmwareHttp(firmware_urls[i], &status_code, &content_length);
+        if (!client) {
+            continue;
+        }
+        if (status_code == 200) {
+            if (using_proxy) {
+                ESP_LOGI(TAG, "Firmware download proxy selected");
+            }
+            break;
+        }
+
+        ESP_LOGW(TAG, "Firmware URL returned status %d, trying next candidate", status_code);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        client = nullptr;
+    }
     if (!client) {
+        ESP_LOGE(TAG, "All firmware download candidates failed");
         return;
     }
 
@@ -362,17 +561,43 @@ void Ota::Upgrade(const std::string& firmware_url) {
     }
 
     if (content_length <= 0) {
-        ESP_LOGE(TAG, "Failed to get content length");
+        ESP_LOGW(TAG, "Firmware content length unavailable, continuing with byte-count progress");
+    } else if (content_length > static_cast<int>(update_partition->size)) {
+        ESP_LOGE(TAG, "Firmware too large: %d bytes > partition %lu bytes",
+                 content_length, update_partition->size);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return;
     }
 
-    char buffer[512];
+    auto buffer_free = [](char* ptr) {
+        if (ptr) {
+            heap_caps_free(ptr);
+        }
+    };
+    std::unique_ptr<char, decltype(buffer_free)> buffer(
+        static_cast<char*>(heap_caps_malloc(kFirmwareHttpBufferSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)),
+        buffer_free);
+    if (!buffer) {
+        ESP_LOGE(TAG, "No memory for OTA download buffer");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return;
+    }
+
+    OtaFlashWorker flash(update_partition);
+    if (!flash.ready()) {
+        ESP_LOGE(TAG, "No internal memory for OTA flash worker");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return;
+    }
+
+    bool ota_begun = false;
     size_t total_read = 0, recent_read = 0;
     auto last_calc_time = esp_timer_get_time();
     while (true) {
-        int ret = esp_http_client_read(client, buffer, sizeof(buffer));
+        int ret = esp_http_client_read(client, buffer.get(), kFirmwareHttpBufferSize);
         if (ret < 0) {
             ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
             esp_http_client_close(client);
@@ -384,8 +609,13 @@ void Ota::Upgrade(const std::string& firmware_url) {
         recent_read += ret;
         total_read += ret;
         if (esp_timer_get_time() - last_calc_time >= 1000000 || ret == 0) {
-            size_t progress = total_read * 100 / content_length;
-            ESP_LOGI(TAG, "Progress: %u%% (%u/%u), Speed: %uB/s", progress, total_read, content_length, recent_read);
+            size_t progress = content_length > 0 ? total_read * 100 / content_length : 0;
+            if (content_length > 0) {
+                ESP_LOGI(TAG, "Progress: %u%% (%u/%u), Speed: %uB/s",
+                         progress, total_read, content_length, recent_read);
+            } else {
+                ESP_LOGI(TAG, "Progress: %u bytes, Speed: %uB/s", total_read, recent_read);
+            }
             if (upgrade_callback_) {
                 upgrade_callback_(progress, recent_read);
             }
@@ -398,36 +628,75 @@ void Ota::Upgrade(const std::string& firmware_url) {
         }
 
         if (!image_header_checked) {
-            image_header.append(buffer, ret);
-            if (image_header.size() >= sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t)) {
-                esp_app_desc_t new_app_info;
-                memcpy(&new_app_info, image_header.data() + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t), sizeof(esp_app_desc_t));
-                ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
-
-                auto current_version = esp_app_get_description()->version;
-                if (memcmp(new_app_info.version, current_version, sizeof(new_app_info.version)) == 0) {
-                    ESP_LOGE(TAG, "Firmware version is the same, skipping upgrade");
-                    esp_http_client_close(client);
-                    esp_http_client_cleanup(client);
-                    return;
-                }
-
-                if (esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle)) {
-                    esp_ota_abort(update_handle);
-                    ESP_LOGE(TAG, "Failed to begin OTA");
-                    esp_http_client_close(client);
-                    esp_http_client_cleanup(client);
-                    return;
-                }
-
-                image_header_checked = true;
-                std::string().swap(image_header);
+            const size_t copy_len = std::min(
+                static_cast<size_t>(ret),
+                kRequiredHeaderSize - image_header_size);
+            if (copy_len > 0) {
+                memcpy(image_header.get() + image_header_size, buffer.get(), copy_len);
+                image_header_size += copy_len;
             }
+            if (image_header_size < kRequiredHeaderSize) {
+                continue;
+            }
+
+            esp_app_desc_t new_app_info;
+            memcpy(&new_app_info,
+                   image_header.get() + sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t),
+                   sizeof(esp_app_desc_t));
+            ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+
+            auto current_version = esp_app_get_description()->version;
+            if (memcmp(new_app_info.version, current_version, sizeof(new_app_info.version)) == 0) {
+                ESP_LOGE(TAG, "Firmware version is the same, skipping upgrade");
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+                return;
+            }
+
+            esp_err_t begin_err = flash.Begin();
+            if (begin_err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to begin OTA: %s", esp_err_to_name(begin_err));
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+                return;
+            }
+
+            image_header_checked = true;
+            ota_begun = true;
+            auto err = flash.Write(image_header.get(), image_header_size);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to write OTA header data: %s", esp_err_to_name(err));
+                flash.Abort();
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+                return;
+            }
+            image_header.reset();
+            const size_t remaining_len = static_cast<size_t>(ret) - copy_len;
+            if (remaining_len > 0) {
+                err = flash.Write(buffer.get() + copy_len, remaining_len);
+                if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "Failed to write OTA buffered data: %s", esp_err_to_name(err));
+                    flash.Abort();
+                    esp_http_client_close(client);
+                    esp_http_client_cleanup(client);
+                    return;
+                }
+            }
+            continue;
         }
-        auto err = esp_ota_write(update_handle, buffer, ret);
+
+        if (!ota_begun) {
+            ESP_LOGE(TAG, "OTA data arrived before OTA begin");
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            return;
+        }
+
+        auto err = flash.Write(buffer.get(), ret);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to write OTA data: %s", esp_err_to_name(err));
-            esp_ota_abort(update_handle);
+            flash.Abort();
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
             return;
@@ -436,7 +705,12 @@ void Ota::Upgrade(const std::string& firmware_url) {
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
 
-    esp_err_t err = esp_ota_end(update_handle);
+    if (!ota_begun) {
+        ESP_LOGE(TAG, "Firmware download ended before image header was received");
+        return;
+    }
+
+    esp_err_t err = flash.End();
     if (err != ESP_OK) {
         if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
             ESP_LOGE(TAG, "Image validation failed, image is corrupted");
@@ -446,7 +720,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
         return;
     }
 
-    err = esp_ota_set_boot_partition(update_partition);
+    err = flash.SetBoot();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set boot partition: %s", esp_err_to_name(err));
         return;

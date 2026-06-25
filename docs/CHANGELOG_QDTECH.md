@@ -2,32 +2,566 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
-## 2026-06-19: v1.7.19 FC Playability Stabilization
+## 2026-06-25: v1.7.44 Phone WiFi Profile, Weather Config, And Brand Layout Fix
 
 Scope:
 
-- Bumped firmware version to `1.7.19` so the on-device GitHub Release updater can see this FC stability build as newer than `1.7.18`.
-- Kept the Nofrendo APU audio output added in `v1.7.18`, but reduced FC runtime contention with XiaoZhi background networking.
-- FC task priority remains lowered to `1`.
-- FC audio output now reuses a service-owned resample buffer and logs low-rate audio/internal-SRAM diagnostics instead of allocating a temporary vector every audio tick.
-- Entering the FC page marks external audio active and suspends the XiaoZhi protocol. Remaining on the FC page after pressing LIST keeps the protocol suspended so selecting another ROM is not competing with MQTT reconnects. Leaving the FC page resumes the protocol.
-- OTA retry alerts/sounds and weather HTTP fetches are suppressed while external audio/FC mode is active.
-- Nofrendo SRAM keeps the conservative 16 KB padded allocation and safe nulling on free. The attempted 64 KB SRAM / 32 KB VRAM static PSRAM reuse experiment was explicitly reverted because hardware testing showed worse "freezes soon after entering gameplay".
+- Bumped firmware version to `1.7.44` so devices on `1.7.43` can see the new GitHub Release as an OTA update.
+- Added a local WiFi phone config page/API at `http://<device-ip>/` as the verified sync path for custom logo, owner name, and weather location.
+- Simplified the phone form so normal users only enter a city name; latitude/longitude are resolved automatically through Open-Meteo geocoding when omitted.
+- Brand labels update in place across Main, Apps, Radio, Network, and Settings after profile saves.
+- Fixed the main-page top-left `logo/name` overlap by using explicit single-line label heights and aligning `name` directly below `logo`.
+- Restored theme-aware brand colors and clamped long brand text with ellipsis.
+- Weather summary text now uses a Chinese-capable font so Chinese city names render correctly.
+- BLE config service code remains present, but current runtime memory still skips NimBLE startup safely instead of rebooting.
 
 Verification:
 
-- Built and flashed successfully from `/private/tmp/qdtech_s3_build_src` to `/dev/cu.usbmodem212401` at 921600 baud.
-- Final `v1.7.19` build reported `xiaozhi.bin` size `0x3cf380`, smallest app partition `0x600000`, free `0x230c80`.
-- Monitor logs confirmed `App version: 1.7.19` and `Ota: Current version: 1.7.19`.
-- Reverted "play immediately freezes" PSRAM static-buffer experiment before this release candidate.
-- Monitor logs after the final flash showed normal QDTech boot, WiFi, weather, MQTT, apps navigation, FC page activation, protocol suspension, SD mount, `/sdcard/FC` scan, and `fc scan found 192 nes files`.
-- Entering FC after MQTT connected raised internal SRAM from about `7 KB` to about `15 KB` after protocol suspension.
-- Known remaining FC issue: pressing LIST/Stop after gameplay can still expose Nofrendo heap corruption on some ROMs. A previous crash was captured in `rom_free()` while freeing SRAM after gameplay. Do not reintroduce the PSRAM static SRAM/VRAM experiment; it made gameplay less stable.
+- Built the ESP32-S3 QDTech target from `/tmp/qdtech_firmware_copy` with ESP-IDF `v5.5.2`.
+- Pre-release hardware flash of the brand-layout fix passed on `/dev/cu.usbmodem212401`.
+- Boot monitor showed `App version: 1.7.43` before the version bump, display/UI creation, touch navigation Main -> Apps -> Main, WiFi IP `192.168.1.111`, HTTP config server startup, and no reboot/backtrace.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.44-app.bin`: `AAF698866909DB0A6EBB7B35B906D6B3B96D1FFBAACF8F05705513019B4E31B5`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.44-firmware.zip`: `BCF321D3F990C7C0DD45C6DF9484C3DDEB4D28CF5C2DD9B4EFBD00347C11C19C`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.44-full.bin`: `7109A141405D828D2889A73E811C39EFFCA6860E612B7FC750DFF3F71D52DCC0`
+
+## 2026-06-25: Phone WiFi Profile And Weather Config Sync
+
+Scope:
+
+- Added a local WiFi phone config page/API at `http://<device-ip>/` as the verified sync path for custom logo, owner name, and weather location.
+- Added `Phone Web` status in Settings next to the existing BLE status/profile/weather rows.
+- Simplified the phone form so normal users only enter a city name; latitude/longitude are resolved automatically when omitted.
+- Added Open-Meteo geocoding lookup for city-only weather configuration.
+- Brand labels now update in place across Main, Apps, Radio, Network, and Settings after profile saves, avoiding full LVGL UI reconstruction.
+- Restored theme-aware brand colors and clamped long brand text with ellipsis to prevent overlap.
+- Weather summary text now uses a Chinese-capable font so Chinese city names render correctly.
+- Added `qd_wifi_config_server.cc/h` using ESP-IDF `esp_http_server`.
+- Moved the HTTP server task stack to PSRAM and cached config values in RAM before startup so HTTP handlers do not read NVS from a PSRAM stack.
+- Shared JSON parsing/storage between BLE and WiFi config through `QdApplyConfigJson`.
+- Cached weather location in `TimeWeatherService` before the PSRAM-stack weather task starts.
+- Changed WiFi config apply to lightly refresh Settings controls instead of rebuilding the full LVGL UI after POST.
+
+Verification:
+
+- Built from `/tmp/qdtech_firmware_copy` with ESP-IDF `v5.5.2`.
+- Build result: `xiaozhi.bin` size `0x4ccc80`, smallest app partition `0x600000`, free `0x133380` (20%).
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Runtime reached WiFi IP `192.168.1.111`, live Zhongshan weather, MQTT connected, and `Application: STATE: idle`.
+- Verified `GET http://192.168.1.111/config` returned:
+
+```json
+{"logo":"nothing impossible","name":"tupi","city":"Zhongshan","latitude":"22.5176","longitude":"113.3928"}
+```
+
+- Verified `GET /` returned the mobile HTML form.
+- Verified `POST /config` returned `Saving...`, then `GET /config` returned the same saved values.
+- Verified city-only POST with `city=中山` resolved to `22.5231,113.3791`.
+- Verified `city=dongguan` resolved to `东莞市 23.0180,113.7487`; weather refreshed as `31 C 东莞市 Storm`.
+- Serial monitor confirmed `wifi config synced profile=1 weather=1`, weather refreshed, and no reboot/backtrace occurred after saving.
+
+## 2026-06-25: Phone BLE Profile And Weather Config Sync
+
+Scope:
+
+- Merged the latest `origin/main` line through firmware version `1.7.43`.
+- Added persistent user profile settings for the top-left text logo and owner name, defaulting to `nothing impossible` and `tupi`.
+- Added a QDTech BLE configuration service named `QDTech-Config` so a phone app can read/write profile and weather settings when enough internal RAM is available.
+- Added Settings-page "Phone Sync" rows showing BLE sync status, current profile logo/name, and weather city.
+- Weather city sync reuses the existing Open-Meteo weather path by writing city, latitude, and longitude to the weather-location storage/service.
+- Enabled trimmed NimBLE BLE peripheral defaults for the QDTech board and added a low-memory startup guard to prevent BLE controller reboot loops.
+- Updated the QDTech main component dependencies required by ESP-IDF 5.5 explicit dependency checks.
+
+BLE JSON payload:
+
+```json
+{"logo":"nothing impossible","name":"tupi","city":"Zhongshan","latitude":"22.5176","longitude":"113.3928"}
+```
+
+Verification:
+
+- Built from a temporary no-space copy of the project because the macOS workspace path contains spaces and ESP-SR's generated `-L` paths are not fully quoted at link time.
+- Build command target: ESP32-S3 QDTech board defaults with ESP-IDF `v5.5.2`.
+- Result after the BLE memory guard: `xiaozhi.bin` size `0x4c8080`, smallest app partition `0x600000`, free `0x137f80` (20%).
+- Flashed successfully to `/dev/cu.usbmodem212401`; esptool verified bootloader, app, partition table, OTA data, and srmodels hashes.
+- Runtime monitor reached stable UI/audio/WiFi/MQTT/weather idle. Weather refreshed live for Zhongshan at `32 C` with storm code `95`.
+- BLE hardware result: after WiFi startup the board had only `14743` bytes free internal RAM and `14336` bytes largest internal block, so the guard skipped NimBLE startup and surfaced `BLE low memory`.
+- Follow-up: direct always-on BLE phone sync is deferred until a lower-memory strategy is chosen, such as WiFi local config, MQTT/MCP phone sync, or an explicit BLE-only config mode.
+
+## 2026-06-24: v1.7.43 Roll Back Caiyun Weather
+
+Scope:
+
+- Reverted the `v1.7.42` configurable Caiyun weather source.
+- Restored the stable weather path to the previous Open-Meteo HTTP implementation.
+- Removed the on-device Caiyun token MCP/config workflow from the firmware surface so multi-board OTA does not depend on per-device private weather tokens.
+- Bumped firmware version to `1.7.43` so boards already running `1.7.42` can OTA forward to the no-Caiyun stable line.
+- The GitHub Release `v1.7.42` should be deleted because it contains the withdrawn Caiyun firmware assets.
+
+Verification:
+
+- Build the QDTech target. Result: `xiaozhi.bin` size `0x492650`, smallest app partition `0x600000`, free `0x16d9b0`.
+- Published GitHub Release `v1.7.43` with app, full, and zip assets.
+- Deleted the withdrawn GitHub Release `v1.7.42` and its tag.
+- USB app-only flashed `v1.7.43` to `COM13`, preserving WiFi/NVS.
+- Boot log confirmed `App version: 1.7.43`.
+- Weather returned through the restored Open-Meteo path: `weather ok 34 C Zhongshan Storm 15:34 code=95 updated=15:34`.
+- MQTT connected and the application reached `STATE: idle`.
+- No assert, backtrace, or reboot was observed during the post-flash monitor window.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-app.bin`: `0AB583C0B731A373B6E66D25D066AC14C2D1B96F7D3CF625F63139D360F2EA08`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-firmware.zip`: `F74A81A7866724288E9A24A646497540F7B576FA88E9BC76BABF6BF07742D30A`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.43-full.bin`: `36A5D0C43D20804F03E2FEBA55806C6D45A4D7976883AFDF0489DE44B7913EAA`
+
+## 2026-06-23: v1.7.39 Settings OTA Verified End-to-End
+
+Scope:
+
+- Bumped firmware version to `1.7.39`.
+- This is the validation release for the `v1.7.38` OTA updater; code is unchanged except the version bump.
+- Published GitHub Release `v1.7.39` with app, full, and zip assets.
+
+Verification:
+
+- Board on `COM13` was running `v1.7.38` after USB app-only bootstrap.
+- Settings updater selected `qdtech-s3-touch-lcd-3.5-v1.7.39-app.bin`.
+- Firmware download used proxy candidate first: `Firmware download attempt 1/3: proxy`, then `Firmware download proxy selected`.
+- OTA read the image header: `New firmware version: 1.7.39`.
+- OTA wrote the full app image to `ota_1` with progress reaching `100% (4784848/4784848)`.
+- Runtime logged `Firmware upgrade successful, rebooting in 3 seconds...`.
+- After reboot, firmware logged `App version: 1.7.39`, `Running partition: ota_1`, and `Marking firmware as valid`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-app.bin`: `BAB265FF1F70263C8CC1596878209CCB4D416172107A3B121A80137F56BF8CD1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-firmware.zip`: `ED46D36418BFFB98B4AC844215A346C48699A18AAAF5ABE03D3801B076C8A01A`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.39-full.bin`: `0349A8AB8B0694FE85B118675CC7DB489DBCC299A42276BBD12BFC720DBCD01F`
+
+Notes:
+
+- The exact failure was not "network cannot reach GitHub" alone. Earlier logs proved GitHub release metadata could be fetched and the proxy asset stream could start.
+- Final root cause was a combination of TLS/internal-RAM pressure and ESP-IDF's flash-write requirement that cache-freeze work run from an internal-RAM stack.
+- Serial monitor must remain open for the whole OTA test. Reopening the USB serial port resets this board and interrupts an in-progress OTA.
+
+## 2026-06-23: v1.7.38 Persistent Internal OTA Flash Worker
+
+Scope:
+
+- Bumped firmware version to `1.7.38`.
+- Replaced the per-chunk OTA flash task creation with one persistent internal-RAM `ota_flash` worker.
+- The worker is created before the firmware HTTP connection opens and owns the `esp_ota_*` calls.
+- OTA data is downloaded on the normal updater path, then copied through a 1024-byte internal staging buffer before `esp_ota_write()`.
+- This avoids both previous failure modes: post-TLS task allocation failure and `s_task_stack_is_sane_when_cache_frozen()` assertion from PSRAM task stacks.
+
+Verification:
+
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x4902d0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x16fd30`, about 24%.
+- USB app-only flashed `v1.7.38` to the current `COM13` board at `0x100000`, preserving WiFi/NVS.
+- Boot logs confirmed `App version: 1.7.38`, WiFi reconnect, MQTT idle, and Settings OTA readiness.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-app.bin`: `772EF16098ABB2F2927501A119A54BB005EFFBA6F779C4438FC1B6FC0DEC3A93`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-firmware.zip`: `6DF259376BEA59B64CC8C240FBD30B842A9C6042003D90BE9698B4F519A3D03E`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.38-full.bin`: `48DBE8496E0B2BEEEEB9F20ADA9D39F7B075DB0ADBD4A7A21E66BEF47E4A1B3C`
+
+## 2026-06-23: v1.7.36-v1.7.37 OTA Debug Attempts
+
+Scope:
+
+- `v1.7.36` tried to avoid internal task allocation by writing OTA data directly with a preallocated internal staging buffer.
+- `v1.7.37` was a version-only validation target for that updater.
+
+Verification:
+
+- `v1.7.36` could detect `v1.7.37`, select the GitHub Release app asset, and open the proxy stream.
+- It then asserted at `esp_cache_freeze_caches_disable_interrupts` because the updater task stack was in PSRAM while calling `esp_ota_write()`.
+- Conclusion: the write path must stay on an internal-RAM worker task, but that worker must be persistent and allocated before TLS download pressure.
+
+## 2026-06-23: v1.7.33 OTA Flash Worker Split
+
+Scope:
+
+- Bumped firmware version to `1.7.33`.
+- Split OTA into a PSRAM-stack HTTPS download task plus a small internal-RAM flash worker task.
+- The HTTPS task can keep the larger stack and TLS/AES memory needs outside the scarce internal task stack budget.
+- The flash worker is the only task that calls `esp_ota_begin()`, `esp_ota_write()`, `esp_ota_end()`, and `esp_ota_set_boot_partition()`, so flash cache-disable operations no longer run on a PSRAM stack.
+- OTA header and HTTP download buffers are allocated from PSRAM; each write is copied into the flash worker's internal staging buffer before `esp_ota_write()`.
+
+Verification:
+
+- Built and USB-flashed the `v1.7.32` bootstrap build with the flash-worker split to `COM14`.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48fd80`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x170280`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-app.bin`: `c5b910059161cfbeeb31fe036bf8890d90b16c656be04696406103c89c7c1bd0`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-firmware.zip`: `bb5e40f3bc0391a4c6c5323dc08bfe3c08b891d72c0acbed4dd2549f1e6b6b65`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.33-full.bin`: `be346268722b679b9157601667e9e2cfc3c0ba3a8c7862d0b8b1764554f22125`
+- Board-initiated OTA from the bootstrap build to `v1.7.33` still did not complete. It no longer hit the old cache assertion or stack overflow, but the TLS/proxy read path failed with `esp-aes: Failed to allocate memory` and then `Failed to read HTTP data: ESP_FAIL`.
+- Follow-up target: free more internal RAM before opening the firmware HTTP connection, or replace HTTPS OTA asset download with a lower-memory transport/manifest path.
+
+## 2026-06-23: v1.7.32 OTA Low-Internal-RAM Upgrade Fit
+
+Scope:
+
+- Bumped firmware version to `1.7.32`.
+- Follow-up fix after `v1.7.31` OTA testing: the internal upgrade task was created, but its 6144-byte internal stack left too little internal heap for the OTA image header and download buffer.
+- Reduced the firmware upgrade task stack to 4096 bytes.
+- Reduced the firmware HTTP download buffer from 2048 bytes to 1024 bytes so OTA can fit in the observed low-internal-RAM state.
+
+Verification:
+
+- Built and USB-flashed the `v1.7.31` bootstrap build with these memory reductions to `COM14`.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f980`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x170680`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.32-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.32-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.32-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-app.bin`: `2a5cb26b3587c79356a8ac033a7a3d07acfd136d879eb11919336d468801c248`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-firmware.zip`: `a94bace312395293d5b96c3395a9e4fa1e741145af7000e5eb4e03521902e10a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.32-full.bin`: `e3f1230680314d43ff71f5e1b79a4197293cf8380e1a1964672da722d1524e73`
+- Follow-up target: publish `v1.7.32` and verify board-initiated OTA from the bootstrap build to `v1.7.32`.
+
+## 2026-06-23: v1.7.31 OTA Check/Upgrade Task Split
+
+Scope:
+
+- Bumped firmware version to `1.7.31`.
+- Follow-up fix after `v1.7.30` testing: update-check tasks still need the larger 10KB stack but do not write flash, so they can safely use PSRAM.
+- Firmware upgrade tasks still require an internal-RAM stack because they call `esp_ota_write()` while flash cache may be disabled.
+- If the internal upgrade stack cannot be created, the updater now reports `No internal RAM` instead of falling back to an unsafe default stack.
+
+Verification:
+
+- `v1.7.30` bootstrap with this task split was USB-flashed to `COM14` after the task-create failure was captured.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f980`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x170680`, about 24%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.31-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.31-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.31-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-app.bin`: `a49538f4186d84cbaf049d5c29c444addce142320306bd0bbb498d93a6f1d5fd`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-firmware.zip`: `d6f84cfcb9103f3df0859007c35163e8764edbd457e6dcc0c82f283163318608`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.31-full.bin`: `c8b7bbd5ad5e5b863da67f70f4273a452bd12b0590b3e3c725832a32d62e0f0c`
+- Follow-up target: publish `v1.7.31` and verify board-initiated OTA from the bootstrap build to `v1.7.31`.
+
+## 2026-06-23: v1.7.30 OTA Internal-RAM Write Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.30`.
+- Fixed the Settings OTA crash captured on a new board running `v1.7.28`.
+- Runtime logs proved this was not a GitHub/proxy reachability problem: direct GitHub timed out, proxy download succeeded, and the crash happened after `New firmware version: 1.7.29` while OTA flash writing began.
+- Root cause: the firmware upgrade task was created in PSRAM first. ESP-IDF disables cache during flash erase/write, so a PSRAM task stack is unsafe and triggers `s_task_stack_is_sane_when_cache_frozen()`.
+- The firmware upgrade task now uses an internal-RAM stack first.
+- OTA image header accumulation no longer uses `std::string`; the header buffer is allocated from internal RAM.
+- OTA HTTP download buffer moved from task stack to internal heap, so `esp_ota_write()` always receives internal-RAM data.
+- Bootstrap note: boards already running `v1.7.28` cannot fix this exact OTA crash by OTA, because the crashing updater is the old app. They need one USB flash to `v1.7.29` or newer before future OTA updates are reliable.
+
+Verification:
+
+- Captured failing board logs on `COM14`: current app `1.7.28`, release asset selected, direct GitHub connection timed out, proxy selected, `New firmware version: 1.7.29`, then ESP-IDF cache-freeze stack assertion and reboot.
+- Built successfully with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f850`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x1707b0`, about 24%.
+- USB-flashed the fixed `1.7.29` bootstrap build to the new board on `COM14`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-app.bin`: `476ebaa1ea9afa1fad285e815a754d4815c94bd4e3fc552006fa54e9331ed620`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-firmware.zip`: `0e780c5bfdeb7fd3e490af80e82cffe7152380f8e2ae26ef4731409646cab58a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.30-full.bin`: `b3a33e954bde02dec6cd96297dcbd544f692e6c8e4cdcab076effb015723a598`
+- Follow-up verification target: publish `v1.7.30`, then test on-device OTA from the fixed `1.7.29` bootstrap build to `v1.7.30`.
+
+## 2026-06-23: v1.7.29 Weather Scene GIF Pack
+
+Scope:
+
+- Bumped firmware version to `1.7.29`.
+- Replaced the main-page weather module's low-quality LVGL primitive animation path with a GIF scene player for the QDTech board.
+- Enabled `LV_USE_GIF` and `LV_GIF_CACHE_DECODE_DATA` for `BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5`.
+- Added six warm-paper weather scene assets: clear, cloudy, rain, snow, fog, and storm.
+- Weather code mapping now selects a full animated scene: clear `0`, cloudy/pending `1`, rain `2`, snow `3`, fog `4`, storm `5`.
+- The bottom temperature and weather-summary labels remain separate from the 142x84 animated scene area so the animation does not cover text.
+- The older LVGL shape-based weather objects remain as a fallback path, but the normal QDTech build now uses the GIF scene player.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x48f920`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x1706e0`, about 24%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.29`, QDTech startup, `Desktop UI created`, saved WiFi reconnect, MQTT connection, and `Application: STATE: idle`.
+- Weather logs confirmed default/pending `scene=1` and live Zhongshan storm weather switching to `scene=5`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-app.bin`: `483dd14a036b6b66861729889a6525286be102287b47d48a555e3679d85f06e1`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-firmware.zip`: `9c7170cc4e8a73beb1a73b094a6dae216ae2558b6ed48746b1d821fe2e446557`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.29-full.bin`: `e5d99dab73860a5834c6c9f7d560f02a50846dc4fc0b968aba501913046063ed`
+- Follow-up: visually inspect all six scenes on the physical LCD when the weather code changes or by forcing weather codes in test builds; if the asset pack grows again, watch app partition space.
+
+## 2026-06-23: v1.7.28 GitHub OTA Proxy Fallback
+
+Scope:
+
+- Bumped firmware version to `1.7.28`.
+- Fixed the observed Settings OTA failure where the board could detect the latest GitHub Release but timed out when opening the GitHub Release asset download URL.
+- Serial logs proved the failure was `ESP_ERR_HTTP_CONNECT` before any image data was downloaded or written, so the app image and OTA partition were not the root cause.
+- Added firmware-download URL candidates: direct GitHub first, then `https://ghfast.top/` plus the original GitHub URL, then `https://gh-proxy.com/` plus the original GitHub URL.
+- Added attempt logging so future captures show whether the updater is using direct or proxy download.
+- Added one retry to GitHub Release metadata fetch before showing Check failed.
+- Bootstrap note: firmware already running `v1.7.27` or older does not have this fallback and may still require one USB flash to `v1.7.28`.
+
+Verification:
+
+- `curl -L -I` from the development PC confirmed `ghfast.top` and `gh-proxy.com` returned `200 OK` with the correct `Content-Length` for the `v1.7.27` app asset; `gh.llkk.cc` returned `403` and was not added.
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x3d7e10`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2281f0`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.28`, QDTech board startup, `Desktop UI created`, saved WiFi reconnect, `Ota: Current version: 1.7.28`, MQTT connection, weather update, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-app.bin`: `8cddf5b367c5dfb108840127743ae208bdcc2f34e20b3e44e3d0a5468cd1a029`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-firmware.zip`: `777be58c569dce64035b66363da943e97109b082eafed0a2bd34f1d2906a7806`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.28-full.bin`: `5e6b9fb0df401a7a4ddc65f110624dbab3917467eca3a260bd86db884f75821f`
+- Follow-up: verify a real on-device OTA from `v1.7.28` to a later release and confirm the proxy fallback path succeeds when direct GitHub asset download fails.
+
+## 2026-06-23: v1.7.27 Tupi Warm Theme And Weather Layout Reuse
+
+Scope:
+
+- Bumped firmware version to `1.7.27`.
+- Added a third persisted desktop theme, `Tupi Warm`, after the user approved the warm paper `nothing impossible / tupi` direction.
+- Added the Tupi Warm palette, four-dot brand mark, warm main clock card, warm daily-card treatment, and warm Apps/FC/NES surface colors without changing the overall desktop page architecture.
+- Removed the rejected compact Tupi weather-card layout. Tupi Warm now reuses the proven Classic weather animation geometry for sun, cloud, rain, snow, storm, and gold particles while retaining the warm-paper card colors.
+- Kept the weather card free of the added city label because it collided with the animation on the 480x320 panel.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech build`.
+- `xiaozhi.bin` size: `0x3d75d0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x228a30`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.27`, QDTech board startup, `Desktop UI created`, touch input creation, battery ADC readings, saved WiFi reconnect, `Ota: Current version: 1.7.27`, GitHub OTA latest check, MQTT connection, and `Application: STATE: idle`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-app.bin`: `88a347cb3700185db6dcb17b6b590c28f8da0309446f7bc9dbb81c399a74a82a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-firmware.zip`: `126b45d88d6e50c1a102c81e9db39559593d963c79e61d54fcb2d4637320961c`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.27-full.bin`: `56f506ef9f7dd255c6b114fcdde78c6327839b4dbff5436af1e192427f9c7b4e`
+- Follow-up: after publishing `v1.7.27`, install or OTA it on the board and visually confirm the Tupi Warm weather card now matches the older accepted weather animation behavior.
+
+## 2026-06-22: v1.7.26 GitHub OTA Redirect Buffer Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.26`.
+- Fixed the Settings GitHub OTA update failure seen on a board updating to `v1.7.25`.
+- Serial capture showed the failing path: GitHub `browser_download_url` returned a `302` redirect to a very long signed `release-assets.githubusercontent.com` URL, then `HTTP_CLIENT: Out of buffer`, followed by `Ota: Failed to open firmware HTTP connection: ESP_FAIL`.
+- Increased the firmware-download HTTP client RX/TX buffers from 1024 to 2048 bytes so the long GitHub release-asset redirect request can be opened.
+- Changed redirect logging to print only the status and Location length, instead of logging the whole signed URL.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a10`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x2295f0`, about 36%.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-app.bin`: `1b2b33dc5cef448fbe8d2142f9f5151e9145c3a25f797c7d765aee1ae192a36e`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-firmware.zip`: `51a426a752542126916f512d5a960c9b40e66ebce12a43af58fd267e8a6698df`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.26-full.bin`: `276c0f80e0c30f06db08a546d9a811e539d129e8e852e23663b62d0e6df42fbf`
+- Follow-up: after publishing, run a real Settings OTA update from a board on `v1.7.25` to `v1.7.26` and confirm progress passes the GitHub redirect step.
+
+## 2026-06-21: v1.7.25 FC ROM Name Font Coverage Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.25`.
+- Restored FC/NES ROM list and selected-game detail labels to `font_puhui_16_4`.
+- Kept the shared LXGW WenKai subset for fixed UI copy, but avoided using that subset for dynamic SD-card ROM names because the subset cannot cover arbitrary Chinese game titles.
+- Fixed the regression where FC game names showed missing glyph boxes or garbled-looking text after the shared LXGW WenKai UI font pass.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-app.bin`: `c6aded5a555049e414718fe84705fc8f4ceb84a1ade9bbdf0e00744c4a0db6c3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-firmware.zip`: `abd27e9bc1b1e243dc99206e0b23bdfb977843f2792c0625e34297b239b1d80f`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.25-full.bin`: `ea2a2a3afda4e8c286ae6d1b8a947fe5e0c7c801ac62fd09dcde871434671845`
+- Follow-up: visually re-open FC/NES on the physical LCD and confirm Chinese ROM names render normally with the restored full-coverage font.
+
+## 2026-06-21: v1.7.24 Shared LXGW WenKai UI Font Release
+
+Scope:
+
+- Bumped firmware version to `1.7.24`.
+- Regenerated the QDTech embedded `qd_font_lxgw_16` and `qd_font_lxgw_20` LVGL font subsets from LXGW WenKai so the Cat and Classic themes share the same Chinese UI font style.
+- Added the new Cat-theme and desktop Chinese glyphs to the subset, including `小苍兰`, `端午`, cat/theme labels, daily-card text, and related UI copy, avoiding missing-glyph boxes without linking the much larger full Puhui 20/30 px fonts.
+- Switched desktop Chinese labels that previously used `font_puhui_16_4` to the shared LXGW WenKai subset where appropriate, including the daily card, Calendar today/weekday labels, and FC/NES ROM list/detail labels.
+- Increased the Classic theme daily-card title and body text to the 20 px LXGW WenKai font so the quote area reads less thin while keeping the existing layout.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d6a00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x229600`, about 36%.
+- Flashed successfully to `COM14` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- `idf.py monitor` could not be captured from this non-interactive shell because it requires stdin attached to a TTY; the build output confirmed `App "xiaozhi" version: 1.7.24`.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-app.bin`: `b3d4f95b449db34cb28bb42c70169bcaa960bc4547efb446dc579b839fa17ae3`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-firmware.zip`: `13c2d4042ed9d96bb0c5bbbf5d4330884abfa4257f6d70c5b79e6a2653035158`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.24-full.bin`: `91958bcf02c64000e81b86fe907f30695e45b2f5778709a36efbdbbaaa58e597`
+- Follow-up: visually inspect both Classic and Cat themes on the physical LCD after release, especially the 20 px daily-card line wrapping.
+
+## 2026-06-21: v1.7.23 Cat Theme Switcher And Layout Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.23`.
+- Added a persisted `Cat` UI theme alongside the existing `Classic` theme.
+- Added `Appearance / Theme` to Settings so the user can switch themes with one button. The setting is stored in NVS and applied after restart.
+- Kept the existing desktop/page architecture intact; the Cat theme changes colors, cards, brand styling, page decorations, and selected Cat-only layout offsets.
+- Updated Cat theme palette toward a stronger pink background and pink/white card system.
+- Updated the main clock card for Cat theme with better contrast: pink hour digits, orange minute digits, and a dedicated card positioned below the top-left brand mark.
+- Added Cat-theme Chinese brand mark `小苍兰 / 端午` using the existing Puhui Chinese font path.
+- Added a small Cat-theme cat icon to the main daily-card panel while preserving the existing festival/history/daily-quote content priority.
+- Added Cat-style XiaoZhi face decoration using LVGL primitives.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d4f00`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22b100`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Esptool verified hashes for bootloader, app, partition table, OTA data, and srmodels, then hard reset the board.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-app.bin`: `51f84d5d354c5959a81b93a2766ab7e00551f3e579d3999c5d54c0f94bfc0634`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-firmware.zip`: `360cd8bff4ad320f633ea15633a5b22159483da08437a922382f9c37178eb494`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.23-full.bin`: `aff237067c6e55e9b6ff94fa6a82ddea6d9dca70d696e13f23463d6dbe6d1df8`
+- Follow-up: perform one more visual pass on the physical display after the release if the Cat theme still needs tighter spacing or stronger contrast.
+
+## 2026-06-21: v1.7.22 More Robust GitHub OTA Download
+
+Scope:
+
+- Bumped firmware version to `1.7.22`.
+- Hardened the shared OTA download/write path used by the QDTech Settings firmware updater.
+- GitHub firmware downloads can now continue when the final asset response has no usable `Content-Length`; progress falls back to byte-count logging instead of failing immediately.
+- The OTA writer now waits until enough image header bytes have been received before calling `esp_ota_begin()` and writing data, avoiding failures when the first TLS/HTTP read returns a short chunk.
+- Added explicit partition-size checking and clearer OTA begin/header-write error logs.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2f40`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d0c0`, about 36%.
+- Flashed successfully to the newly connected board on `COM14` at 921600 baud.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.22-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.22-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.22-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-app.bin`: `6a700d79478094792ce175542a02a9e1520e69cf161db656dfb3980e6e12e4a6`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-firmware.zip`: `413c7a89172c634869d03fa61f606def0af32201ed166b1de0a09533cbbfc635`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.22-full.bin`: `857ad9ab97c059d7afdbfee3a6d0785826be876ce685b6c390598d5cf400b859`
+- Follow-up: verify a real older-board Settings -> Firmware -> Update path. If a board running the older updater still cannot cross-upgrade from GitHub, flash `v1.7.22-full.bin` once over USB and use `v1.7.22+` as the stable OTA baseline.
+
+## 2026-06-20: v1.7.21 Preserve WiFi After BOOT Wake
+
+Scope:
+
+- Bumped firmware version to `1.7.21`.
+- Fixed a BOOT-power regression from the new soft-power flow: the existing QDTech BOOT single-click handler could call `ResetWifiConfiguration()` while the app was still starting and WiFi had not reconnected yet.
+- Changed QDTech BOOT single-click handling so clicks during `starting` or `wifi configuring` are ignored and never clear saved WiFi credentials. Once the device is idle, BOOT can still toggle chat state.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2bd0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d430`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.21`, direct reconnection to saved WiFi `liutupi`, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, and `Application: STATE: idle`.
+- No `ResetWifiConfiguration()`/配网 reset path appeared in the verified boot log.
+- BOOT deep-sleep cycle was not recaptured during this monitor window; the board stayed awake and continued battery logs. The key regression fix is the removal of the startup-click WiFi reset path.
+- Hardware follow-up confirmed from the local QDTech schematic: USB-C `VBUS/+5V` feeds a `TP4054` battery charge circuit for `JP1 BAT+`, so a connected single-cell 3.7V/4.2V Li-ion/LiPo pack should charge automatically from USB-C.
+- A larger 2800mAh pack is acceptable if it remains a protected single-cell 3.7V/4.2V Li-ion/LiPo battery and connector polarity matches the board; charge time will be longer.
+- The firmware reads real battery voltage through `IO8 / ADC1_CH7`, but no ESP32 GPIO mapping for the charger `CHRG` signal was found, so the UI does not yet show a hardware charger-state indicator.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-app.bin`: `91d227d0a8b3d1031d8362317e9237263d0edd971c8c3630589bddd6325c63d2`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-firmware.zip`: `63f1ef9152ed390a5ef0a20a24a24c41da23cb53f611237282b3a8e3d71bff0a`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.21-full.bin`: `317a280aa1bc8916dc031203051dacc9f7c50461fd24042b5ceb7cf105a2f730`
+
+## 2026-06-20: v1.7.20 BOOT Soft Power Release-Gated Sleep
+
+Scope:
+
+- Bumped firmware version to `1.7.20`.
+- Fixed the BOOT soft-power timing from `v1.7.19`: entering deep sleep while GPIO0 is still held low can immediately satisfy the wake condition, making the board look like it never powered off.
+- Changed `EnterDeepSleep()` to turn the backlight off, stop the BOOT polling timer, wait for the BOOT key to be released, debounce for 250 ms, and only then enable GPIO0 low-level wake and enter deep sleep.
+- Added an `entering_deep_sleep_` guard so the button callback and GPIO polling path cannot re-enter the sleep sequence.
+
+Verification:
+
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d2b70`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d490`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.20`, `Ota: Current version: 1.7.20`, WiFi, idle state, and live battery readings around `4166-4174mV / 97%`.
+- During BOOT long-press testing, the serial monitor aborted with the COM port closing after the board had been running normally, which matches the expected USB serial drop when the board enters deep sleep. Reopening COM13 after pressing BOOT again produced a fresh `App version: 1.7.20` boot log and normal battery readings.
+- This remains firmware soft power: it enters ESP32-S3 deep sleep rather than physically cutting the battery rail. True zero-power off still requires a power latch or PMIC.
+- Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.20-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.20-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.20-app.bin`.
+- Release asset SHA256:
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-app.bin`: `fb80a2806dfaa11d9603e754dabecd0e7bd40c267237c6b9c25e77c61c44e4ec`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-firmware.zip`: `62de97c20e442ac5b7646a544a5b42571bdb23904cbc1106d8b1abb4d8247707`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.20-full.bin`: `1eb83bb34fa72f7113fb4078865396dc0ee112e07c1a83905e9aaf9cbab447d6`
+
+## 2026-06-20: v1.7.19 Battery Monitor And BOOT Soft Power
+
+Scope:
+
+- Bumped firmware version to `1.7.19`.
+- Replaced the QDTech desktop status-bar fake `80%` battery text with live battery percentage updates.
+- Added QDTech battery ADC support using the vendor battery-voltage path: ADC1 channel 7 / GPIO8, 12 dB attenuation, 12-bit width, calibrated ADC millivolts multiplied by the board's x2 divider.
+- Added a `Board::GetBatteryLevel()` implementation backed by the QDTech battery monitor.
+- Added BOOT/GPIO0 long-press soft power behavior: long press enters ESP32-S3 deep sleep, configures GPIO0 as the wake source, and turns the backlight off first.
+- Added direct GPIO0 polling in addition to the existing button component callback so the soft-power path does not depend only on the button helper event layer.
+
+Verification:
+
+- Checked live GitHub Releases before this work: latest published release was still `v1.7.17`; local `main` already had the pushed `v1.7.18` FC-audio commit but no GitHub Release.
+- Build completed successfully from the Windows checkout with `idf.py -B build-qdtech ... build`.
+- `xiaozhi.bin` size: `0x3d29b0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x22d650`, about 36%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Boot logs confirmed `App version: 1.7.19`, `Ota: Current version: 1.7.19`, WiFi connection, and `Application: STATE: idle`.
+- Battery logs confirmed real ADC sampling on hardware: examples included `battery adc raw=2460 adc_mv=2041 battery_mv=4082 level=90% gpio=8 cal=1` and later stable `4076-4082mV / 90%` readings.
+- BOOT soft-power code is compiled and flashed, but two 90-second serial-monitor windows did not capture `BOOT press down` or `BOOT gpio down`; either the physical BOOT key was not pressed during the window, the pressed key is not wired to GPIO0, or this board exposes BOOT differently from the expected GPIO0 path. Treat deep-sleep entry/wake as implemented but not hardware-confirmed until a GPIO0 edge is observed.
 - Release assets prepared as `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`, `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`, and `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`.
 - Release asset SHA256:
-  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`: `da477d4d9c7b9ce98aa5f88f9a61b26d4c31b5cff79704aae4bd183435530e0c`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`: `bcc5bf4d01dfe1bce56e0f335b5b9cfc200e6729f086ecd4cb3a6f33fecea4b6`
-  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`: `0aade4d670afa8e6651dd94469c6550492bf3409cb8f8374a1821bc502519720`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-app.bin`: `5a65a3ecf01e77d8c10b274d78d4e02fb81afc093a5d52245b9dc4c94182f434`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-firmware.zip`: `5a8c3abfcea5e88c90afcf42d5f3af1648b3023778a8bf12e64f68af45689473`
+  - `qdtech-s3-touch-lcd-3.5-v1.7.19-full.bin`: `5406b5a0fe3f9b58966d82c1a3e38d02293d5cc4863bd39ab098eca1cd2259c9`
 
 ## 2026-06-19: v1.7.18 FC Emulator Audio Output
 

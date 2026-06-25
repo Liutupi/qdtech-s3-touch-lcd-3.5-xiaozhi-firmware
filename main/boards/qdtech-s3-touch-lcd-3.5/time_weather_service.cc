@@ -26,12 +26,6 @@
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 1536;
 
-struct WeatherLocation {
-    char city[32];
-    double latitude;
-    double longitude;
-};
-
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
     char* end = nullptr;
     double parsed = strtod(text.c_str(), &end);
@@ -45,25 +39,43 @@ static bool ParseCoordinate(const std::string& text, double min_value, double ma
     return true;
 }
 
-static void LoadWeatherLocation(WeatherLocation* location) {
-    snprintf(location->city, sizeof(location->city), "%s", "Zhongshan");
-    location->latitude = 22.5176;
-    location->longitude = 113.3928;
-
+void TimeWeatherService::LoadLocationCacheFromNvs() {
+    std::string city = "Zhongshan";
+    double latitude = 22.5176;
+    double longitude = 113.3928;
     Settings settings("weather_cfg", false);
-    std::string city = settings.GetString("city", "Zhongshan");
+    std::string city_text = settings.GetString("city", "Zhongshan");
     std::string lat_text = settings.GetString("lat", "22.5176");
     std::string lon_text = settings.GetString("lon", "113.3928");
 
-    double latitude = 0.0;
-    double longitude = 0.0;
-    if (ParseCoordinate(lat_text, -90.0, 90.0, &latitude) &&
-        ParseCoordinate(lon_text, -180.0, 180.0, &longitude)) {
-        if (!city.empty()) {
-            snprintf(location->city, sizeof(location->city), "%s", city.c_str());
+    double parsed_lat = 0.0;
+    double parsed_lon = 0.0;
+    if (ParseCoordinate(lat_text, -90.0, 90.0, &parsed_lat) &&
+        ParseCoordinate(lon_text, -180.0, 180.0, &parsed_lon)) {
+        latitude = parsed_lat;
+        longitude = parsed_lon;
+        if (!city_text.empty()) {
+            city = city_text;
         }
-        location->latitude = latitude;
-        location->longitude = longitude;
+    }
+
+    std::lock_guard<std::mutex> lock(location_mutex_);
+    location_city_ = city;
+    location_latitude_ = latitude;
+    location_longitude_ = longitude;
+    location_loaded_ = true;
+}
+
+void TimeWeatherService::CopyLocationCache(std::string* city, double* latitude, double* longitude) {
+    std::lock_guard<std::mutex> lock(location_mutex_);
+    if (city) {
+        *city = location_city_;
+    }
+    if (latitude) {
+        *latitude = location_latitude_;
+    }
+    if (longitude) {
+        *longitude = location_longitude_;
     }
 }
 
@@ -316,6 +328,9 @@ static DailyCardKind BuildDailyCardText(const tm& info, char* title, size_t titl
 
 void TimeWeatherService::Start(DesktopUI* ui) {
     desktop_ui_ = ui;
+    if (!location_loaded_) {
+        LoadLocationCacheFromNvs();
+    }
     if (!task_handle_) {
         constexpr uint32_t stack_size = 6144;
         ESP_LOGI(TAG, "time weather task create free_internal=%u largest_internal=%u",
@@ -357,6 +372,14 @@ bool TimeWeatherService::SetLocation(const std::string& city, const std::string&
     settings.SetString("city", city);
     settings.SetString("lat", latitude);
     settings.SetString("lon", longitude);
+
+    {
+        std::lock_guard<std::mutex> lock(location_mutex_);
+        location_city_ = city;
+        location_latitude_ = lat;
+        location_longitude_ = lon;
+        location_loaded_ = true;
+    }
 
     location_update_requested_.store(true);
     if (task_handle_) {
@@ -583,13 +606,15 @@ bool TimeWeatherService::FetchWeather() {
         return false;
     }
 
-    WeatherLocation location = {};
-    LoadWeatherLocation(&location);
+    std::string city;
+    double latitude = 22.5176;
+    double longitude = 113.3928;
+    CopyLocationCache(&city, &latitude, &longitude);
     
     char url[256];
     snprintf(url, sizeof(url),
              "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code&timezone=Asia%%2FShanghai",
-             location.latitude, location.longitude);
+             latitude, longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
@@ -654,7 +679,7 @@ bool TimeWeatherService::FetchWeather() {
     if (info.tm_year >= (2024 - 1900)) {
         snprintf(last_update_, sizeof(last_update_), "%02d:%02d", info.tm_hour, info.tm_min);
     }
-    snprintf(summary, sizeof(summary), "%s %s %s", location.city, WeatherDesc(code->valueint), last_update_);
+    snprintf(summary, sizeof(summary), "%s %s %s", city.c_str(), WeatherDesc(code->valueint), last_update_);
     
     snprintf(last_temperature_, sizeof(last_temperature_), "%s", temp_text);
     snprintf(last_summary_, sizeof(last_summary_), "%s", summary);

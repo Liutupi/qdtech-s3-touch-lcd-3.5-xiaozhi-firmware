@@ -3,6 +3,7 @@
 
 #include <driver/gpio.h>
 #include <driver/spi_master.h>
+#include <esp_adc/adc_oneshot.h>
 #include <esp_lcd_panel_dev.h>
 
 #define AUDIO_INPUT_SAMPLE_RATE 24000
@@ -22,6 +23,13 @@
 
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
 #define BUILTIN_LED_GPIO GPIO_NUM_NC
+
+#define BATTERY_ADC_GPIO GPIO_NUM_8
+#define BATTERY_ADC_UNIT ADC_UNIT_1
+#define BATTERY_ADC_CHANNEL ADC_CHANNEL_7
+#define BATTERY_ADC_ATTEN ADC_ATTEN_DB_12
+#define BATTERY_ADC_BITWIDTH ADC_BITWIDTH_12
+#define BATTERY_VOLTAGE_DIVIDER 2
 
 #define DISPLAY_SPI_HOST SPI2_HOST
 #define DISPLAY_SPI_MODE 0

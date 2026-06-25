@@ -3,6 +3,7 @@
 #include "desktop_ui.h"
 
 #include <atomic>
+#include <mutex>
 #include <string>
 
 #include "freertos/FreeRTOS.h"
@@ -23,6 +24,11 @@ private:
     bool sntp_started_ = false;
     bool sntp_synced_once_ = false;
     bool last_weather_valid_ = false;
+    std::mutex location_mutex_;
+    std::string location_city_ = "Zhongshan";
+    double location_latitude_ = 22.5176;
+    double location_longitude_ = 113.3928;
+    bool location_loaded_ = false;
     char last_temperature_[16] = "-- C";
     char last_summary_[96] = "Weather pending";
     char last_update_[24] = "never";
@@ -32,6 +38,8 @@ private:
     static void TaskWrapper(void* arg);
     void Task();
     void WaitApplicationReady();
+    void LoadLocationCacheFromNvs();
+    void CopyLocationCache(std::string* city, double* latitude, double* longitude);
     void StartSntp();
     bool WaitTimeReady();
     void UpdateTime();

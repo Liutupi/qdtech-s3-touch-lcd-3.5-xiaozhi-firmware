@@ -215,7 +215,8 @@ static void qd_video_set_palette(rgb_t* pal) {
         const uint16_t r = (uint16_t)(pal[i].r >> 3);
         const uint16_t g = (uint16_t)(pal[i].g >> 2);
         const uint16_t b = (uint16_t)(pal[i].b >> 3);
-        s_palette[i] = (uint16_t)((r << 11) | (g << 5) | b);
+        uint16_t color = (uint16_t)((r << 11) | (g << 5) | b);
+        s_palette[i] = (uint16_t)((color << 8) | (color >> 8));
     }
 }
 

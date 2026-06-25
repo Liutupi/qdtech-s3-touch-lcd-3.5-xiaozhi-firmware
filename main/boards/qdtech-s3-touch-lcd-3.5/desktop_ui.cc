@@ -4,7 +4,9 @@
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
 #include "firmware_update_service.h"
+#include "qd_user_config.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -14,9 +16,11 @@
 
 #include <esp_app_desc.h>
 #include <esp_log.h>
+#include <esp_system.h>
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
+#include <libs/gif/lv_gif.h>
 
 #define TAG "DesktopUI"
 
@@ -29,20 +33,144 @@ LV_FONT_DECLARE(qd_font_clock_72);
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(qd_font_lxgw_16);
 LV_FONT_DECLARE(qd_font_lxgw_20);
+LV_IMAGE_DECLARE(qd_weather_clear_scene);
+LV_IMAGE_DECLARE(qd_weather_cloudy_scene);
+LV_IMAGE_DECLARE(qd_weather_rain_scene);
+LV_IMAGE_DECLARE(qd_weather_snow_scene);
+LV_IMAGE_DECLARE(qd_weather_fog_scene);
+LV_IMAGE_DECLARE(qd_weather_storm_scene);
 
-// Color palette
-static constexpr lv_color_t COLOR_BG = LV_COLOR_MAKE(0x00, 0x00, 0x00);
-static constexpr lv_color_t COLOR_SURFACE = LV_COLOR_MAKE(0x0b, 0x0c, 0x0d);
-static constexpr lv_color_t COLOR_SURFACE_2 = LV_COLOR_MAKE(0x12, 0x14, 0x13);
-static constexpr lv_color_t COLOR_TEXT = LV_COLOR_MAKE(0xf6, 0xef, 0xdf);
-static constexpr lv_color_t COLOR_CREAM = LV_COLOR_MAKE(0xff, 0xf4, 0xd8);
-static constexpr lv_color_t COLOR_MUTED = LV_COLOR_MAKE(0x8a, 0x8a, 0x82);
-static constexpr lv_color_t COLOR_LINE = LV_COLOR_MAKE(0x34, 0x35, 0x31);
-static constexpr lv_color_t COLOR_GOLD = LV_COLOR_MAKE(0xff, 0xbd, 0x55);
-static constexpr lv_color_t COLOR_GREEN = LV_COLOR_MAKE(0x82, 0xd7, 0x78);
-static constexpr lv_color_t COLOR_PURPLE = LV_COLOR_MAKE(0xaa, 0x78, 0xff);
-static constexpr lv_color_t COLOR_BLUE = LV_COLOR_MAKE(0x68, 0x9d, 0xff);
-static constexpr lv_color_t COLOR_CLOCK_DOT = LV_COLOR_MAKE(0xd7, 0xde, 0xe3);
+// Theme palette
+enum class UiTheme : uint8_t {
+    CLASSIC = 0,
+    CAT = 1,
+    TUPI_WARM = 2,
+};
+
+struct ThemePalette {
+    const char* name;
+    lv_color_t bg;
+    lv_color_t surface;
+    lv_color_t surface2;
+    lv_color_t text;
+    lv_color_t cream;
+    lv_color_t muted;
+    lv_color_t line;
+    lv_color_t gold;
+    lv_color_t green;
+    lv_color_t purple;
+    lv_color_t blue;
+    lv_color_t clock_dot;
+};
+
+static constexpr ThemePalette THEMES[] = {
+    {
+        "Classic",
+        LV_COLOR_MAKE(0x00, 0x00, 0x00),
+        LV_COLOR_MAKE(0x0b, 0x0c, 0x0d),
+        LV_COLOR_MAKE(0x12, 0x14, 0x13),
+        LV_COLOR_MAKE(0xf6, 0xef, 0xdf),
+        LV_COLOR_MAKE(0xff, 0xf4, 0xd8),
+        LV_COLOR_MAKE(0x8a, 0x8a, 0x82),
+        LV_COLOR_MAKE(0x34, 0x35, 0x31),
+        LV_COLOR_MAKE(0xff, 0xbd, 0x55),
+        LV_COLOR_MAKE(0x82, 0xd7, 0x78),
+        LV_COLOR_MAKE(0xaa, 0x78, 0xff),
+        LV_COLOR_MAKE(0x68, 0x9d, 0xff),
+        LV_COLOR_MAKE(0xd7, 0xde, 0xe3),
+    },
+    {
+        "Cat",
+        LV_COLOR_MAKE(0xf6, 0xdb, 0xe8),
+        LV_COLOR_MAKE(0xff, 0xf7, 0xfb),
+        LV_COLOR_MAKE(0xff, 0xeb, 0xf3),
+        LV_COLOR_MAKE(0x4d, 0x3d, 0x50),
+        LV_COLOR_MAKE(0xff, 0xfd, 0xfe),
+        LV_COLOR_MAKE(0x9a, 0x6f, 0x88),
+        LV_COLOR_MAKE(0xff, 0x8f, 0xb5),
+        LV_COLOR_MAKE(0xff, 0xa9, 0x58),
+        LV_COLOR_MAKE(0x68, 0xd1, 0xa2),
+        LV_COLOR_MAKE(0xff, 0x6f, 0xa2),
+        LV_COLOR_MAKE(0x7b, 0xc7, 0xff),
+        LV_COLOR_MAKE(0xff, 0x77, 0xaa),
+    },
+    {
+        "Tupi Warm",
+        LV_COLOR_MAKE(0xf6, 0xf0, 0xe6),
+        LV_COLOR_MAKE(0xfb, 0xf7, 0xee),
+        LV_COLOR_MAKE(0xf4, 0xee, 0xe3),
+        LV_COLOR_MAKE(0x1c, 0x1b, 0x19),
+        LV_COLOR_MAKE(0xff, 0xfc, 0xf4),
+        LV_COLOR_MAKE(0x6f, 0x72, 0x5f),
+        LV_COLOR_MAKE(0xc9, 0xbf, 0xae),
+        LV_COLOR_MAKE(0xd9, 0x90, 0x2f),
+        LV_COLOR_MAKE(0x7f, 0x87, 0x6d),
+        LV_COLOR_MAKE(0xb9, 0x79, 0x5a),
+        LV_COLOR_MAKE(0x8d, 0x8b, 0x7d),
+        LV_COLOR_MAKE(0x7f, 0x87, 0x6d),
+    },
+};
+
+static UiTheme current_theme = UiTheme::CLASSIC;
+
+static const ThemePalette& theme() {
+    return THEMES[static_cast<uint8_t>(current_theme)];
+}
+
+static bool is_cat_theme() {
+    return current_theme == UiTheme::CAT;
+}
+
+static bool is_tupi_warm_theme() {
+    return current_theme == UiTheme::TUPI_WARM;
+}
+
+static void load_theme() {
+    nvs_handle_t handle;
+    uint8_t value = 0;
+    if (nvs_open("qd_ui", NVS_READONLY, &handle) == ESP_OK) {
+        nvs_get_u8(handle, "theme", &value);
+        nvs_close(handle);
+    }
+    if (value >= sizeof(THEMES) / sizeof(THEMES[0])) {
+        value = 0;
+    }
+    current_theme = static_cast<UiTheme>(value);
+}
+
+static void save_theme(UiTheme next_theme) {
+    nvs_handle_t handle;
+    if (nvs_open("qd_ui", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u8(handle, "theme", static_cast<uint8_t>(next_theme));
+        nvs_commit(handle);
+        nvs_close(handle);
+    }
+}
+
+static lv_color_t themed_color(lv_color_t classic, lv_color_t cat) {
+    return is_cat_theme() ? cat : classic;
+}
+
+static lv_color_t cat_card_shadow() {
+    return LV_COLOR_MAKE(0xe9, 0xc8, 0xd8);
+}
+
+static lv_color_t tupi_warm_shadow() {
+    return LV_COLOR_MAKE(0xd8, 0xcd, 0xbc);
+}
+
+#define COLOR_BG (theme().bg)
+#define COLOR_SURFACE (theme().surface)
+#define COLOR_SURFACE_2 (theme().surface2)
+#define COLOR_TEXT (theme().text)
+#define COLOR_CREAM (theme().cream)
+#define COLOR_MUTED (theme().muted)
+#define COLOR_LINE (theme().line)
+#define COLOR_GOLD (theme().gold)
+#define COLOR_GREEN (theme().green)
+#define COLOR_PURPLE (theme().purple)
+#define COLOR_BLUE (theme().blue)
+#define COLOR_CLOCK_DOT (theme().clock_dot)
 static constexpr lv_color_t RADIO_BAR_COLORS[16] = {
     LV_COLOR_MAKE(0xff, 0x6b, 0x6b), LV_COLOR_MAKE(0xff, 0x8e, 0x5a),
     LV_COLOR_MAKE(0xff, 0xb8, 0x4d), LV_COLOR_MAKE(0xf7, 0xd8, 0x5a),
@@ -84,14 +212,102 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
     return label;
 }
 
-static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4) {
-    lv_obj_t* brand_a = label_en(parent, "Nothing", &style_en);
-    lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
+static void fit_brand_label(lv_obj_t* label, int16_t width, bool owner) {
+    const lv_font_t* font = lv_obj_get_style_text_font(label, 0);
+    const int16_t height = font ? (lv_font_get_line_height(font) + 2) : 20;
+    lv_obj_set_size(label, width, height);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_line_space(label, 0, 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, 0);
+    if (owner) {
+        lv_obj_set_style_text_color(label,
+                                    is_tupi_warm_theme() ? COLOR_GREEN :
+                                    (is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD), 0);
+    } else {
+        lv_obj_set_style_text_color(label,
+                                    is_tupi_warm_theme() ? COLOR_TEXT :
+                                    (is_cat_theme() ? COLOR_TEXT : COLOR_CREAM), 0);
+    }
+}
 
-    lv_obj_t* brand_b = label_en(parent, "impossible", &style_gold);
-    lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, x, y + 20);
+static lv_obj_t* circle(lv_obj_t* parent, int16_t size, lv_color_t color, lv_opa_t opa);
+
+static void create_tupi_dot_mark(lv_obj_t* parent, int16_t x, int16_t y, int16_t dot = 8, int16_t gap = 4) {
+    const lv_color_t colors[4] = {
+        COLOR_TEXT, COLOR_TEXT, COLOR_GREEN, COLOR_MUTED
+    };
+    for (int r = 0; r < 2; ++r) {
+        for (int c = 0; c < 2; ++c) {
+            lv_obj_t* d = circle(parent, dot, colors[r * 2 + c], LV_OPA_COVER);
+            lv_obj_align(d, LV_ALIGN_TOP_LEFT, x + c * (dot + gap), y + r * (dot + gap));
+        }
+    }
+}
+
+static void create_brand_mark(lv_obj_t* parent, int16_t x = 18, int16_t y = 4,
+                              lv_obj_t** logo_label = nullptr, lv_obj_t** owner_label = nullptr) {
+    const auto profile = QdLoadUserProfile();
+    if (is_cat_theme()) {
+        lv_obj_t* brand_a = lv_label_create(parent);
+        lv_label_set_text(brand_a, profile.logo.c_str());
+        lv_obj_add_style(brand_a, &style_en, 0);
+        lv_obj_set_style_text_font(brand_a, &font_puhui_16_4, 0);
+        fit_brand_label(brand_a, 170, false);
+        lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
+        add_gesture_bubble(brand_a);
+        if (logo_label) {
+            *logo_label = brand_a;
+        }
+
+        lv_obj_t* brand_b = lv_label_create(parent);
+        lv_label_set_text(brand_b, profile.owner.c_str());
+        lv_obj_add_style(brand_b, &style_gold, 0);
+        lv_obj_set_style_text_font(brand_b, &font_puhui_16_4, 0);
+        fit_brand_label(brand_b, 170, true);
+        lv_obj_align_to(brand_b, brand_a, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 3);
+        add_gesture_bubble(brand_b);
+        if (owner_label) {
+            *owner_label = brand_b;
+        }
+        return;
+    }
+
+    if (is_tupi_warm_theme()) {
+        create_tupi_dot_mark(parent, x, y + 2, 8, 4);
+
+        lv_obj_t* brand = label_en(parent, profile.logo.c_str(), &style_en);
+        lv_obj_set_style_text_font(brand, &font_puhui_16_4, 0);
+        fit_brand_label(brand, 180, false);
+        lv_obj_align(brand, LV_ALIGN_TOP_LEFT, x + 34, y);
+        if (logo_label) {
+            *logo_label = brand;
+        }
+
+        lv_obj_t* sub = label_en(parent, profile.owner.c_str(), &style_muted);
+        lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
+        fit_brand_label(sub, 180, true);
+        lv_obj_align_to(sub, brand, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 3);
+        if (owner_label) {
+            *owner_label = sub;
+        }
+        return;
+    }
+
+    lv_obj_t* brand_a = label_en(parent, profile.logo.c_str(), &style_en);
+    lv_obj_set_style_text_font(brand_a, &font_puhui_16_4, 0);
+    fit_brand_label(brand_a, 170, false);
+    lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, x, y);
+    if (logo_label) {
+        *logo_label = brand_a;
+    }
+
+    lv_obj_t* brand_b = label_en(parent, profile.owner.c_str(), &style_gold);
+    lv_obj_set_style_text_font(brand_b, &font_puhui_16_4, 0);
+    fit_brand_label(brand_b, 170, true);
+    lv_obj_align_to(brand_b, brand_a, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 3);
+    if (owner_label) {
+        *owner_label = brand_b;
+    }
 }
 
 static lv_obj_t* circle(lv_obj_t* parent, int16_t size, lv_color_t color, lv_opa_t opa) {
@@ -213,21 +429,35 @@ static void init_styles() {
     lv_style_set_bg_opa(&style_panel, LV_OPA_COVER);
     lv_style_set_border_color(&style_panel, COLOR_LINE);
     lv_style_set_border_width(&style_panel, 1);
-    lv_style_set_radius(&style_panel, 6);
+    lv_style_set_radius(&style_panel, is_tupi_warm_theme() ? 10 : 6);
     lv_style_set_pad_all(&style_panel, 0);
+    if (is_tupi_warm_theme()) {
+        lv_style_set_shadow_width(&style_panel, 8);
+        lv_style_set_shadow_color(&style_panel, tupi_warm_shadow());
+        lv_style_set_shadow_opa(&style_panel, LV_OPA_20);
+        lv_style_set_shadow_ofs_y(&style_panel, 2);
+    }
 
     lv_style_init(&style_clock_card);
-    lv_style_set_bg_color(&style_clock_card, LV_COLOR_MAKE(0x08, 0x08, 0x08));
+    lv_style_set_bg_color(&style_clock_card,
+                          is_tupi_warm_theme() ? COLOR_SURFACE :
+                          themed_color(LV_COLOR_MAKE(0x08, 0x08, 0x08), COLOR_SURFACE));
     lv_style_set_bg_opa(&style_clock_card, LV_OPA_COVER);
-    lv_style_set_border_color(&style_clock_card, LV_COLOR_MAKE(0x2a, 0x28, 0x22));
+    lv_style_set_border_color(&style_clock_card,
+                              is_tupi_warm_theme() ? COLOR_LINE :
+                              themed_color(LV_COLOR_MAKE(0x2a, 0x28, 0x22), COLOR_LINE));
     lv_style_set_border_width(&style_clock_card, 1);
-    lv_style_set_radius(&style_clock_card, 5);
+    lv_style_set_radius(&style_clock_card, is_tupi_warm_theme() ? 12 : 5);
     lv_style_set_pad_all(&style_clock_card, 0);
 }
 
 // ===== Animation callbacks =====
 void DesktopUI::ObjOpaCb(void* obj, int32_t value) {
     lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), value, 0);
+}
+
+void DesktopUI::ObjXCb(void* obj, int32_t value) {
+    lv_obj_set_x(static_cast<lv_obj_t*>(obj), value);
 }
 
 void DesktopUI::ObjYCb(void* obj, int32_t value) {
@@ -716,6 +946,12 @@ static void settings_firmware_cb(lv_event_t* event) {
     }
 }
 
+static void settings_theme_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->CycleTheme();
+    }
+}
+
 static void main_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -733,11 +969,15 @@ static void xiaozhi_toggle_cb(lv_event_t* event) {
 // ===== DesktopUI implementation =====
 void DesktopUI::Create() {
     g_desktop_ui = this;
+    load_theme();
     init_styles();
 
     lv_obj_t* root = lv_scr_act();
     lv_obj_set_style_bg_color(root, COLOR_BG, 0);
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);
+    brand_label_count_ = 0;
+    memset(brand_logo_labels_, 0, sizeof(brand_logo_labels_));
+    memset(brand_owner_labels_, 0, sizeof(brand_owner_labels_));
 
     CreateMainPage(root);
     CreateAppsPage(root);
@@ -1031,23 +1271,50 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     add_gesture_bubble(main_page_);
 
     // Brand
-    lv_obj_t* brand_a = label_en(main_page_, "Nothing", &style_en);
-    lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
+    if (is_tupi_warm_theme()) {
+        lv_obj_t* logo = nullptr;
+        lv_obj_t* owner = nullptr;
+        create_brand_mark(main_page_, 20, 10, &logo, &owner);
+        RegisterBrandLabels(logo, owner);
 
-    lv_obj_t* brand_b = label_en(main_page_, "impossible", &style_gold);
-    lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_20, 0);
-    lv_obj_align(brand_b, LV_ALIGN_TOP_LEFT, 20, 32);
-    
-    lv_obj_t* brand_c = label_en(main_page_, "Tupi", &style_muted);
-    lv_obj_set_style_text_font(brand_c, &lv_font_montserrat_14, 0);
-    lv_obj_align(brand_c, LV_ALIGN_TOP_LEFT, 20, 54);
+        lv_obj_t* wifi = label_en(main_page_, "WiFi", &style_en);
+        lv_obj_set_style_text_font(wifi, &lv_font_montserrat_14, 0);
+        lv_obj_align(wifi, LV_ALIGN_TOP_LEFT, 278, 14);
+
+        lv_obj_t* battery = label_en(main_page_, "--%", &style_en);
+        lv_obj_set_style_text_color(battery, COLOR_TEXT, 0);
+        lv_obj_align(battery, LV_ALIGN_TOP_LEFT, 340, 14);
+        for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+            if (!status_bar_battery_labels_[i]) {
+                status_bar_battery_labels_[i] = battery;
+                break;
+            }
+        }
+        SetBatteryStatus(battery_level_, battery_charging_, battery_level_ >= 0);
+    } else if (is_cat_theme()) {
+        lv_obj_t* logo = nullptr;
+        lv_obj_t* owner = nullptr;
+        create_brand_mark(main_page_, 20, 4, &logo, &owner);
+        RegisterBrandLabels(logo, owner);
+    } else {
+        const auto profile = QdLoadUserProfile();
+        lv_obj_t* brand_a = label_en(main_page_, profile.logo.c_str(), &style_en);
+        lv_obj_set_style_text_font(brand_a, &lv_font_montserrat_20, 0);
+        fit_brand_label(brand_a, 170, false);
+        lv_obj_align(brand_a, LV_ALIGN_TOP_LEFT, 20, 10);
+
+        lv_obj_t* brand_b = label_en(main_page_, profile.owner.c_str(), &style_gold);
+        lv_obj_set_style_text_font(brand_b, &lv_font_montserrat_16, 0);
+        fit_brand_label(brand_b, 170, true);
+        lv_obj_align_to(brand_b, brand_a, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 4);
+        RegisterBrandLabels(brand_a, brand_b);
+    }
 
     CreateBigTime(main_page_);
 
     // Date and weekday
     date_label_ = label_en(main_page_, "01 / 01     |", &style_en);
-    lv_obj_set_style_text_color(date_label_, COLOR_CREAM, 0);
+    lv_obj_set_style_text_color(date_label_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_text_font(date_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 52, 174);
 
@@ -1055,83 +1322,181 @@ void DesktopUI::CreateMainPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(week_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 178, 174);
 
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(date_label_, COLOR_TEXT, 0);
+        lv_obj_set_style_text_font(date_label_, &lv_font_montserrat_20, 0);
+        lv_obj_align(date_label_, LV_ALIGN_TOP_LEFT, 60, 165);
+        lv_obj_set_style_text_color(week_label_, COLOR_GREEN, 0);
+        lv_obj_set_style_text_font(week_label_, &qd_font_lxgw_20, 0);
+        lv_obj_align(week_label_, LV_ALIGN_TOP_LEFT, 182, 164);
+    }
+
     CreateWeatherPanel(main_page_);
     CreateQuotePanel(main_page_);
 
     // Menu button
     lv_obj_t* menu = CreateButton(main_page_, "Menu", show_apps_cb);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_size(menu, 58, 30);
+        lv_obj_set_style_bg_color(menu, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(menu, COLOR_LINE, 0);
+        lv_obj_set_style_radius(menu, 15, 0);
+    }
     lv_obj_align(menu, LV_ALIGN_TOP_RIGHT, -18, 10);
 }
 
 void DesktopUI::CreateBigTime(lv_obj_t* parent) {
     lv_obj_t* time_group = lv_obj_create(parent);
     lv_obj_remove_style_all(time_group);
-    lv_obj_set_size(time_group, 254, 154);
-    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20, 18);
+    lv_obj_set_size(time_group, is_tupi_warm_theme() ? 254 : 254,
+                    is_tupi_warm_theme() ? 142 : (is_cat_theme() ? 106 : 154));
+    lv_obj_align(time_group, LV_ALIGN_TOP_LEFT, 20,
+                 is_tupi_warm_theme() ? 58 : (is_cat_theme() ? 66 : 18));
     lv_obj_clear_flag(time_group, LV_OBJ_FLAG_SCROLLABLE);
+    if (is_cat_theme() || is_tupi_warm_theme()) {
+        lv_obj_set_style_radius(time_group, is_tupi_warm_theme() ? 12 : 18, 0);
+        lv_obj_set_style_bg_color(time_group, COLOR_SURFACE, 0);
+        lv_obj_set_style_bg_opa(time_group, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(time_group, COLOR_LINE, 0);
+        lv_obj_set_style_border_width(time_group, 1, 0);
+        lv_obj_set_style_shadow_width(time_group, is_tupi_warm_theme() ? 8 : 14, 0);
+        lv_obj_set_style_shadow_color(time_group,
+                                      is_tupi_warm_theme() ? tupi_warm_shadow() : cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(time_group, is_tupi_warm_theme() ? LV_OPA_20 : LV_OPA_40, 0);
+    }
     add_gesture_bubble(time_group);
 
     clock_hour_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_hour_label_, "00");
-    lv_obj_set_size(clock_hour_label_, 108, 60);
+    lv_obj_set_size(clock_hour_label_, is_tupi_warm_theme() ? 104 : 108,
+                    is_tupi_warm_theme() ? 78 : (is_cat_theme() ? 78 : 60));
     lv_obj_set_style_text_font(clock_hour_label_, &qd_font_clock_72, 0);
-    lv_obj_set_style_text_color(clock_hour_label_, COLOR_CREAM, 0);
+    lv_obj_set_style_text_color(clock_hour_label_,
+                                is_tupi_warm_theme() ? COLOR_TEXT :
+                                (is_cat_theme() ? COLOR_PURPLE : COLOR_CREAM), 0);
     lv_obj_set_style_text_align(clock_hour_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT, 0, 77);
+    lv_obj_align(clock_hour_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 18 : 0,
+                 is_tupi_warm_theme() ? 22 : (is_cat_theme() ? 18 : 77));
     add_gesture_bubble(clock_hour_label_);
 
     clock_minute_label_ = lv_label_create(time_group);
     lv_label_set_text(clock_minute_label_, "00");
-    lv_obj_set_size(clock_minute_label_, 110, 60);
+    lv_obj_set_size(clock_minute_label_, is_tupi_warm_theme() ? 100 : 110,
+                    is_tupi_warm_theme() ? 78 : (is_cat_theme() ? 78 : 60));
     lv_obj_set_style_text_font(clock_minute_label_, &qd_font_clock_72, 0);
     lv_obj_set_style_text_color(clock_minute_label_, COLOR_GOLD, 0);
     lv_obj_set_style_text_align(clock_minute_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT, 142, 77);
+    lv_obj_align(clock_minute_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 150 : 142,
+                 is_tupi_warm_theme() ? 22 : (is_cat_theme() ? 18 : 77));
     add_gesture_bubble(clock_minute_label_);
 
-    clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, 73);
-    clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
-    lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, 116);
-    lv_timer_create(ColonTimerCb, 500, this);
-
+    if (is_tupi_warm_theme()) {
+        lv_obj_t* colon = lv_label_create(time_group);
+        lv_label_set_text(colon, ":");
+        lv_obj_set_style_text_font(colon, &qd_font_clock_72, 0);
+        lv_obj_set_style_text_color(colon, COLOR_TEXT, 0);
+        lv_obj_set_size(colon, 26, 78);
+        lv_obj_set_style_text_align(colon, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(colon, LV_ALIGN_TOP_LEFT, 124, 22);
+        add_gesture_bubble(colon);
+    } else {
+        clock_colon_dots_[0] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+        lv_obj_align(clock_colon_dots_[0], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 18 : 73);
+        clock_colon_dots_[1] = circle(time_group, 18, COLOR_CLOCK_DOT, LV_OPA_COVER);
+        lv_obj_align(clock_colon_dots_[1], LV_ALIGN_TOP_LEFT, 118, is_cat_theme() ? 60 : 116);
+        lv_timer_create(ColonTimerCb, 500, this);
+    }
+    if (is_tupi_warm_theme()) {
+        lv_obj_t* divider = bar(time_group, 190, 1, COLOR_LINE, LV_OPA_70);
+        lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 32, 96);
+        lv_obj_t* dot = circle(time_group, 5, COLOR_GREEN, LV_OPA_COVER);
+        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 124, 94);
+        lv_obj_t* date_pill = bar(time_group, 196, 28, COLOR_SURFACE_2, LV_OPA_COVER);
+        lv_obj_set_style_border_color(date_pill, COLOR_LINE, 0);
+        lv_obj_set_style_border_width(date_pill, 1, 0);
+        lv_obj_align(date_pill, LV_ALIGN_TOP_LEFT, 30, 106);
+    }
     RenderBigTime(0, 0, false);
 }
 
 void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_obj_t* panel = CreatePanel(parent, 166, 154, 294, 50);
     lv_obj_set_style_bg_color(panel, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_clip_corner(panel, true, 0);
 
     lv_obj_t* title = label_en(panel, "Weather", &style_muted);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 12, 8);
 
-    // Weather icon pieces are reused for all weather codes to keep the main page light.
-    weather_sun_ = circle(panel, 54, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 56, 28);
+    weather_horizon_ = bar(panel, 132, 1, COLOR_LINE, LV_OPA_60);
+    lv_obj_align(weather_horizon_, LV_ALIGN_TOP_LEFT, 17, 105);
 
-    // Clouds
-    weather_cloud_[0] = circle(panel, 38, COLOR_CREAM, LV_OPA_70);
-    lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 42, 60);
-    weather_cloud_[1] = circle(panel, 46, COLOR_CREAM, LV_OPA_80);
-    lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 72, 52);
-    weather_cloud_[2] = bar(panel, 88, 26, COLOR_CREAM, LV_OPA_80);
-    lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 40, 78);
+    weather_glow_ = circle(panel, 82, COLOR_GOLD, LV_OPA_20);
+    lv_obj_align(weather_glow_, LV_ALIGN_TOP_LEFT, 38, 18);
 
-    for (int i = 0; i < 3; ++i) {
-        weather_rain_[i] = bar(panel, 4, 20, COLOR_BLUE, LV_OPA_80);
-        lv_obj_align(weather_rain_[i], LV_ALIGN_TOP_LEFT, 55 + i * 22, 100);
-        lv_obj_set_style_transform_rotation(weather_rain_[i], 180, 0);
-
-        weather_snow_[i] = circle(panel, 8, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_align(weather_snow_[i], LV_ALIGN_TOP_LEFT, 54 + i * 24, 104);
+    const int16_t ray_pos[6][3] = {
+        {78, 22, 0}, {108, 34, 450}, {112, 66, 900},
+        {76, 92, 0}, {44, 70, 450}, {42, 36, 900},
+    };
+    for (int i = 0; i < 6; ++i) {
+        weather_rays_[i] = bar(panel, 4, 16, COLOR_GOLD, LV_OPA_60);
+        lv_obj_align(weather_rays_[i], LV_ALIGN_TOP_LEFT, ray_pos[i][0], ray_pos[i][1]);
+        lv_obj_set_style_transform_rotation(weather_rays_[i], ray_pos[i][2], 0);
     }
 
-    weather_storm_[0] = bar(panel, 10, 32, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_storm_[0], LV_ALIGN_TOP_LEFT, 84, 92);
-    lv_obj_set_style_transform_rotation(weather_storm_[0], 250, 0);
-    weather_storm_[1] = bar(panel, 10, 26, COLOR_GOLD, LV_OPA_COVER);
-    lv_obj_align(weather_storm_[1], LV_ALIGN_TOP_LEFT, 72, 112);
+    weather_sun_ = circle(panel, 46, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(weather_sun_, LV_ALIGN_TOP_LEFT, 58, 42);
+    lv_obj_t* sun_highlight = circle(weather_sun_, 14, COLOR_CREAM, LV_OPA_40);
+    lv_obj_align(sun_highlight, LV_ALIGN_TOP_LEFT, 9, 8);
+
+    weather_cloud_shadow_ = bar(panel, 94, 24, COLOR_LINE, LV_OPA_30);
+    lv_obj_align(weather_cloud_shadow_, LV_ALIGN_TOP_LEFT, 36, 82);
+
+    weather_cloud_[0] = circle(panel, 40, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[0], LV_ALIGN_TOP_LEFT, 38, 68);
+    weather_cloud_[1] = circle(panel, 50, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[1], LV_ALIGN_TOP_LEFT, 67, 58);
+    weather_cloud_[2] = bar(panel, 96, 28, COLOR_CREAM, LV_OPA_COVER);
+    lv_obj_align(weather_cloud_[2], LV_ALIGN_TOP_LEFT, 34, 84);
+    if (is_tupi_warm_theme()) {
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_set_style_border_color(weather_cloud_[i], COLOR_LINE, 0);
+            lv_obj_set_style_border_width(weather_cloud_[i], 1, 0);
+        }
+        lv_obj_set_style_bg_opa(weather_glow_, LV_OPA_30, 0);
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        weather_rain_[i] = bar(panel, 3, i % 2 == 0 ? 15 : 11, COLOR_BLUE, LV_OPA_70);
+        lv_obj_align(weather_rain_[i], LV_ALIGN_TOP_LEFT, 40 + i * 15, 86 + (i % 2) * 5);
+        lv_obj_set_style_transform_rotation(weather_rain_[i], 180, 0);
+
+        weather_snow_[i] = circle(panel, i % 2 == 0 ? 7 : 5, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_align(weather_snow_[i], LV_ALIGN_TOP_LEFT, 40 + i * 15, 88 + (i % 3) * 5);
+    }
+
+    weather_storm_[0] = circle(panel, 74, COLOR_GOLD, LV_OPA_20);
+    lv_obj_align(weather_storm_[0], LV_ALIGN_TOP_LEFT, 45, 39);
+    lv_obj_move_background(weather_storm_[0]);
+    weather_storm_[1] = bar(panel, 24, 4, COLOR_GOLD, LV_OPA_70);
+    lv_obj_align(weather_storm_[1], LV_ALIGN_TOP_LEFT, 70, 70);
     lv_obj_set_style_transform_rotation(weather_storm_[1], 250, 0);
+    weather_storm_[2] = bar(panel, 18, 3, COLOR_GOLD, LV_OPA_50);
+    lv_obj_align(weather_storm_[2], LV_ALIGN_TOP_LEFT, 91, 60);
+    lv_obj_set_style_transform_rotation(weather_storm_[2], 650, 0);
+    weather_storm_[3] = bar(panel, 16, 3, COLOR_CREAM, LV_OPA_50);
+    lv_obj_align(weather_storm_[3], LV_ALIGN_TOP_LEFT, 56, 82);
+    lv_obj_set_style_transform_rotation(weather_storm_[3], 420, 0);
+
+    weather_scene_gif_ = lv_gif_create(panel);
+    lv_gif_set_src(weather_scene_gif_, &qd_weather_cloudy_scene);
+    lv_obj_set_size(weather_scene_gif_, 142, 84);
+    lv_obj_align(weather_scene_gif_, LV_ALIGN_TOP_LEFT, 12, 22);
+    lv_obj_set_style_bg_opa(weather_scene_gif_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(weather_scene_gif_, 0, 0);
+    lv_obj_add_flag(weather_scene_gif_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(weather_scene_gif_);
 
     // Shared weather pulse animation
     lv_anim_t anim;
@@ -1143,56 +1508,143 @@ void DesktopUI::CreateWeatherPanel(lv_obj_t* parent) {
     lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
     lv_anim_set_exec_cb(&anim, ObjOpaCb);
     lv_anim_start(&anim);
+
+    lv_anim_t storm_anim;
+    lv_anim_init(&storm_anim);
+    lv_anim_set_var(&storm_anim, weather_storm_[0]);
+    lv_anim_set_values(&storm_anim, LV_OPA_10, LV_OPA_30);
+    lv_anim_set_time(&storm_anim, 420);
+    lv_anim_set_playback_time(&storm_anim, 820);
+    lv_anim_set_repeat_count(&storm_anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_exec_cb(&storm_anim, ObjOpaCb);
+    lv_anim_start(&storm_anim);
     
     // Weather particle animation timer
-    weather_particle_timer_ = lv_timer_create(WeatherParticleCb, 200, this);
+    weather_particle_timer_ = lv_timer_create(WeatherParticleCb, 260, this);
     lv_timer_pause(weather_particle_timer_);
 
     weather_temp_label_ = label_en(panel, "-- C", &style_en);
     lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(weather_temp_label_, COLOR_GREEN, 0);
+        lv_obj_set_style_text_font(weather_temp_label_, &lv_font_montserrat_20, 0);
+    }
     lv_obj_set_width(weather_temp_label_, 142);
     lv_label_set_long_mode(weather_temp_label_, LV_LABEL_LONG_CLIP);
-    lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 12, 108);
+    lv_obj_align(weather_temp_label_, LV_ALIGN_TOP_LEFT, 14, 112);
 
     weather_meta_label_ = label_en(panel, "Weather pending", &style_green);
     lv_obj_set_width(weather_meta_label_, 142);
     lv_label_set_long_mode(weather_meta_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(weather_meta_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 12, 132);
+    lv_obj_set_style_text_font(weather_meta_label_, &font_puhui_16_4, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(weather_meta_label_, COLOR_GREEN, 0);
+    }
+    lv_obj_align(weather_meta_label_, LV_ALIGN_TOP_LEFT, 14, 134);
 
     ApplyWeatherVisual(-1);
 }
 
 void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
-    daily_card_panel_ = CreatePanel(parent, 438, 94, 20, 214);
+    daily_card_panel_ = CreatePanel(parent, 438, is_tupi_warm_theme() ? 76 : 94,
+                                    20, is_tupi_warm_theme() ? 232 : 214);
+    if (is_cat_theme()) {
+        lv_obj_set_style_bg_color(daily_card_panel_, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(daily_card_panel_, COLOR_LINE, 0);
+        lv_obj_set_style_shadow_width(daily_card_panel_, 12, 0);
+        lv_obj_set_style_shadow_color(daily_card_panel_, cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_40, 0);
+    } else if (is_tupi_warm_theme()) {
+        lv_obj_set_style_bg_color(daily_card_panel_, COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(daily_card_panel_, COLOR_LINE, 0);
+        lv_obj_set_style_shadow_width(daily_card_panel_, 8, 0);
+        lv_obj_set_style_shadow_color(daily_card_panel_, tupi_warm_shadow(), 0);
+        lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_20, 0);
+
+        lv_obj_t* note = label_en(daily_card_panel_, "tupi note", &style_muted);
+        lv_obj_set_style_text_font(note, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(note, COLOR_GREEN, 0);
+        lv_obj_align(note, LV_ALIGN_TOP_LEFT, 22, 8);
+        create_tupi_dot_mark(daily_card_panel_, 98, 10, 6, 3);
+    }
 
     daily_card_date_label_ = label_en(daily_card_panel_, "--/--", &style_gold);
     lv_obj_set_width(daily_card_date_label_, 92);
-    lv_obj_set_style_text_align(daily_card_date_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_date_label_, &lv_font_montserrat_20, 0);
-    lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT, 16, 15);
+    lv_obj_set_style_text_align(daily_card_date_label_,
+                                is_tupi_warm_theme() ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(daily_card_date_label_,
+                               is_tupi_warm_theme() ? &lv_font_montserrat_16 : &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(daily_card_date_label_,
+                                is_tupi_warm_theme() ? COLOR_GREEN : COLOR_GOLD, 0);
+    lv_obj_align(daily_card_date_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 24 : 16, is_tupi_warm_theme() ? 33 : 15);
 
     daily_card_title_label_ = label_en(daily_card_panel_, "今日", &style_muted);
-    lv_obj_set_width(daily_card_title_label_, 108);
+    lv_obj_set_width(daily_card_title_label_, is_tupi_warm_theme() ? 104 : 108);
     lv_label_set_long_mode(daily_card_title_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_align(daily_card_title_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(daily_card_title_label_, &font_puhui_16_4, 0);
-    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT, 16, 47);
+    lv_obj_set_style_text_align(daily_card_title_label_,
+                                is_tupi_warm_theme() ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(daily_card_title_label_, COLOR_TEXT, 0);
+    lv_obj_set_style_text_font(daily_card_title_label_,
+                               is_tupi_warm_theme() ? &qd_font_lxgw_16 : &qd_font_lxgw_20, 0);
+    lv_obj_align(daily_card_title_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 24 : 16,
+                 is_tupi_warm_theme() ? 52 : (is_cat_theme() ? 45 : 47));
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
-    lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 132, 16);
+    lv_obj_align(divider, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 124 : (is_cat_theme() ? 120 : 132),
+                 is_tupi_warm_theme() ? 10 : 16);
+
+    if (is_cat_theme()) {
+        lv_obj_t* cat = circle(daily_card_panel_, 38, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_border_color(cat, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(cat, 1, 0);
+        lv_obj_align(cat, LV_ALIGN_TOP_LEFT, 134, 24);
+
+        lv_obj_t* ear_l = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_l, 3, 0);
+        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_l, 1, 0);
+        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
+        lv_obj_align(ear_l, LV_ALIGN_TOP_LEFT, 139, 18);
+
+        lv_obj_t* ear_r = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_r, 3, 0);
+        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_r, 1, 0);
+        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
+        lv_obj_align(ear_r, LV_ALIGN_TOP_LEFT, 156, 18);
+
+        lv_obj_t* eye_l = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
+        lv_obj_align(eye_l, LV_ALIGN_TOP_LEFT, 146, 39);
+        lv_obj_t* eye_r = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
+        lv_obj_align(eye_r, LV_ALIGN_TOP_LEFT, 160, 39);
+        lv_obj_t* nose = circle(daily_card_panel_, 4, COLOR_PURPLE, LV_OPA_COVER);
+        lv_obj_align(nose, LV_ALIGN_TOP_LEFT, 153, 49);
+    }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, 266);
+    lv_obj_set_width(quote_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_font(quote_label_, &font_puhui_16_4, 0);
-    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT, 152, 14);
+    lv_obj_set_style_text_color(quote_label_, COLOR_TEXT, 0);
+    lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
+    lv_obj_set_style_text_line_space(quote_label_,
+                                     is_tupi_warm_theme() ? 2 : (is_cat_theme() ? 1 : 0), 0);
+    lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT,
+                 is_tupi_warm_theme() ? 146 : (is_cat_theme() ? 186 : 152),
+                 is_tupi_warm_theme() ? 16 : 10);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, 266);
+    lv_obj_set_width(network_status_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
-    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT, 152, -7);
+    lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT,
+                 is_tupi_warm_theme() ? 148 : (is_cat_theme() ? 190 : 152),
+                 is_tupi_warm_theme() ? -9 : -7);
+    if (is_tupi_warm_theme()) {
+        lv_obj_add_flag(network_status_label_, LV_OBJ_FLAG_HIDDEN);
+    }
     
     // Daily card breathing animation
     lv_timer_create(DailyCardBreathCb, 50, this);
@@ -1206,22 +1658,34 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(apps_page_, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
-    lv_obj_set_style_bg_color(apps_page_, LV_COLOR_MAKE(0x0e, 0x08, 0x05), 0);
+    lv_obj_set_style_bg_color(apps_page_,
+                              is_tupi_warm_theme() ? COLOR_BG :
+                              themed_color(LV_COLOR_MAKE(0x0e, 0x08, 0x05), COLOR_BG), 0);
 
-    create_brand_mark(apps_page_);
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(apps_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
 
     CreateStatusBar(apps_page_);
 
     lv_obj_t* title = label_en(apps_page_, "Apps", &style_en);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
+    }
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(apps_page_, "App Center", &style_muted);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
     lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
-    lv_obj_set_style_bg_color(back, LV_COLOR_MAKE(0x24, 0x16, 0x0f), 0);
-    lv_obj_set_style_border_color(back, LV_COLOR_MAKE(0x78, 0x48, 0x26), 0);
+    lv_obj_set_style_bg_color(back,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x24, 0x16, 0x0f), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(back,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x78, 0x48, 0x26), COLOR_LINE), 0);
     lv_obj_set_style_radius(back, 16, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
@@ -1237,11 +1701,11 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     AppInfo apps[] = {
         {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
         {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
-        {"AI", "XiaoZhi", "Online", COLOR_PURPLE, xiaozhi_card_cb},
+        {"AI", "XiaoZhi", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
         {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
-        {"CAL", "Calendar", "Today", COLOR_PURPLE, calendar_card_cb},
+        {"CAL", "Calendar", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
         {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi Hub", COLOR_BLUE, network_card_cb},
+        {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
         {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
     };
 
@@ -1266,23 +1730,39 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
     lv_obj_add_flag(box, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_bg_color(box, LV_COLOR_MAKE(0x18, 0x0f, 0x0a), 0);
-    lv_obj_set_style_border_color(box, LV_COLOR_MAKE(0x68, 0x3d, 0x22), 0);
-    lv_obj_set_style_radius(box, 6, 0);
+    lv_obj_set_style_bg_color(box,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x18, 0x0f, 0x0a), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(box,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x68, 0x3d, 0x22), COLOR_LINE), 0);
+    lv_obj_set_style_radius(box, is_tupi_warm_theme() ? 8 : 6, 0);
+    if (is_cat_theme()) {
+        lv_obj_set_style_shadow_width(box, 10, 0);
+        lv_obj_set_style_shadow_color(box, cat_card_shadow(), 0);
+        lv_obj_set_style_shadow_opa(box, LV_OPA_30, 0);
+    } else if (is_tupi_warm_theme()) {
+        lv_obj_set_style_shadow_width(box, 6, 0);
+        lv_obj_set_style_shadow_color(box, tupi_warm_shadow(), 0);
+        lv_obj_set_style_shadow_opa(box, LV_OPA_20, 0);
+    }
     add_gesture_bubble(box);
 
     lv_obj_t* icon_box = lv_obj_create(box);
     lv_obj_remove_style_all(icon_box);
     lv_obj_set_size(icon_box, 36, 34);
     lv_obj_set_style_radius(icon_box, 6, 0);
-    lv_obj_set_style_bg_color(icon_box, LV_COLOR_MAKE(0x1b, 0x11, 0x0b), 0);
+    lv_obj_set_style_bg_color(icon_box,
+                              is_tupi_warm_theme() ? COLOR_SURFACE_2 :
+                              themed_color(LV_COLOR_MAKE(0x1b, 0x11, 0x0b), COLOR_SURFACE_2), 0);
     lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(icon_box, COLOR_GOLD, 0);
+    lv_obj_set_style_border_color(icon_box, is_tupi_warm_theme() ? COLOR_LINE : COLOR_GOLD, 0);
     lv_obj_set_style_border_width(icon_box, 1, 0);
     lv_obj_align(icon_box, LV_ALIGN_TOP_LEFT, 10, 7);
     add_gesture_bubble(icon_box);
 
     lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
+    lv_obj_set_style_text_color(cn_label, is_tupi_warm_theme() ? color : COLOR_GOLD, 0);
     lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_12, 0);
     lv_obj_center(cn_label);
 
@@ -1314,9 +1794,12 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             lv_obj_remove_style_all(frame);
             lv_obj_set_size(frame, 58, 26);
             lv_obj_set_style_radius(frame, 3, 0);
-            lv_obj_set_style_bg_color(frame, LV_COLOR_MAKE(0x8b, 0x6c, 0x45), 0);
+            lv_obj_set_style_bg_color(frame,
+                                      themed_color(LV_COLOR_MAKE(0x8b, 0x6c, 0x45),
+                                                   LV_COLOR_MAKE(0xff, 0xe8, 0xf0)), 0);
             lv_obj_set_style_bg_opa(frame, LV_OPA_COVER, 0);
-            lv_obj_set_style_border_color(frame, LV_COLOR_MAKE(0xe8, 0xc9, 0x8e), 0);
+            lv_obj_set_style_border_color(frame,
+                                          themed_color(LV_COLOR_MAKE(0xe8, 0xc9, 0x8e), COLOR_LINE), 0);
             lv_obj_set_style_border_width(frame, 1, 0);
             lv_obj_align(frame, LV_ALIGN_TOP_RIGHT, -14, 11);
             add_gesture_bubble(frame);
@@ -1329,8 +1812,10 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 2: {
-            lv_obj_t* face = circle(box, 28, LV_COLOR_MAKE(0x20, 0x14, 0x0d), LV_OPA_COVER);
-            lv_obj_set_style_border_color(face, COLOR_GOLD, 0);
+            lv_obj_t* face = circle(box, 28,
+                                    themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_CREAM),
+                                    LV_OPA_COVER);
+            lv_obj_set_style_border_color(face, is_tupi_warm_theme() ? COLOR_GREEN : COLOR_GOLD, 0);
             lv_obj_set_style_border_width(face, 2, 0);
             lv_obj_align(face, LV_ALIGN_TOP_RIGHT, -32, 10);
             lv_obj_t* eye_l = circle(face, 3, COLOR_GOLD, LV_OPA_COVER);
@@ -1344,12 +1829,17 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 3: {
-            lv_obj_t* cart = bar(box, 42, 18, LV_COLOR_MAKE(0x8d, 0xa7, 0xb4), LV_OPA_COVER);
+            lv_obj_t* cart = bar(box, 42, 18,
+                                 themed_color(LV_COLOR_MAKE(0x8d, 0xa7, 0xb4), COLOR_BLUE),
+                                 LV_OPA_COVER);
             lv_obj_set_style_radius(cart, 2, 0);
-            lv_obj_set_style_border_color(cart, LV_COLOR_MAKE(0x5c, 0x3a, 0x24), 0);
+            lv_obj_set_style_border_color(cart,
+                                          themed_color(LV_COLOR_MAKE(0x5c, 0x3a, 0x24), COLOR_LINE), 0);
             lv_obj_set_style_border_width(cart, 2, 0);
             lv_obj_align(cart, LV_ALIGN_TOP_RIGHT, -28, 15);
-            lv_obj_t* led = circle(box, 6, LV_COLOR_MAKE(0xc5, 0x6e, 0x4c), LV_OPA_COVER);
+            lv_obj_t* led = circle(box, 6,
+                                   themed_color(LV_COLOR_MAKE(0xc5, 0x6e, 0x4c), COLOR_PURPLE),
+                                   LV_OPA_COVER);
             lv_obj_align(led, LV_ALIGN_TOP_RIGHT, -15, 21);
             break;
         }
@@ -1366,8 +1856,11 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
             break;
         }
         case 5: {
-            lv_obj_t* ring = circle(box, 36, LV_COLOR_MAKE(0x1c, 0x11, 0x0b), LV_OPA_COVER);
-            lv_obj_set_style_border_color(ring, LV_COLOR_MAKE(0xe0, 0x8d, 0x4d), 0);
+            lv_obj_t* ring = circle(box, 36,
+                                    themed_color(LV_COLOR_MAKE(0x1c, 0x11, 0x0b), COLOR_CREAM),
+                                    LV_OPA_COVER);
+            lv_obj_set_style_border_color(ring,
+                                          themed_color(LV_COLOR_MAKE(0xe0, 0x8d, 0x4d), COLOR_PURPLE), 0);
             lv_obj_set_style_border_width(ring, 4, 0);
             lv_obj_align(ring, LV_ALIGN_TOP_RIGHT, -25, 6);
             lv_obj_t* number = label_en(ring, "25", &style_en);
@@ -1473,6 +1966,9 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     add_gesture_bubble(fc_game_group_);
 
     fc_title_label_ = label_en(fc_list_group_, "FC / NES", &style_gold);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(fc_title_label_, COLOR_TEXT, 0);
+    }
     lv_obj_set_style_text_font(fc_title_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(fc_title_label_, LV_ALIGN_TOP_LEFT, 24, 14);
 
@@ -1483,13 +1979,20 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(fc_detail_label_, LV_ALIGN_TOP_LEFT, 132, 19);
 
     lv_obj_t* list_panel = CreatePanel(fc_list_group_, 432, 204, 24, 52);
-    lv_obj_set_style_bg_color(list_panel, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
-    lv_obj_set_style_border_color(list_panel, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_bg_color(list_panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(list_panel,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(list_panel, 1, 0);
     lv_obj_set_style_radius(list_panel, 6, 0);
 
     fc_list_label_ = label_en(list_panel, "No .nes\n/sdcard/nes", &style_en);
     lv_obj_set_style_text_font(fc_list_label_, &font_puhui_16_4, 0);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(fc_list_label_, COLOR_TEXT, 0);
+    }
     lv_obj_set_width(fc_list_label_, 400);
     lv_label_set_long_mode(fc_list_label_, LV_LABEL_LONG_CLIP);
     lv_obj_align(fc_list_label_, LV_ALIGN_TOP_LEFT, 16, 14);
@@ -1508,8 +2011,12 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     lv_obj_align(next, LV_ALIGN_TOP_LEFT, 356, 272);
 
     lv_obj_t* screen = CreatePanel(fc_game_group_, 480, 240, 0, 0);
-    lv_obj_set_style_bg_color(screen, LV_COLOR_MAKE(0x02, 0x03, 0x05), 0);
-    lv_obj_set_style_border_color(screen, LV_COLOR_MAKE(0x26, 0x31, 0x3c), 0);
+    lv_obj_set_style_bg_color(screen,
+                              is_tupi_warm_theme() ? COLOR_BG :
+                              themed_color(LV_COLOR_MAKE(0x02, 0x03, 0x05), LV_COLOR_MAKE(0xff, 0xfb, 0xfc)), 0);
+    lv_obj_set_style_border_color(screen,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x26, 0x31, 0x3c), COLOR_LINE), 0);
     lv_obj_set_style_border_width(screen, 0, 0);
     lv_obj_set_style_radius(screen, 0, 0);
 
@@ -1518,7 +2025,9 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
     add_gesture_bubble(fc_screen_image_);
 
     lv_obj_t* controls = CreatePanel(fc_game_group_, 480, 80, 0, 240);
-    lv_obj_set_style_bg_color(controls, LV_COLOR_MAKE(0x05, 0x07, 0x09), 0);
+    lv_obj_set_style_bg_color(controls,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x05, 0x07, 0x09), COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(controls, 0, 0);
     lv_obj_set_style_radius(controls, 0, 0);
 
@@ -1529,9 +2038,11 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
         lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x12, 0x1a, 0x20), 0);
+        lv_obj_set_style_bg_color(key,
+                                  themed_color(LV_COLOR_MAKE(0x12, 0x1a, 0x20), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
-        lv_obj_set_style_border_color(key, LV_COLOR_MAKE(0x47, 0xb3, 0xff), 0);
+        lv_obj_set_style_border_color(key,
+                                      themed_color(LV_COLOR_MAKE(0x47, 0xb3, 0xff), COLOR_BLUE), 0);
         lv_obj_set_style_border_width(key, 1, 0);
         lv_obj_set_style_radius(key, 6, 0);
         lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESSED, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
@@ -1552,7 +2063,8 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_align(key, LV_ALIGN_TOP_LEFT, x, y);
         lv_obj_clear_flag(key, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(key, LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(key, LV_COLOR_MAKE(0x1c, 0x18, 0x14), 0);
+        lv_obj_set_style_bg_color(key,
+                                  themed_color(LV_COLOR_MAKE(0x1c, 0x18, 0x14), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(key, LV_OPA_80, 0);
         lv_obj_set_style_border_color(key, COLOR_GOLD, 0);
         lv_obj_set_style_border_width(key, 1, 0);
@@ -1590,75 +2102,95 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_add_event_cb(calendar_page_, calendar_gesture_cb, LV_EVENT_GESTURE, NULL);
     add_gesture_bubble(calendar_page_);
 
-    lv_obj_set_style_bg_color(calendar_page_, LV_COLOR_MAKE(0x2a, 0x16, 0x0c), 0);
+    lv_obj_set_style_bg_color(calendar_page_,
+                              themed_color(LV_COLOR_MAKE(0x2a, 0x16, 0x0c), COLOR_BG), 0);
 
-    lv_obj_t* glow = circle(calendar_page_, 146, LV_COLOR_MAKE(0xb0, 0x6c, 0x36), LV_OPA_30);
+    lv_obj_t* glow = circle(calendar_page_, 146,
+                            themed_color(LV_COLOR_MAKE(0xb0, 0x6c, 0x36), COLOR_PURPLE),
+                            is_cat_theme() ? LV_OPA_20 : LV_OPA_30);
     lv_obj_align(glow, LV_ALIGN_BOTTOM_LEFT, -48, 34);
 
     lv_obj_t* today_card = CreatePanel(calendar_page_, 146, 252, 10, 18);
-    lv_obj_set_style_bg_color(today_card, LV_COLOR_MAKE(0xff, 0xf3, 0xdb), 0);
+    lv_obj_set_style_bg_color(today_card,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xf3, 0xdb), COLOR_SURFACE), 0);
     lv_obj_set_style_border_width(today_card, 0, 0);
     lv_obj_set_style_radius(today_card, 8, 0);
 
-    lv_obj_t* card_sun = circle(today_card, 112, LV_COLOR_MAKE(0xff, 0xc8, 0x78), LV_OPA_30);
+    lv_obj_t* card_sun = circle(today_card, 112,
+                                themed_color(LV_COLOR_MAKE(0xff, 0xc8, 0x78), COLOR_PURPLE),
+                                LV_OPA_30);
     lv_obj_align(card_sun, LV_ALIGN_TOP_RIGHT, 38, -32);
 
-    lv_obj_t* card_shadow = circle(today_card, 96, LV_COLOR_MAKE(0xed, 0xa0, 0x54), LV_OPA_20);
+    lv_obj_t* card_shadow = circle(today_card, 96,
+                                   themed_color(LV_COLOR_MAKE(0xed, 0xa0, 0x54), COLOR_BLUE),
+                                   LV_OPA_20);
     lv_obj_align(card_shadow, LV_ALIGN_BOTTOM_LEFT, -58, 26);
 
     lv_obj_t* card_today_cn = label_en(today_card, "\xE4\xBB\x8A""\xE6\x97\xA5", &style_gold);
-    lv_obj_set_style_text_font(card_today_cn, &font_puhui_16_4, 0);
-    lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, 22);
+    lv_obj_set_style_text_font(card_today_cn,
+                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+    lv_obj_align(card_today_cn, LV_ALIGN_TOP_LEFT, 20, is_cat_theme() ? 18 : 22);
 
     lv_obj_t* card_today_en = label_en(today_card, "TODAY", &style_muted);
-    lv_obj_set_style_text_color(card_today_en, LV_COLOR_MAKE(0x55, 0x4c, 0x42), 0);
+    lv_obj_set_style_text_color(card_today_en,
+                                themed_color(LV_COLOR_MAKE(0x55, 0x4c, 0x42), COLOR_MUTED), 0);
     lv_obj_align(card_today_en, LV_ALIGN_TOP_LEFT, 20, 54);
 
     calendar_card_day_label_ = label_en(today_card, "--", &style_en);
-    lv_obj_set_style_text_color(calendar_card_day_label_, LV_COLOR_MAKE(0x20, 0x16, 0x10), 0);
+    lv_obj_set_style_text_color(calendar_card_day_label_,
+                                themed_color(LV_COLOR_MAKE(0x20, 0x16, 0x10), COLOR_PURPLE), 0);
     lv_obj_set_style_text_font(calendar_card_day_label_, &lv_font_montserrat_48, 0);
     lv_obj_align(calendar_card_day_label_, LV_ALIGN_TOP_MID, 0, 92);
 
     calendar_card_weekday_label_ = label_en(today_card, "--", &style_en);
-    lv_obj_set_style_text_color(calendar_card_weekday_label_, LV_COLOR_MAKE(0x2e, 0x21, 0x18), 0);
-    lv_obj_set_style_text_font(calendar_card_weekday_label_, &font_puhui_16_4, 0);
-    lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, 164);
+    lv_obj_set_style_text_color(calendar_card_weekday_label_,
+                                themed_color(LV_COLOR_MAKE(0x2e, 0x21, 0x18), COLOR_TEXT), 0);
+    lv_obj_set_style_text_font(calendar_card_weekday_label_,
+                               is_cat_theme() ? &qd_font_lxgw_20 : &qd_font_lxgw_16, 0);
+    lv_obj_align(calendar_card_weekday_label_, LV_ALIGN_TOP_LEFT, 22, is_cat_theme() ? 160 : 164);
 
     calendar_card_date_label_ = label_en(today_card, "---- / --", &style_gold);
     lv_obj_set_style_text_font(calendar_card_date_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(calendar_card_date_label_, LV_ALIGN_TOP_LEFT, 22, 198);
 
     lv_obj_t* panel = CreatePanel(calendar_page_, 304, 252, 166, 18);
-    lv_obj_set_style_bg_color(panel, LV_COLOR_MAKE(0x18, 0x0f, 0x0a), 0);
-    lv_obj_set_style_border_color(panel, LV_COLOR_MAKE(0x63, 0x43, 0x2b), 0);
+    lv_obj_set_style_bg_color(panel,
+                              themed_color(LV_COLOR_MAKE(0x18, 0x0f, 0x0a), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(panel,
+                                  themed_color(LV_COLOR_MAKE(0x63, 0x43, 0x2b), COLOR_LINE), 0);
     lv_obj_set_style_radius(panel, 8, 0);
 
     calendar_title_label_ = label_en(panel, "Month ----", &style_en);
-    lv_obj_set_style_text_color(calendar_title_label_, LV_COLOR_MAKE(0xff, 0xf5, 0xe4), 0);
+    lv_obj_set_style_text_color(calendar_title_label_,
+                                themed_color(LV_COLOR_MAKE(0xff, 0xf5, 0xe4), COLOR_TEXT), 0);
     lv_obj_set_style_text_font(calendar_title_label_, &lv_font_montserrat_20, 0);
     lv_obj_align(calendar_title_label_, LV_ALIGN_TOP_LEFT, 18, 18);
 
     lv_obj_t* top_today = CreateButton(panel, "Today", calendar_today_cb);
     lv_obj_set_size(top_today, 76, 28);
-    lv_obj_set_style_bg_color(top_today, LV_COLOR_MAKE(0xff, 0xc1, 0x70), 0);
+    lv_obj_set_style_bg_color(top_today,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xc1, 0x70), COLOR_CREAM), 0);
     lv_obj_set_style_border_width(top_today, 0, 0);
     lv_obj_align(top_today, LV_ALIGN_TOP_RIGHT, -18, 18);
 
     calendar_today_label_ = label_en(panel, "Minimal monthly view", &style_muted);
     lv_obj_set_width(calendar_today_label_, 180);
     lv_label_set_long_mode(calendar_today_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_color(calendar_today_label_, LV_COLOR_MAKE(0x9a, 0x76, 0x5e), 0);
+    lv_obj_set_style_text_color(calendar_today_label_,
+                                themed_color(LV_COLOR_MAKE(0x9a, 0x76, 0x5e), COLOR_MUTED), 0);
     lv_obj_set_style_text_font(calendar_today_label_, &lv_font_montserrat_14, 0);
     lv_obj_align(calendar_today_label_, LV_ALIGN_TOP_LEFT, 18, 50);
 
-    lv_obj_t* divider = bar(panel, 268, 1, LV_COLOR_MAKE(0x6b, 0x48, 0x2e), LV_OPA_COVER);
+    lv_obj_t* divider = bar(panel, 268, 1,
+                            themed_color(LV_COLOR_MAKE(0x6b, 0x48, 0x2e), COLOR_LINE),
+                            LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 18, 76);
 
     static constexpr const char* kWeekdays[] = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"};
     for (int col = 0; col < 7; ++col) {
         lv_obj_t* label = label_en(panel, kWeekdays[col], &style_muted);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-        const lv_color_t weekday_color = col >= 5 ? COLOR_GOLD : lv_color_make(0xa8, 0x86, 0x6e);
+        const lv_color_t weekday_color = col >= 5 ? COLOR_GOLD : themed_color(lv_color_make(0xa8, 0x86, 0x6e), COLOR_MUTED);
         lv_obj_set_style_text_color(label, weekday_color, 0);
         lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
         lv_obj_set_width(label, 36);
@@ -1672,9 +2204,11 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
         lv_obj_remove_style_all(cell);
         lv_obj_set_size(cell, 32, 20);
         lv_obj_set_style_radius(cell, 8, 0);
-        lv_obj_set_style_bg_color(cell, LV_COLOR_MAKE(0x24, 0x18, 0x10), 0);
+        lv_obj_set_style_bg_color(cell,
+                                  themed_color(LV_COLOR_MAKE(0x24, 0x18, 0x10), COLOR_SURFACE_2), 0);
         lv_obj_set_style_bg_opa(cell, LV_OPA_50, 0);
-        lv_obj_set_style_border_color(cell, LV_COLOR_MAKE(0x5d, 0x40, 0x2b), 0);
+        lv_obj_set_style_border_color(cell,
+                                      themed_color(LV_COLOR_MAKE(0x5d, 0x40, 0x2b), COLOR_LINE), 0);
         lv_obj_set_style_border_width(cell, 1, 0);
         lv_obj_align(cell, LV_ALIGN_TOP_LEFT, 16 + col * 40, 116 + row * 22);
         add_gesture_bubble(cell);
@@ -1691,22 +2225,27 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_obj_t* prev = CreateButton(calendar_page_, "Prev", calendar_prev_cb);
     lv_obj_set_size(prev, 96, 34);
     lv_obj_set_ext_click_area(prev, 12);
-    lv_obj_set_style_bg_color(prev, LV_COLOR_MAKE(0x20, 0x14, 0x0d), 0);
-    lv_obj_set_style_border_color(prev, LV_COLOR_MAKE(0x5b, 0x3c, 0x27), 0);
+    lv_obj_set_style_bg_color(prev,
+                              themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(prev,
+                                  themed_color(LV_COLOR_MAKE(0x5b, 0x3c, 0x27), COLOR_LINE), 0);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 18, 278);
 
     lv_obj_t* today = CreateButton(calendar_page_, "Today", calendar_today_cb);
     lv_obj_set_size(today, 96, 34);
     lv_obj_set_ext_click_area(today, 12);
-    lv_obj_set_style_bg_color(today, LV_COLOR_MAKE(0xff, 0xc1, 0x70), 0);
+    lv_obj_set_style_bg_color(today,
+                              themed_color(LV_COLOR_MAKE(0xff, 0xc1, 0x70), COLOR_CREAM), 0);
     lv_obj_set_style_border_width(today, 0, 0);
     lv_obj_align(today, LV_ALIGN_TOP_MID, 0, 278);
 
     lv_obj_t* next = CreateButton(calendar_page_, "Next", calendar_next_cb);
     lv_obj_set_size(next, 96, 34);
     lv_obj_set_ext_click_area(next, 12);
-    lv_obj_set_style_bg_color(next, LV_COLOR_MAKE(0x20, 0x14, 0x0d), 0);
-    lv_obj_set_style_border_color(next, LV_COLOR_MAKE(0x5b, 0x3c, 0x27), 0);
+    lv_obj_set_style_bg_color(next,
+                              themed_color(LV_COLOR_MAKE(0x20, 0x14, 0x0d), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(next,
+                                  themed_color(LV_COLOR_MAKE(0x5b, 0x3c, 0x27), COLOR_LINE), 0);
     lv_obj_align(next, LV_ALIGN_TOP_RIGHT, -18, 278);
 
     RenderCalendar();
@@ -1723,7 +2262,10 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     add_gesture_bubble(radio_page_);
 
     // 顶部状态栏
-    create_brand_mark(radio_page_);
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(radio_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
 
     CreateStatusBar(radio_page_);
 
@@ -1738,15 +2280,15 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
 
     // 当前电台信息
     radio_station_label_ = label_en(radio_page_, "CNR China Voice", &style_gold);
-    lv_obj_set_style_text_font(radio_station_label_, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(radio_station_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_station_label_, LV_ALIGN_TOP_LEFT, 24, 88);
 
     radio_state_label_ = label_en(radio_page_, "Ready", &style_green);
-    lv_obj_set_style_text_font(radio_state_label_, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(radio_state_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_state_label_, LV_ALIGN_TOP_LEFT, 24, 118);
 
     radio_meta_label_ = label_en(radio_page_, "MP3 64 kbps", &style_muted);
-    lv_obj_set_style_text_font(radio_meta_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(radio_meta_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
     // 播放控制按钮
@@ -1944,7 +2486,10 @@ void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
     lv_obj_add_flag(network_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(network_page_, network_gesture_cb, LV_EVENT_GESTURE, NULL);
 
-    create_brand_mark(network_page_);
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(network_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
 
     CreateStatusBar(network_page_);
 
@@ -2002,7 +2547,10 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(settings_page_, settings_gesture_cb, LV_EVENT_GESTURE, NULL);
 
-    create_brand_mark(settings_page_);
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(settings_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
 
     CreateStatusBar(settings_page_);
 
@@ -2070,29 +2618,102 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(settings_volume_slider_, COLOR_CREAM, LV_PART_KNOB);
     lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
 
+    lv_obj_t* theme_title = label_en(settings_content_, "Appearance", &style_gold);
+    lv_obj_set_style_text_font(theme_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(theme_title, LV_ALIGN_TOP_LEFT, 4, 166);
+
+    lv_obj_t* theme_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(theme_row, &style_panel, 0);
+    lv_obj_set_size(theme_row, 414, 58);
+    lv_obj_align(theme_row, LV_ALIGN_TOP_LEFT, 0, 192);
+    lv_obj_clear_flag(theme_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* theme_label = label_en(theme_row, "Theme", &style_en);
+    lv_obj_align(theme_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    settings_theme_value_ = label_en(theme_row, theme().name, &style_muted);
+    lv_obj_set_style_text_font(settings_theme_value_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_theme_value_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_theme_button_ = lv_btn_create(theme_row);
+    lv_obj_set_size(settings_theme_button_, 84, 30);
+    lv_obj_set_style_radius(settings_theme_button_, 15, 0);
+    lv_obj_set_style_bg_color(settings_theme_button_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_border_color(settings_theme_button_, COLOR_PURPLE, 0);
+    lv_obj_set_style_border_width(settings_theme_button_, 1, 0);
+    lv_obj_add_event_cb(settings_theme_button_, settings_theme_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(settings_theme_button_, LV_ALIGN_RIGHT_MID, -14, 0);
+    settings_theme_button_label_ = label_en(settings_theme_button_, "Switch", &style_en);
+    lv_obj_set_style_text_font(settings_theme_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_center(settings_theme_button_label_);
+
     lv_obj_t* weather_title = label_en(settings_content_, "Weather", &style_gold);
     lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 166);
+    lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 258);
 
     lv_obj_t* weather_row = lv_obj_create(settings_content_);
     lv_obj_add_style(weather_row, &style_panel, 0);
     lv_obj_set_size(weather_row, 414, 58);
-    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 192);
+    lv_obj_align(weather_row, LV_ALIGN_TOP_LEFT, 0, 284);
     lv_obj_clear_flag(weather_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* weather_label = label_en(weather_row, "Location", &style_en);
     lv_obj_align(weather_label, LV_ALIGN_TOP_LEFT, 14, 8);
-    lv_obj_t* weather_value = label_en(weather_row, "Configured by XiaoZhi / MCP", &style_muted);
-    lv_obj_set_style_text_font(weather_value, &lv_font_montserrat_12, 0);
-    lv_obj_align(weather_value, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_weather_value_ = label_en(weather_row, "Zhongshan", &style_muted);
+    lv_obj_set_width(settings_weather_value_, 260);
+    lv_label_set_long_mode(settings_weather_value_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(settings_weather_value_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_weather_value_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_ble_status_label_ = label_en(weather_row, "BLE idle", &style_green);
+    lv_obj_set_width(settings_ble_status_label_, 116);
+    lv_label_set_long_mode(settings_ble_status_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(settings_ble_status_label_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(settings_ble_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_ble_status_label_, LV_ALIGN_BOTTOM_RIGHT, -14, -9);
+
+    lv_obj_t* profile_title = label_en(settings_content_, "Phone Sync", &style_gold);
+    lv_obj_set_style_text_font(profile_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(profile_title, LV_ALIGN_TOP_LEFT, 4, 350);
+
+    lv_obj_t* profile_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(profile_row, &style_panel, 0);
+    lv_obj_set_size(profile_row, 414, 74);
+    lv_obj_align(profile_row, LV_ALIGN_TOP_LEFT, 0, 376);
+    lv_obj_clear_flag(profile_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* profile_label = label_en(profile_row, "Profile", &style_en);
+    lv_obj_align(profile_label, LV_ALIGN_TOP_LEFT, 14, 9);
+    settings_profile_logo_value_ = label_en(profile_row, "nothing impossible", &style_gold);
+    lv_obj_set_width(settings_profile_logo_value_, 210);
+    lv_label_set_long_mode(settings_profile_logo_value_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(settings_profile_logo_value_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(settings_profile_logo_value_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_profile_logo_value_, LV_ALIGN_TOP_RIGHT, -14, 11);
+    lv_obj_t* owner_label = label_en(profile_row, "Owner", &style_en);
+    lv_obj_align(owner_label, LV_ALIGN_BOTTOM_LEFT, 14, -11);
+    settings_profile_owner_value_ = label_en(profile_row, "tupi", &style_green);
+    lv_obj_set_width(settings_profile_owner_value_, 230);
+    lv_label_set_long_mode(settings_profile_owner_value_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(settings_profile_owner_value_, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(settings_profile_owner_value_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_profile_owner_value_, LV_ALIGN_BOTTOM_RIGHT, -14, -12);
+
+    lv_obj_t* wifi_sync_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(wifi_sync_row, &style_panel, 0);
+    lv_obj_set_size(wifi_sync_row, 414, 58);
+    lv_obj_align(wifi_sync_row, LV_ALIGN_TOP_LEFT, 0, 458);
+    lv_obj_clear_flag(wifi_sync_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* wifi_sync_label = label_en(wifi_sync_row, "Phone Web", &style_en);
+    lv_obj_align(wifi_sync_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    settings_wifi_config_status_label_ = label_en(wifi_sync_row, "WiFi config idle", &style_muted);
+    lv_obj_set_width(settings_wifi_config_status_label_, 260);
+    lv_label_set_long_mode(settings_wifi_config_status_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(settings_wifi_config_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(settings_wifi_config_status_label_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
 
     lv_obj_t* firmware_title = label_en(settings_content_, "Firmware", &style_gold);
     lv_obj_set_style_text_font(firmware_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 258);
+    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 550);
 
     lv_obj_t* firmware_row = lv_obj_create(settings_content_);
     lv_obj_add_style(firmware_row, &style_panel, 0);
     lv_obj_set_size(firmware_row, 414, 74);
-    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 284);
+    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 576);
     lv_obj_clear_flag(firmware_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* version_label = label_en(firmware_row, "Version", &style_en);
     lv_obj_align(version_label, LV_ALIGN_TOP_LEFT, 14, 9);
@@ -2183,21 +2804,53 @@ void DesktopUI::UpdateWifiList() {
 }
 
 void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
+    if (is_cat_theme()) {
+        lv_obj_t* head = circle(parent, 154, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_border_color(head, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(head, 2, 0);
+        lv_obj_align(head, LV_ALIGN_CENTER, 0, -24);
+
+        lv_obj_t* ear_l = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_l, 8, 0);
+        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_l, 2, 0);
+        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
+        lv_obj_align(ear_l, LV_ALIGN_CENTER, -48, -110);
+
+        lv_obj_t* ear_r = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
+        lv_obj_set_style_radius(ear_r, 8, 0);
+        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
+        lv_obj_set_style_border_width(ear_r, 2, 0);
+        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
+        lv_obj_align(ear_r, LV_ALIGN_CENTER, 48, -110);
+
+        for (int i = 0; i < 3; ++i) {
+            lv_obj_t* whisker_l = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
+            lv_obj_set_style_transform_rotation(whisker_l, (i - 1) * 80, 0);
+            lv_obj_align(whisker_l, LV_ALIGN_CENTER, -102, -18 + i * 18);
+            lv_obj_t* whisker_r = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
+            lv_obj_set_style_transform_rotation(whisker_r, (1 - i) * 80, 0);
+            lv_obj_align(whisker_r, LV_ALIGN_CENTER, 102, -18 + i * 18);
+        }
+    }
     // 全屏黑色背景，直接在parent上创建元素
 
     // 左眼白
     eye_left_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_left_, 60, 70);
+    lv_obj_set_size(eye_left_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
     lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
-    lv_obj_set_style_radius(eye_left_, 30, 0);
-    lv_obj_set_style_bg_color(eye_left_, COLOR_CREAM, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(eye_left_, LV_ALIGN_CENTER, -38, -46);
+    }
+    lv_obj_set_style_radius(eye_left_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_style_bg_color(eye_left_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_left_, 0, 0);
     add_gesture_bubble(eye_left_);
 
     // 左瞳孔
     pupil_left_ = lv_obj_create(eye_left_);
-    lv_obj_set_size(pupil_left_, 28, 35);
+    lv_obj_set_size(pupil_left_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
     lv_obj_align(pupil_left_, LV_ALIGN_CENTER, 0, 4);
     lv_obj_set_style_radius(pupil_left_, 14, 0);
     lv_obj_set_style_bg_color(pupil_left_, lv_color_black(), 0);
@@ -2215,17 +2868,20 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 右眼白
     eye_right_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_right_, 60, 70);
+    lv_obj_set_size(eye_right_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
     lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
-    lv_obj_set_style_radius(eye_right_, 30, 0);
-    lv_obj_set_style_bg_color(eye_right_, COLOR_CREAM, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(eye_right_, LV_ALIGN_CENTER, 38, -46);
+    }
+    lv_obj_set_style_radius(eye_right_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_style_bg_color(eye_right_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_right_, 0, 0);
     add_gesture_bubble(eye_right_);
 
     // 右瞳孔
     pupil_right_ = lv_obj_create(eye_right_);
-    lv_obj_set_size(pupil_right_, 28, 35);
+    lv_obj_set_size(pupil_right_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
     lv_obj_align(pupil_right_, LV_ALIGN_CENTER, 0, 4);
     lv_obj_set_style_radius(pupil_right_, 14, 0);
     lv_obj_set_style_bg_color(pupil_right_, lv_color_black(), 0);
@@ -2249,6 +2905,9 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_left_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_left_, 0, 0);
+    if (is_cat_theme()) {
+        lv_obj_add_flag(eyebrow_left_, LV_OBJ_FLAG_HIDDEN);
+    }
     add_gesture_bubble(eyebrow_left_);
 
     // 右眉毛
@@ -2259,14 +2918,20 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_right_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_right_, 0, 0);
+    if (is_cat_theme()) {
+        lv_obj_add_flag(eyebrow_right_, LV_OBJ_FLAG_HIDDEN);
+    }
     add_gesture_bubble(eyebrow_right_);
 
     // 嘴巴
     mouth_ = lv_obj_create(parent);
-    lv_obj_set_size(mouth_, 80, 20);
+    lv_obj_set_size(mouth_, is_cat_theme() ? 46 : 80, is_cat_theme() ? 10 : 20);
     lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
-    lv_obj_set_style_radius(mouth_, 10, 0);
-    lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
+    if (is_cat_theme()) {
+        lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 6);
+    }
+    lv_obj_set_style_radius(mouth_, is_cat_theme() ? 5 : 10, 0);
+    lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mouth_, 0, 0);
     add_gesture_bubble(mouth_);
@@ -2302,6 +2967,9 @@ lv_obj_t* DesktopUI::CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t
 
 void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
     lv_obj_t* wifi = label_en(parent, "WiFi", &style_green);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(wifi, COLOR_TEXT, 0);
+    }
     lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -168, 12);
 
     lv_obj_t* time = label_en(parent, "--:--", &style_en);
@@ -2314,8 +2982,18 @@ void DesktopUI::CreateStatusBar(lv_obj_t* parent) {
         }
     }
 
-    lv_obj_t* battery = label_en(parent, "80%", &style_green);
+    lv_obj_t* battery = label_en(parent, "--%", &style_green);
+    if (is_tupi_warm_theme()) {
+        lv_obj_set_style_text_color(battery, COLOR_TEXT, 0);
+    }
     lv_obj_align(battery, LV_ALIGN_TOP_RIGHT, -20, 12);
+    for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+        if (!status_bar_battery_labels_[i]) {
+            status_bar_battery_labels_[i] = battery;
+            break;
+        }
+    }
+    SetBatteryStatus(battery_level_, battery_charging_, battery_level_ >= 0);
 }
 
 void DesktopUI::AdjustCalendarMonth(int delta) {
@@ -2374,7 +3052,8 @@ void DesktopUI::RenderCalendar() {
             }
             if (calendar_day_cells_[i]) {
                 lv_obj_set_style_bg_opa(calendar_day_cells_[i], LV_OPA_20, 0);
-                lv_obj_set_style_border_color(calendar_day_cells_[i], LV_COLOR_MAKE(0x5d, 0x40, 0x2b), 0);
+                lv_obj_set_style_border_color(calendar_day_cells_[i],
+                                              themed_color(LV_COLOR_MAKE(0x5d, 0x40, 0x2b), COLOR_LINE), 0);
             }
         }
         return;
@@ -2445,24 +3124,24 @@ void DesktopUI::RenderCalendar() {
         const int col = i % 7;
         const bool weekend = col >= 5;
 
-        lv_color_t bg_color = lv_color_make(0x17, 0x0f, 0x0a);
-        lv_color_t border_color = lv_color_make(0x35, 0x26, 0x1c);
-        lv_color_t text_color = lv_color_make(0x72, 0x58, 0x44);
+        lv_color_t bg_color = themed_color(lv_color_make(0x17, 0x0f, 0x0a), COLOR_SURFACE_2);
+        lv_color_t border_color = themed_color(lv_color_make(0x35, 0x26, 0x1c), COLOR_LINE);
+        lv_color_t text_color = themed_color(lv_color_make(0x72, 0x58, 0x44), COLOR_MUTED);
         lv_opa_t bg_opa = LV_OPA_30;
         if (is_today) {
-            bg_color = lv_color_make(0xff, 0xc1, 0x70);
+            bg_color = themed_color(lv_color_make(0xff, 0xc1, 0x70), COLOR_PURPLE);
             border_color = bg_color;
-            text_color = lv_color_make(0x20, 0x16, 0x10);
+            text_color = themed_color(lv_color_make(0x20, 0x16, 0x10), COLOR_CREAM);
             bg_opa = LV_OPA_COVER;
         } else if (weekend && in_current_month) {
-            bg_color = lv_color_make(0xe7, 0x91, 0x42);
+            bg_color = themed_color(lv_color_make(0xe7, 0x91, 0x42), COLOR_CREAM);
             border_color = bg_color;
-            text_color = lv_color_make(0xff, 0xd0, 0x94);
+            text_color = themed_color(lv_color_make(0xff, 0xd0, 0x94), COLOR_GOLD);
             bg_opa = LV_OPA_COVER;
         } else if (in_current_month) {
-            bg_color = lv_color_make(0x24, 0x18, 0x10);
-            border_color = lv_color_make(0x5d, 0x40, 0x2b);
-            text_color = lv_color_make(0xff, 0xf5, 0xe4);
+            bg_color = themed_color(lv_color_make(0x24, 0x18, 0x10), COLOR_SURFACE);
+            border_color = themed_color(lv_color_make(0x5d, 0x40, 0x2b), COLOR_LINE);
+            text_color = themed_color(lv_color_make(0xff, 0xf5, 0xe4), COLOR_TEXT);
             bg_opa = LV_OPA_70;
         }
 
@@ -2552,7 +3231,7 @@ void DesktopUI::UpdateFaceAnimation() {
         eyebrow_y = -92 + (int)(3 * sin(anim_tick_ * 0.15));
     } else if (listening) {
         eyebrow_y = -95;
-    } else if (strcmp(emotion_, "sad") == 0) {
+    } else if (emotion_ == "sad") {
         eyebrow_y = -82;
     }
 
@@ -2793,45 +3472,86 @@ void DesktopUI::SetFcControllerCallback(std::function<void(uint8_t)> callback) {
 }
 
 void DesktopUI::ApplyWeatherVisual(int weather_code) {
+    current_weather_code_ = weather_code;
     const bool is_clear = weather_code == 0;
+    const bool is_fog = weather_code == 45 || weather_code == 48;
     const bool is_cloud = weather_code == 1 || weather_code == 2 || weather_code == 3 ||
-                          weather_code == 45 || weather_code == 48 || weather_code < 0;
+                          is_fog || weather_code < 0;
     const bool is_rain = (weather_code >= 51 && weather_code <= 67) ||
                          (weather_code >= 80 && weather_code <= 82);
     const bool is_snow = weather_code >= 71 && weather_code <= 77;
     const bool is_storm = weather_code >= 95;
+    const bool use_weather_scene = weather_scene_gif_ != nullptr;
 
-    set_weather_part_visible(weather_sun_, is_clear || weather_code == 1 || weather_code == 2);
+    int next_scene = 1;  // Default to cloudy while weather is pending.
+    const lv_image_dsc_t* scene_src = &qd_weather_cloudy_scene;
+    if (is_clear) {
+        next_scene = 0;
+        scene_src = &qd_weather_clear_scene;
+    } else if (is_storm) {
+        next_scene = 5;
+        scene_src = &qd_weather_storm_scene;
+    } else if (is_snow) {
+        next_scene = 3;
+        scene_src = &qd_weather_snow_scene;
+    } else if (is_rain) {
+        next_scene = 2;
+        scene_src = &qd_weather_rain_scene;
+    } else if (is_fog) {
+        next_scene = 4;
+        scene_src = &qd_weather_fog_scene;
+    }
+
+    if (weather_scene_gif_ && current_weather_scene_ != next_scene) {
+        lv_gif_set_src(weather_scene_gif_, scene_src);
+        lv_gif_restart(weather_scene_gif_);
+        current_weather_scene_ = next_scene;
+    }
+    set_weather_part_visible(weather_scene_gif_, use_weather_scene);
+
+    const bool show_sun = is_clear || weather_code == 1 || weather_code == 2;
+    set_weather_part_visible(weather_glow_, show_sun && !use_weather_scene);
+    set_weather_part_visible(weather_sun_, show_sun && !use_weather_scene);
+    for (auto* ray : weather_rays_) {
+        set_weather_part_visible(ray, show_sun && !is_storm && !use_weather_scene);
+    }
     if (weather_sun_) {
         lv_obj_set_style_opa(weather_sun_, is_clear ? LV_OPA_COVER : LV_OPA_50, 0);
     }
+    if (weather_glow_) {
+        lv_obj_set_style_opa(weather_glow_, is_clear ? LV_OPA_30 : LV_OPA_20, 0);
+    }
 
     const bool show_cloud = is_cloud || is_rain || is_snow || is_storm;
+    set_weather_part_visible(weather_cloud_shadow_, show_cloud && !use_weather_scene);
     for (auto* cloud : weather_cloud_) {
-        set_weather_part_visible(cloud, show_cloud);
+        set_weather_part_visible(cloud, show_cloud && !use_weather_scene);
+        if (cloud) {
+            lv_obj_set_style_opa(cloud, is_storm ? LV_OPA_80 : LV_OPA_COVER, 0);
+        }
     }
 
     for (auto* rain : weather_rain_) {
-        set_weather_part_visible(rain, is_rain || is_storm);
+        set_weather_part_visible(rain, (is_rain || is_storm) && !use_weather_scene);
     }
     for (auto* snow : weather_snow_) {
-        set_weather_part_visible(snow, is_snow);
+        set_weather_part_visible(snow, is_snow && !use_weather_scene);
     }
     for (auto* storm : weather_storm_) {
-        set_weather_part_visible(storm, is_storm);
+        set_weather_part_visible(storm, is_storm && !use_weather_scene);
     }
     
     // Start/stop particle animation based on weather
     if (weather_particle_timer_) {
-        if (is_clear || is_cloud) {
-            lv_timer_resume(weather_particle_timer_);
-        } else {
+        if (use_weather_scene) {
             lv_timer_pause(weather_particle_timer_);
+        } else {
+            lv_timer_resume(weather_particle_timer_);
         }
     }
 
-    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d storm=%d",
-             weather_code, is_clear, show_cloud, is_rain, is_snow, is_storm);
+    ESP_LOGI(TAG, "Weather visual code=%d clear=%d cloud=%d rain=%d snow=%d fog=%d storm=%d scene=%d",
+             weather_code, is_clear, show_cloud, is_rain, is_snow, is_fog, is_storm, next_scene);
 }
 
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {
@@ -2901,6 +3621,95 @@ void DesktopUI::SetSystemVolume(int value) {
     RefreshSettingsControls();
 }
 
+void DesktopUI::SetBluetoothConfigStatus(const char* status) {
+    if (settings_ble_status_label_) {
+        lv_label_set_text(settings_ble_status_label_, status ? status : "BLE idle");
+    }
+}
+
+void DesktopUI::SetWifiConfigStatus(const char* status) {
+    if (settings_wifi_config_status_label_) {
+        lv_label_set_text(settings_wifi_config_status_label_, status ? status : "WiFi config idle");
+    }
+}
+
+void DesktopUI::RegisterBrandLabels(lv_obj_t* logo, lv_obj_t* owner) {
+    if ((!logo && !owner) || brand_label_count_ >= sizeof(brand_logo_labels_) / sizeof(brand_logo_labels_[0])) {
+        return;
+    }
+    brand_logo_labels_[brand_label_count_] = logo;
+    brand_owner_labels_[brand_label_count_] = owner;
+    ++brand_label_count_;
+}
+
+void DesktopUI::RefreshBrandLabels() {
+    const auto profile = QdLoadUserProfile();
+    for (size_t i = 0; i < brand_label_count_; ++i) {
+        if (brand_logo_labels_[i]) {
+            lv_label_set_text(brand_logo_labels_[i], profile.logo.c_str());
+        }
+        if (brand_owner_labels_[i]) {
+            lv_label_set_text(brand_owner_labels_[i], profile.owner.c_str());
+        }
+    }
+}
+
+void DesktopUI::ReloadUserProfile() {
+    const DesktopPage page = current_page_;
+    lv_obj_t* root = lv_scr_act();
+    lv_obj_clean(root);
+
+    main_page_ = nullptr;
+    apps_page_ = nullptr;
+    photo_page_ = nullptr;
+    fc_page_ = nullptr;
+    calendar_page_ = nullptr;
+    radio_page_ = nullptr;
+    focus_page_ = nullptr;
+    xiaozhi_page_ = nullptr;
+    network_page_ = nullptr;
+    settings_page_ = nullptr;
+
+    weather_particle_timer_ = nullptr;
+    radio_anim_timer_ = nullptr;
+    focus_timer_ = nullptr;
+
+    Create();
+    ShowPage(page);
+    RefreshSettingsControls();
+}
+
+void DesktopUI::CycleTheme() {
+    const uint8_t count = sizeof(THEMES) / sizeof(THEMES[0]);
+    uint8_t next = static_cast<uint8_t>(current_theme) + 1;
+    if (next >= count) {
+        next = 0;
+    }
+    save_theme(static_cast<UiTheme>(next));
+    ESP_LOGI(TAG, "Theme switched to %s, recreating UI", THEMES[next].name);
+
+    lv_obj_t* root = lv_scr_act();
+    lv_obj_clean(root);
+    
+    main_page_ = nullptr;
+    apps_page_ = nullptr;
+    photo_page_ = nullptr;
+    fc_page_ = nullptr;
+    calendar_page_ = nullptr;
+    radio_page_ = nullptr;
+    focus_page_ = nullptr;
+    xiaozhi_page_ = nullptr;
+    network_page_ = nullptr;
+    settings_page_ = nullptr;
+    
+    weather_particle_timer_ = nullptr;
+    radio_anim_timer_ = nullptr;
+    focus_timer_ = nullptr;
+    
+    Create();
+    ShowPage(DesktopPage::SETTINGS);
+}
+
 void DesktopUI::RefreshSettingsControls() {
     char value_text[16];
 
@@ -2923,6 +3732,29 @@ void DesktopUI::RefreshSettingsControls() {
     if (settings_firmware_version_label_) {
         const esp_app_desc_t* app_desc = esp_app_get_description();
         lv_label_set_text(settings_firmware_version_label_, app_desc ? app_desc->version : "--");
+    }
+
+    if (settings_theme_value_) {
+        lv_label_set_text(settings_theme_value_, theme().name);
+    }
+
+    if (settings_profile_logo_value_ || settings_profile_owner_value_ || brand_label_count_ > 0) {
+        const auto profile = QdLoadUserProfile();
+        RefreshBrandLabels();
+        if (settings_profile_logo_value_) {
+            lv_label_set_text(settings_profile_logo_value_, profile.logo.c_str());
+        }
+        if (settings_profile_owner_value_) {
+            lv_label_set_text(settings_profile_owner_value_, profile.owner.c_str());
+        }
+    }
+
+    if (settings_weather_value_) {
+        const auto weather = QdLoadWeatherConfig();
+        char text[96];
+        snprintf(text, sizeof(text), "%s (%s, %s)",
+                 weather.city.c_str(), weather.latitude.c_str(), weather.longitude.c_str());
+        lv_label_set_text(settings_weather_value_, text);
     }
 }
 
@@ -3052,6 +3884,35 @@ void DesktopUI::SetNetworkStatus(const char* status) {
     }
 }
 
+void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
+    battery_level_ = valid ? std::max(0, std::min(100, level)) : -1;
+    battery_charging_ = charging;
+
+    char text[12];
+    if (battery_level_ < 0) {
+        snprintf(text, sizeof(text), "--%%");
+    } else if (charging) {
+        snprintf(text, sizeof(text), "%d%%+", battery_level_);
+    } else {
+        snprintf(text, sizeof(text), "%d%%", battery_level_);
+    }
+
+    lv_color_t color = COLOR_GREEN;
+    if (battery_level_ < 0) {
+        color = COLOR_MUTED;
+    } else if (battery_level_ <= 20) {
+        color = lv_color_make(0xff, 0x88, 0x68);
+    } else if (battery_level_ <= 40) {
+        color = COLOR_GOLD;
+    }
+
+    for (size_t i = 0; i < sizeof(status_bar_battery_labels_) / sizeof(status_bar_battery_labels_[0]); ++i) {
+        if (status_bar_battery_labels_[i]) {
+            lv_label_set_text(status_bar_battery_labels_[i], text);
+            lv_obj_set_style_text_color(status_bar_battery_labels_[i], color, 0);
+        }
+    }
+}
 void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress) {
     (void)progress;
     if (settings_firmware_status_label_ && status) {
@@ -3113,11 +3974,13 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
     if (emotion) {
         emotion_ = emotion;
     }
+
 }
 
 void DesktopUI::SetXiaozhiEmotion(const char* emotion) {
     emotion_ = emotion ? emotion : "neutral";
 }
+
 
 void DesktopUI::DailyCardBreathCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
@@ -3145,42 +4008,99 @@ void DesktopUI::ClockShadowCb(lv_timer_t* timer) {
 void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
     auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
     if (!self || !self->weather_sun_) return;
-    
-    // Simple particle effect: create small circles that float up
+
     lv_obj_t* parent = lv_obj_get_parent(self->weather_sun_);
     if (!parent) return;
-    
-    // Create a small particle
+
+    constexpr uint32_t kMaxParticles = 12;
+    const uint32_t child_count = lv_obj_get_child_count(parent);
+    if (child_count >= kMaxParticles + 10) {
+        return;
+    }
+
+    const int code = self->current_weather_code_;
+    const bool is_rain = (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
+    const bool is_snow = code >= 71 && code <= 77;
+    const bool is_storm = code >= 95;
+    const bool is_clear = code == 0;
+    const bool storm_flash = is_storm && (esp_random() % 4 == 0);
+
     lv_obj_t* particle = lv_obj_create(parent);
     lv_obj_remove_style_all(particle);
-    lv_obj_set_size(particle, 4, 4);
+    const int16_t size = is_rain || is_storm ? 3 : (is_snow ? 6 : 4);
+    lv_obj_set_size(particle,
+                    storm_flash ? static_cast<int16_t>(18 + (esp_random() % 12)) : size,
+                    storm_flash ? 3 : (is_rain || is_storm ? 13 : size));
     lv_obj_set_style_radius(particle, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_bg_color(particle, COLOR_GOLD, 0);
-    lv_obj_set_style_bg_opa(particle, LV_OPA_60, 0);
-    
-    // Random position near sun
-    int16_t x = 56 + (esp_random() % 54);
-    int16_t y = 28 + (esp_random() % 30);
+    lv_obj_set_style_bg_color(particle,
+                              storm_flash ? COLOR_GOLD :
+                              (is_rain || is_storm) ? COLOR_BLUE :
+                              (is_snow ? COLOR_CREAM : COLOR_GOLD), 0);
+    lv_obj_set_style_bg_opa(particle, storm_flash ? LV_OPA_80 : LV_OPA_60, 0);
+
+    int16_t x = 48 + (esp_random() % 70);
+    int16_t y = 54 + (esp_random() % 44);
+    int16_t end_y = y - 34;
+    int16_t end_x = x;
+    if (storm_flash) {
+        x = 56 + (esp_random() % 54);
+        y = 56 + (esp_random() % 30);
+        end_x = x + static_cast<int16_t>(4 + (esp_random() % 7));
+        end_y = y + static_cast<int16_t>((esp_random() % 9) - 4);
+        lv_obj_set_style_transform_rotation(particle, (esp_random() % 2) ? 270 : 620, 0);
+    } else if (is_storm) {
+        x = 42 + (esp_random() % 78);
+        y = 70 + (esp_random() % 20);
+        end_x = x + static_cast<int16_t>(4 + (esp_random() % 7));
+        end_y = y + static_cast<int16_t>(16 + (esp_random() % 10));
+        if (end_y > 104) end_y = 104;
+        lv_obj_set_style_transform_rotation(particle, 180, 0);
+    } else if (is_rain) {
+        x = 44 + (esp_random() % 74);
+        y = 74 + (esp_random() % 22);
+        end_x = x + 8;
+        end_y = y + 28;
+        if (end_y > 104) end_y = 104;
+        lv_obj_set_style_transform_rotation(particle, 180, 0);
+    } else if (is_snow) {
+        x = 42 + (esp_random() % 76);
+        y = 78 + (esp_random() % 20);
+        end_x = x + static_cast<int16_t>((esp_random() % 17) - 8);
+        end_y = y + 24;
+        if (end_y > 104) end_y = 104;
+    } else if (is_clear) {
+        x = 52 + (esp_random() % 58);
+        y = 34 + (esp_random() % 42);
+        end_y = y - 36;
+    }
     lv_obj_align(particle, LV_ALIGN_TOP_LEFT, x, y);
-    
-    // Float up animation
+
     lv_anim_t anim;
     lv_anim_init(&anim);
     lv_anim_set_var(&anim, particle);
-    lv_anim_set_values(&anim, y, y - 40);
-    lv_anim_set_time(&anim, 1500);
+    lv_anim_set_values(&anim, y, end_y);
+    lv_anim_set_time(&anim, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
     lv_anim_set_exec_cb(&anim, ObjYCb);
     lv_anim_set_ready_cb(&anim, [](lv_anim_t* a) {
         lv_obj_del(static_cast<lv_obj_t*>(a->var));
     });
     lv_anim_start(&anim);
-    
-    // Fade out
+
+    if (end_x != x) {
+        lv_anim_t drift;
+        lv_anim_init(&drift);
+        lv_anim_set_var(&drift, particle);
+        lv_anim_set_values(&drift, x, end_x);
+        lv_anim_set_time(&drift, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
+        lv_anim_set_exec_cb(&drift, ObjXCb);
+        lv_anim_start(&drift);
+    }
+
     lv_anim_t fade;
     lv_anim_init(&fade);
     lv_anim_set_var(&fade, particle);
     lv_anim_set_values(&fade, LV_OPA_60, LV_OPA_TRANSP);
-    lv_anim_set_time(&fade, 1500);
+    lv_anim_set_time(&fade, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
     lv_anim_set_exec_cb(&fade, ObjOpaCb);
     lv_anim_start(&fade);
 }

@@ -1107,6 +1107,25 @@ void Application::SetDeviceState(DeviceState state) {
     }
 }
 
+void Application::PrepareForFirmwareUpgrade() {
+    ESP_LOGI(TAG, "Preparing low-memory firmware upgrade mode");
+    wake_word_->StopDetection();
+    audio_processor_->Stop();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        audio_send_queue_.clear();
+        audio_decode_queue_.clear();
+        audio_testing_queue_.clear();
+        timestamp_queue_.clear();
+    }
+    audio_decode_cv_.notify_all();
+    background_task_->WaitForCompletion();
+    if (protocol_) {
+        protocol_->CloseAudioChannel();
+        protocol_.reset();
+    }
+}
+
 void Application::ResetDecoder() {
     std::lock_guard<std::mutex> lock(mutex_);
     opus_decoder_->ResetState();
