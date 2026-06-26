@@ -55,6 +55,7 @@ private:
     bool EnsureSdCardMounted();
     bool LoadIndex();
     bool LoadSummary(Episode& episode);
+    void EnsureSelectedDetails(bool decode_cover);
     bool DecodeCover(const std::string& path);
     void FreeCover();
     void UpdateUi(const char* state, const char* detail);

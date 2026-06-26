@@ -240,6 +240,7 @@ void FcEmulatorService::SetActive(bool active) {
             controller_state_.store(0);
             controller_release_tick_.store(0);
             scan_requested_.store(false);
+            start_requested_.store(false);
             release_roms_requested_.store(true);
             PublishMode(false);
             Application::GetInstance().SetExternalAudioActive(false);
@@ -272,26 +273,15 @@ void FcEmulatorService::PlayPause() {
         PublishState("Scanning", "Looking for .nes files");
         return;
     }
-    if (!ValidateSelectedRom()) {
-        playing_.store(false);
-        PublishMode(false);
-        PublishState("Unsupported ROM", SelectedName().c_str());
-        return;
-    }
-    frame_counter_ = 0;
-    produced_frame_counter_ = 0;
-    last_perf_frame_counter_ = 0;
-    last_perf_log_us_ = esp_timer_get_time();
-    controller_state_.store(0);
-    controller_release_tick_.store(0);
-    playing_.store(true);
     PublishMode(true);
-    PublishState(SelectedName().c_str(), "Playing");
-    ESP_LOGI(TAG, "fc play rom=%s", SelectedName().c_str());
+    PublishState("Loading ROM", SelectedName().c_str());
+    start_requested_.store(true);
+    ESP_LOGI(TAG, "fc start requested rom=%s", SelectedName().c_str());
 }
 
 void FcEmulatorService::Stop() {
     playing_.store(false);
+    start_requested_.store(false);
     qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
@@ -315,6 +305,7 @@ void FcEmulatorService::Next() {
         return;
     }
     playing_.store(false);
+    start_requested_.store(false);
     qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
@@ -340,6 +331,7 @@ void FcEmulatorService::Prev() {
         return;
     }
     playing_.store(false);
+    start_requested_.store(false);
     qd_nofrendo_request_stop();
     controller_state_.store(0);
     controller_release_tick_.store(0);
@@ -449,6 +441,28 @@ void FcEmulatorService::TaskLoop() {
         if (!is_active) {
             vTaskDelay(kIdleDelay);
             continue;
+        }
+
+        if (start_requested_.exchange(false)) {
+            PublishMode(true);
+            PublishState("Loading ROM", SelectedName().c_str());
+            if (!ValidateSelectedRom()) {
+                playing_.store(false);
+                PublishMode(false);
+                PublishState("Unsupported ROM", SelectedName().c_str());
+                vTaskDelay(pdMS_TO_TICKS(200));
+                continue;
+            }
+            frame_counter_ = 0;
+            produced_frame_counter_ = 0;
+            last_perf_frame_counter_ = 0;
+            last_perf_log_us_ = esp_timer_get_time();
+            controller_state_.store(0);
+            controller_release_tick_.store(0);
+            playing_.store(true);
+            PublishMode(true);
+            PublishState(SelectedName().c_str(), "Playing");
+            ESP_LOGI(TAG, "fc play rom=%s", SelectedName().c_str());
         }
 
         if (!playing_.load()) {

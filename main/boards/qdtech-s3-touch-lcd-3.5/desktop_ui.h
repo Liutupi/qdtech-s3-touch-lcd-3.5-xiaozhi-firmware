@@ -97,11 +97,14 @@ public:
     std::function<void()> podcast_up_;
     std::function<void()> podcast_down_;
     std::function<void(int)> podcast_seek_;
+    std::function<void()> podcast_activate_;
+    std::function<void()> podcast_stop_other_media_;
     std::function<void()> fc_play_pause_;
     std::function<void()> fc_stop_;
     std::function<void()> fc_next_;
     std::function<void()> fc_prev_;
     std::function<void(uint8_t)> fc_controller_cb_;
+    std::function<void()> fc_stop_other_media_;
 
     // Radio animation (public for timer callback)
     lv_obj_t* radio_bars_[16] = {};  // 音量动态柱

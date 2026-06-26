@@ -1112,6 +1112,10 @@ private:
         }
         auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
         podcast_service_.Start(desktop_ui);
+        desktop_ui->podcast_stop_other_media_ = [this]() {
+            radio_service_.Stop();
+            fc_emulator_service_.Stop();
+        };
     }
 
     void InitializePhotos() {
@@ -1133,6 +1137,10 @@ private:
                 return DrawFcFrame(qd_display, pixels, width, height);
             });
         fc_emulator_service_.Start(desktop_ui);
+        desktop_ui->fc_stop_other_media_ = [this]() {
+            radio_service_.Stop();
+            podcast_service_.Stop();
+        };
         desktop_ui->SetMainPageCallback([this]() {
             time_weather_service_.RequestRefresh(false);
         });

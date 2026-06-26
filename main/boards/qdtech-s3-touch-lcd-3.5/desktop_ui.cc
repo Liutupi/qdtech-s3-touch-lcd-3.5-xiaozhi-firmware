@@ -582,6 +582,9 @@ static void open_app_card(uint8_t index) {
             break;
         case 3:
             if (g_desktop_ui) {
+                if (g_desktop_ui->fc_stop_other_media_) {
+                    g_desktop_ui->fc_stop_other_media_();
+                }
                 g_desktop_ui->ShowPage(DesktopPage::FC);
             }
             break;
@@ -624,8 +627,14 @@ static void radio_card_cb(lv_event_t* event) {
 
 static void podcast_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->podcast_stop_other_media_) {
+            g_desktop_ui->podcast_stop_other_media_();
+        }
         g_desktop_ui->ShowPage(DesktopPage::PODCAST);
         g_desktop_ui->ShowPodcastDetail(false);
+        if (g_desktop_ui->podcast_activate_) {
+            g_desktop_ui->podcast_activate_();
+        }
     }
 }
 

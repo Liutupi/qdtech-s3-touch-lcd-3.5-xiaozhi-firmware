@@ -198,12 +198,14 @@ void PodcastService::Start(DesktopUI* desktop_ui) {
         [this]() { Up(); },
         [this]() { Down(); },
         [this](int percent) { SeekPercent(percent); });
+    desktop_ui_->podcast_activate_ = [this]() {
+        EnsureTaskStarted();
+        PostCommand(Command::REFRESH_UI);
+    };
     audio_focus_blocked_.store(IsXiaozhiAudioState(), std::memory_order_relaxed);
     Application::GetInstance().RegisterDeviceStateCallback([this](DeviceState previous, DeviceState current) {
         OnDeviceStateChanged(static_cast<int>(previous), static_cast<int>(current));
     });
-    EnsureTaskStarted();
-    PostCommand(Command::REFRESH_UI);
 }
 
 void PodcastService::EnsureTaskStarted() {
@@ -225,6 +227,7 @@ void PodcastService::EnsureTaskStarted() {
 }
 
 void PodcastService::PostCommand(Command command) {
+    EnsureTaskStarted();
     auto queue = static_cast<QueueHandle_t>(queue_);
     if (queue) {
         xQueueSend(queue, &command, 0);
@@ -407,7 +410,6 @@ bool PodcastService::LoadIndex() {
         episode.audio = JoinPodcastPath(audio->valuestring);
         episode.cover = cJSON_IsString(cover) ? JoinPodcastPath(cover->valuestring) : "";
         episode.desc = cJSON_IsString(desc) ? JoinPodcastPath(desc->valuestring) : "";
-        LoadSummary(episode);
         episodes_.push_back(std::move(episode));
     }
     cJSON_Delete(root);
@@ -416,9 +418,6 @@ bool PodcastService::LoadIndex() {
     playing_index_ = -1;
     list_top_ = selected_index_ >= 4 ? selected_index_ - 4 : 0;
     ESP_LOGI(TAG, "loaded podcast episodes=%u", static_cast<unsigned>(episodes_.size()));
-    if (index_loaded_ && !episodes_[selected_index_].cover.empty()) {
-        DecodeCover(episodes_[selected_index_].cover);
-    }
     return index_loaded_;
 }
 
@@ -438,6 +437,20 @@ bool PodcastService::LoadSummary(Episode& episode) {
     buffer[read] = '\0';
     episode.summary = TrimSummary(buffer, 220);
     return true;
+}
+
+void PodcastService::EnsureSelectedDetails(bool decode_cover) {
+    if (episodes_.empty()) {
+        return;
+    }
+    selected_index_ = std::clamp(selected_index_, 0, static_cast<int>(episodes_.size()) - 1);
+    Episode& episode = episodes_[selected_index_];
+    if (episode.summary.empty()) {
+        LoadSummary(episode);
+    }
+    if (decode_cover && !episode.cover.empty()) {
+        DecodeCover(episode.cover);
+    }
 }
 
 bool PodcastService::DecodeCover(const std::string& path) {
@@ -539,6 +552,7 @@ void PodcastService::UpdateUi(const char* state, const char* detail) {
         return;
     }
     selected_index_ = std::clamp(selected_index_, 0, static_cast<int>(episodes_.size()) - 1);
+    EnsureSelectedDetails(false);
     const Episode& episode = episodes_[selected_index_];
     if (selected_index_ < static_cast<int>(list_top_)) {
         list_top_ = selected_index_;
@@ -597,9 +611,7 @@ void PodcastService::SelectDelta(int delta, bool interrupt_playback) {
     if (interrupt_playback && playing_index_ != selected_index_) {
         stop_requested_ = true;
     }
-    if (!episodes_[selected_index_].cover.empty()) {
-        DecodeCover(episodes_[selected_index_].cover);
-    }
+    EnsureSelectedDetails(false);
 }
 
 void PodcastService::PlayCurrentEpisode() {
@@ -611,10 +623,8 @@ void PodcastService::PlayCurrentEpisode() {
     selected_index_ = std::clamp(selected_index_, 0, static_cast<int>(episodes_.size()) - 1);
     playing_index_ = selected_index_;
     stop_requested_ = false;
+    EnsureSelectedDetails(true);
     const Episode& episode = episodes_[selected_index_];
-    if (!episode.cover.empty()) {
-        DecodeCover(episode.cover);
-    }
     UpdateProgressUi(0);
     UpdateUi("Buffering", "Opening file");
     if (!PlayFile(episode.audio.c_str()) && play_requested_ && !stop_requested_) {
@@ -852,7 +862,9 @@ void PodcastService::OnDeviceStateChanged(int previous_state, int current_state)
                          current_state == kDeviceStateAudioTesting;
     const bool was_blocked = audio_focus_blocked_.exchange(blocked, std::memory_order_relaxed);
     if (blocked != was_blocked) {
-        PostCommand(Command::FOCUS_CHANGED);
+        if (task_handle_ || play_requested_.load(std::memory_order_relaxed)) {
+            PostCommand(Command::FOCUS_CHANGED);
+        }
     }
 }
 

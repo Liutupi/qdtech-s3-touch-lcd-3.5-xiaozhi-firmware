@@ -40,9 +40,54 @@ Last verified on 2026-06-26 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.47 SD-card podcast player, podcast UI polish, playback stability, and podcast font fallback
+- Last verified update: 2026-06-26 v1.7.48 system smoothness for Podcast and FC/NES loading
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.48 System Smoothness For Podcast And FC
+
+Scope:
+
+- Bumped firmware version to `1.7.48`.
+- Changed Podcast from boot-time startup to lazy startup when the Podcast card is opened.
+- Reduced Podcast SD-card pressure:
+  - `index.json` load no longer reads all episode summaries immediately.
+  - list Up/Down no longer decodes JPG covers.
+  - selected episode summary loads lazily; cover decoding is reserved for playback/detail work that actually needs it.
+- Moved FC/NES ROM validation and startup out of the UI callback path. Play now requests `Loading ROM`, and the FC task performs the SD file validation/start work in the background.
+- Added media mutual exclusion:
+  - entering Podcast stops Radio and FC.
+  - entering FC stops Radio and Podcast.
+- Intent: reduce UI stalls, SD-card contention, audio contention, and freeze/deadlock risk when switching between heavy features such as podcasts and games.
+
+Verification:
+
+- Build passed with `idf.py -B build-qdtech build merge-bin`.
+- CMake/app version: `1.7.48`.
+- Final `xiaozhi.bin` size: `0x4ad510`.
+- Full merged image size: `0x5ad510`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x152af0`, about 22%.
+- Flashed successfully to `COM13`.
+- Boot/runtime logs confirmed:
+  - `App version: 1.7.48`.
+  - WiFi connected to `liutupi`, IP `192.168.4.177`.
+  - MQTT connected and app reached `STATE: idle`.
+  - Weather synced without the earlier low-memory loop: `weather ok 27 C 中山 雷雨 14:00 H95% C100% raw=99 refined=99`.
+  - Deferred Phone Web services started after memory check.
+  - No reboot, panic, or backtrace during the observed startup window.
+- Pre-version-bump interaction check opened Media -> Podcast and confirmed lazy task startup, SD mount, and `PodcastService: loaded podcast episodes=80`.
+
+Release assets prepared in `releases/v1.7.48/`:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-app.bin`, SHA256 `C28DD3E38439FA30FEF47EC6498A69CD95DB7FF89A85B6CE88001D36E236646C`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-firmware.zip`, SHA256 `352154D60BE9BEA082277F35F760FCFD5C3FAB9DEF11A30DE18C75D93E9E11BB`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-full.bin`, SHA256 `6C0A9E670D18F0E3ED6C4A9BBF56AECCFAAE4F901F3EDBD57EDE723709520A51`.
+
+Known follow-up:
+
+- Have the user stress test repeated Podcast list/detail/play/back cycles and FC ROM loading on the physical board.
+- If freezes persist, add a shared SD/media operation guard or central media manager so all SD-heavy services serialize expensive operations explicitly.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.47 SD Podcast Player And Font Fix
 

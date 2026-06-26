@@ -42,6 +42,7 @@ private:
     std::atomic<bool> playing_{false};
     std::atomic<bool> scanning_{false};
     std::atomic<bool> scan_requested_{false};
+    std::atomic<bool> start_requested_{false};
     std::atomic<bool> release_roms_requested_{false};
     bool mounted_ = false;
     sdmmc_card_t* card_ = nullptr;

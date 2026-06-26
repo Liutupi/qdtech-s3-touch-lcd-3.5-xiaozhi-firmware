@@ -38,6 +38,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.45 (2026-06-25): Brand text auto-wrap for long text, weather refresh on page switch, BLE compilation fix
 - v1.7.46 (2026-06-26): Broader Chinese UI font coverage, stable Phone Web IP/status display, delayed/retried Phone Web startup, strongest-BSSID WiFi preference, cleaned brand earth GIF, and refined Open-Meteo weather accuracy using rain/cloud/humidity context
 - v1.7.47 (2026-06-26): SD-card `Nothing Impossible` podcast player with a third Media page, two-level episode UI, seekable progress bar, volume leveling, playback/list stability fixes, and UTF-8-safe podcast list rendering
+- v1.7.48 (2026-06-26): System-level smoothness pass for Podcast and FC/NES: lazy podcast startup, lighter episode selection, asynchronous ROM loading, and media mutual exclusion to reduce SD/audio contention and UI freezes
 
 ## Confirmed Hardware From Source
 

@@ -2,6 +2,40 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.48 System Smoothness For Podcast And FC
+
+Scope:
+
+- Bumped firmware version to `1.7.48` so boards on `v1.7.47` can receive the system smoothness update through OTA.
+- Changed `PodcastService` from boot-time startup to lazy startup when the Podcast card is opened.
+- Stopped the podcast index load from reading every episode summary up front.
+- Stopped podcast list Up/Down selection from decoding JPG covers; cover decoding now happens when entering playback/detail work that actually needs it.
+- Moved FC/NES ROM validation and start work out of the UI callback path and into the FC background task, so tapping Play shows `Loading ROM` without blocking LVGL/touch on SD file reads.
+- Added media mutual exclusion: entering Podcast stops Radio and FC; entering FC stops Radio and Podcast. This reduces SD-card, decoder, and audio-output contention when switching between heavy features.
+- Kept the release scoped to runtime stability and did not change podcast SD-card format or game ROM format.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin`; app version logged as `1.7.48`.
+- Final `xiaozhi.bin` size: `0x4ad510`.
+- Full merged image size: `0x5ad510`.
+- Smallest app partition: `0x600000`; free app space `0x152af0` (about 22%).
+- Flashed successfully to `COM13`.
+- Runtime logs confirmed:
+  - `App version: 1.7.48`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced without `weather low memory`: `weather ok 27 C 中山 雷雨 14:00 H95% C100%`
+  - Deferred Phone Web services started after the memory guard check
+  - No reboot, panic, or backtrace during the observed startup window
+- A pre-version-bump hardware interaction check opened Media -> Podcast and confirmed lazy podcast startup, SD mount, and `PodcastService: loaded podcast episodes=80`.
+
+Release asset SHA256:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-app.bin`: `C28DD3E38439FA30FEF47EC6498A69CD95DB7FF89A85B6CE88001D36E236646C`
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-firmware.zip`: `352154D60BE9BEA082277F35F760FCFD5C3FAB9DEF11A30DE18C75D93E9E11BB`
+- `qdtech-s3-touch-lcd-3.5-v1.7.48-full.bin`: `6C0A9E670D18F0E3ED6C4A9BBF56AECCFAAE4F901F3EDBD57EDE723709520A51`
+
 ## 2026-06-26: v1.7.47 Podcast SD Player And List Font Fix
 
 Scope:
