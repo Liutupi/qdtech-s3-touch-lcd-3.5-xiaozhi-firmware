@@ -2,6 +2,31 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.51 Theme-specific XiaoZhi Face Animation Bounds
+
+Scope:
+
+- Bumped firmware version to `1.7.51` so boards on `v1.7.50` can receive the theme-animation fix through OTA.
+- Added theme-specific XiaoZhi face metrics for eye, pupil, highlight, eyebrow, and mouth layout.
+- Fixed the Cat theme regression where `UpdateFaceAnimation()` reapplied the default large Classic eye positions/sizes every frame, pushing Cat eyes outside the face frame.
+- Kept Classic and Tupi Warm on the previous large face proportions.
+- Hid pupil/highlight layers during closed-blink frames, then restored them as the eye opens.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin` from `/tmp/qdtech_flash_src`; app version logged as `1.7.51`.
+- Final `xiaozhi.bin` size: `0x4e0a80`.
+- Full merged image size: `0x5e0a80`.
+- Smallest app partition: `0x600000`; free app space `0x11f580` (about 19%).
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Flash logs confirmed ESP32-S3 with 8 MB PSRAM, successful writes for all regions, hash verification, and hard reset.
+
+Release asset SHA256:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-app.bin`: `E126BE2C68AEACF0E30D8AD72243BEC86B84A11F06FB3EA6F34F43676FEB578E`
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-firmware.zip`: `9A63F4AC1E342560EA8517C357F2090FE30EA380F2E87E150B8678A43DC74937`
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-full.bin`: `51B4157FBDF7CF7F109ED3B46A3AC93CAB4467E43F8D15BB1A2A4FC8D4C9EDBB`
+
 ## 2026-06-26: v1.7.50 Radio And Podcast Audio Quality Polish
 
 Scope:

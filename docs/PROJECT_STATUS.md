@@ -41,6 +41,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.48 (2026-06-26): System-level smoothness pass for Podcast and FC/NES: lazy podcast startup, lighter episode selection, asynchronous ROM loading, and media mutual exclusion to reduce SD/audio contention and UI freezes
 - v1.7.49 (2026-06-26): Photos portrait display polish: landscape photos still fill the screen, while portrait photos show fully centered with a generated dark blurred background from the same image
 - v1.7.50 (2026-06-26): Radio and Podcast audio quality polish: radio automatic gain/soft limiting, per-stream gain reset, and removal of mono sample over-boosting to reduce clipping
+- v1.7.51 (2026-06-26): Theme-specific XiaoZhi face animation metrics so Cat, Classic, and Tupi Warm keep their intended eye/mouth bounds during idle, listening, speaking, and blink animation
 
 ## Confirmed Hardware From Source
 
@@ -100,6 +101,7 @@ Always enumerate serial ports first if the board has moved to a new machine.
 - Landscape LVGL display with QDTech board-specific flush path.
 - Touch tap/swipe polling for desktop navigation.
 - Persisted Settings -> Appearance -> Theme switcher with `Classic`, `Cat`, and `Tupi Warm` themes.
+- XiaoZhi face animation uses theme-specific metrics. Cat keeps compact eyes and mouth inside the face frame, while Classic and Tupi Warm keep the larger original face layout.
 - Unified navigation hierarchy:
   - Main left swipe opens Apps.
   - Apps right swipe returns to Main.

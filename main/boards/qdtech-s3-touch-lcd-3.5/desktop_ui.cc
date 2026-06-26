@@ -246,6 +246,83 @@ static void fit_brand_label(lv_obj_t* label, int16_t width, bool owner) {
 
 static lv_obj_t* circle(lv_obj_t* parent, int16_t size, lv_color_t color, lv_opa_t opa);
 
+struct FaceMetrics {
+    int eye_x;
+    int eye_y;
+    int eye_w;
+    int eye_h;
+    int eye_h_speaking_base;
+    int eye_h_speaking_amp;
+    int eye_h_listening;
+    int eye_h_blink;
+    int eye_radius;
+    int pupil_w;
+    int pupil_h;
+    int pupil_y;
+    int pupil_move_x;
+    int pupil_move_y;
+    int highlight_x;
+    int highlight_y;
+    int highlight_size;
+    int eyebrow_x;
+    int eyebrow_y;
+    int eyebrow_speaking_y;
+    int eyebrow_listening_y;
+    int eyebrow_sad_y;
+    int mouth_y;
+    int mouth_idle_w;
+    int mouth_idle_h;
+    int mouth_listening_w;
+    int mouth_listening_h;
+    int mouth_speaking_w;
+    int mouth_speaking_w_amp;
+    int mouth_speaking_h[6];
+};
+
+static FaceMetrics face_metrics() {
+    if (is_cat_theme()) {
+        return {
+            38, -46,
+            34, 40,
+            37, 3,
+            42,
+            8,
+            20,
+            12, 14,
+            4,
+            3, 2,
+            -5, -8,
+            6,
+            38, -72, -74, -76, -68,
+            6,
+            36, 8,
+            42, 10,
+            44, 6,
+            {10, 16, 13, 18, 11, 15},
+        };
+    }
+
+    return {
+        80, -40,
+        60, 70,
+        65, 5,
+        75,
+        10,
+        30,
+        28, 35,
+        4,
+        6, 4,
+        -8, -10,
+        10,
+        80, -90, -92, -95, -82,
+        60,
+        60, 16,
+        70, 25,
+        80, 15,
+        {20, 35, 28, 40, 24, 32},
+    };
+}
+
 static void create_tupi_dot_mark(lv_obj_t* parent, int16_t x, int16_t y, int16_t dot = 8, int16_t gap = 4) {
     const lv_color_t colors[4] = {
         COLOR_TEXT, COLOR_TEXT, COLOR_GREEN, COLOR_MUTED
@@ -3162,6 +3239,8 @@ void DesktopUI::UpdateWifiList() {
 }
 
 void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
+    const FaceMetrics metrics = face_metrics();
+
     if (is_cat_theme()) {
         lv_obj_t* head = circle(parent, 154, COLOR_CREAM, LV_OPA_COVER);
         lv_obj_set_style_border_color(head, COLOR_PURPLE, 0);
@@ -3195,12 +3274,9 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 左眼白
     eye_left_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_left_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
-    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
-    if (is_cat_theme()) {
-        lv_obj_align(eye_left_, LV_ALIGN_CENTER, -38, -46);
-    }
-    lv_obj_set_style_radius(eye_left_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_size(eye_left_, metrics.eye_w, metrics.eye_h);
+    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -metrics.eye_x, metrics.eye_y);
+    lv_obj_set_style_radius(eye_left_, metrics.eye_radius, 0);
     lv_obj_set_style_bg_color(eye_left_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_left_, 0, 0);
@@ -3208,30 +3284,27 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 左瞳孔
     pupil_left_ = lv_obj_create(eye_left_);
-    lv_obj_set_size(pupil_left_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
-    lv_obj_align(pupil_left_, LV_ALIGN_CENTER, 0, 4);
-    lv_obj_set_style_radius(pupil_left_, 14, 0);
+    lv_obj_set_size(pupil_left_, metrics.pupil_w, metrics.pupil_h);
+    lv_obj_align(pupil_left_, LV_ALIGN_CENTER, 0, metrics.pupil_y);
+    lv_obj_set_style_radius(pupil_left_, metrics.pupil_w / 2, 0);
     lv_obj_set_style_bg_color(pupil_left_, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(pupil_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(pupil_left_, 0, 0);
 
     // 左眼高光
     highlight_left_ = lv_obj_create(eye_left_);
-    lv_obj_set_size(highlight_left_, 10, 10);
-    lv_obj_align(highlight_left_, LV_ALIGN_CENTER, -8, -10);
-    lv_obj_set_style_radius(highlight_left_, 5, 0);
+    lv_obj_set_size(highlight_left_, metrics.highlight_size, metrics.highlight_size);
+    lv_obj_align(highlight_left_, LV_ALIGN_CENTER, metrics.highlight_x, metrics.highlight_y);
+    lv_obj_set_style_radius(highlight_left_, metrics.highlight_size / 2, 0);
     lv_obj_set_style_bg_color(highlight_left_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(highlight_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(highlight_left_, 0, 0);
 
     // 右眼白
     eye_right_ = lv_obj_create(parent);
-    lv_obj_set_size(eye_right_, is_cat_theme() ? 34 : 60, is_cat_theme() ? 40 : 70);
-    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
-    if (is_cat_theme()) {
-        lv_obj_align(eye_right_, LV_ALIGN_CENTER, 38, -46);
-    }
-    lv_obj_set_style_radius(eye_right_, is_cat_theme() ? 20 : 30, 0);
+    lv_obj_set_size(eye_right_, metrics.eye_w, metrics.eye_h);
+    lv_obj_align(eye_right_, LV_ALIGN_CENTER, metrics.eye_x, metrics.eye_y);
+    lv_obj_set_style_radius(eye_right_, metrics.eye_radius, 0);
     lv_obj_set_style_bg_color(eye_right_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_right_, 0, 0);
@@ -3239,18 +3312,18 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 右瞳孔
     pupil_right_ = lv_obj_create(eye_right_);
-    lv_obj_set_size(pupil_right_, is_cat_theme() ? 12 : 28, is_cat_theme() ? 14 : 35);
-    lv_obj_align(pupil_right_, LV_ALIGN_CENTER, 0, 4);
-    lv_obj_set_style_radius(pupil_right_, 14, 0);
+    lv_obj_set_size(pupil_right_, metrics.pupil_w, metrics.pupil_h);
+    lv_obj_align(pupil_right_, LV_ALIGN_CENTER, 0, metrics.pupil_y);
+    lv_obj_set_style_radius(pupil_right_, metrics.pupil_w / 2, 0);
     lv_obj_set_style_bg_color(pupil_right_, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(pupil_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(pupil_right_, 0, 0);
 
     // 右眼高光
     highlight_right_ = lv_obj_create(eye_right_);
-    lv_obj_set_size(highlight_right_, 10, 10);
-    lv_obj_align(highlight_right_, LV_ALIGN_CENTER, -8, -10);
-    lv_obj_set_style_radius(highlight_right_, 5, 0);
+    lv_obj_set_size(highlight_right_, metrics.highlight_size, metrics.highlight_size);
+    lv_obj_align(highlight_right_, LV_ALIGN_CENTER, metrics.highlight_x, metrics.highlight_y);
+    lv_obj_set_style_radius(highlight_right_, metrics.highlight_size / 2, 0);
     lv_obj_set_style_bg_color(highlight_right_, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(highlight_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(highlight_right_, 0, 0);
@@ -3283,12 +3356,9 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
     // 嘴巴
     mouth_ = lv_obj_create(parent);
-    lv_obj_set_size(mouth_, is_cat_theme() ? 46 : 80, is_cat_theme() ? 10 : 20);
-    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
-    if (is_cat_theme()) {
-        lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 6);
-    }
-    lv_obj_set_style_radius(mouth_, is_cat_theme() ? 5 : 10, 0);
+    lv_obj_set_size(mouth_, metrics.mouth_idle_w, metrics.mouth_idle_h);
+    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, metrics.mouth_y);
+    lv_obj_set_style_radius(mouth_, metrics.mouth_idle_h / 2, 0);
     lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mouth_, 0, 0);
@@ -3540,86 +3610,120 @@ void DesktopUI::SetFacePart(lv_obj_t* obj, int x, int y, int w, int h, int radiu
 void DesktopUI::UpdateFaceAnimation() {
     if (!eye_left_ || !eye_right_ || !mouth_) return;
 
+    const FaceMetrics metrics = face_metrics();
     const DeviceState state = Application::GetInstance().GetDeviceState();
     const bool speaking = state == kDeviceStateSpeaking;
     const bool listening = state == kDeviceStateListening || state == kDeviceStateConnecting;
 
     // ===== 眨眼动画 =====
-    int eye_h = 70;
+    int eye_h = metrics.eye_h;
     if (speaking) {
-        eye_h = 65 + (int)(5 * sin(anim_tick_ * 0.2));
+        eye_h = metrics.eye_h_speaking_base + (int)(metrics.eye_h_speaking_amp * sin(anim_tick_ * 0.2));
     } else if (listening) {
-        eye_h = 75;
+        eye_h = metrics.eye_h_listening;
     } else {
         const int blink_phase = anim_tick_ % 60;
         if (blink_phase >= 55) {
-            eye_h = 10;
+            eye_h = metrics.eye_h_blink;
         }
     }
 
+    lv_obj_set_width(eye_left_, metrics.eye_w);
+    lv_obj_set_width(eye_right_, metrics.eye_w);
     lv_obj_set_height(eye_left_, eye_h);
     lv_obj_set_height(eye_right_, eye_h);
-    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -80, -40);
-    lv_obj_align(eye_right_, LV_ALIGN_CENTER, 80, -40);
+    lv_obj_set_style_radius(eye_left_, std::min(metrics.eye_radius, eye_h / 2), 0);
+    lv_obj_set_style_radius(eye_right_, std::min(metrics.eye_radius, eye_h / 2), 0);
+    lv_obj_align(eye_left_, LV_ALIGN_CENTER, -metrics.eye_x, metrics.eye_y);
+    lv_obj_align(eye_right_, LV_ALIGN_CENTER, metrics.eye_x, metrics.eye_y);
 
     // ===== 瞳孔随机移动 =====
     if (anim_tick_ % 40 == 0) {
-        pupil_target_x_ = (float)((rand() % 12) - 6);
-        pupil_target_y_ = (float)((rand() % 8) - 4);
+        pupil_target_x_ = (float)((rand() % (metrics.pupil_move_x * 2 + 1)) - metrics.pupil_move_x);
+        pupil_target_y_ = (float)((rand() % (metrics.pupil_move_y * 2 + 1)) - metrics.pupil_move_y);
     }
     pupil_offset_x_ += (pupil_target_x_ - pupil_offset_x_) * 0.08f;
     pupil_offset_y_ += (pupil_target_y_ - pupil_offset_y_) * 0.08f;
 
+    const bool eyes_closed = eye_h <= metrics.eye_h_blink + 2;
     if (pupil_left_) {
-        lv_obj_align(pupil_left_, LV_ALIGN_CENTER, (int)pupil_offset_x_, 4 + (int)pupil_offset_y_);
+        lv_obj_set_size(pupil_left_, metrics.pupil_w, metrics.pupil_h);
+        lv_obj_set_style_radius(pupil_left_, metrics.pupil_w / 2, 0);
+        if (eyes_closed) {
+            lv_obj_add_flag(pupil_left_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(pupil_left_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(pupil_left_, LV_ALIGN_CENTER, (int)pupil_offset_x_, metrics.pupil_y + (int)pupil_offset_y_);
+        }
     }
     if (pupil_right_) {
-        lv_obj_align(pupil_right_, LV_ALIGN_CENTER, (int)pupil_offset_x_, 4 + (int)pupil_offset_y_);
+        lv_obj_set_size(pupil_right_, metrics.pupil_w, metrics.pupil_h);
+        lv_obj_set_style_radius(pupil_right_, metrics.pupil_w / 2, 0);
+        if (eyes_closed) {
+            lv_obj_add_flag(pupil_right_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(pupil_right_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(pupil_right_, LV_ALIGN_CENTER, (int)pupil_offset_x_, metrics.pupil_y + (int)pupil_offset_y_);
+        }
     }
     if (highlight_left_) {
-        lv_obj_align(highlight_left_, LV_ALIGN_CENTER, -8 + (int)pupil_offset_x_, -10 + (int)pupil_offset_y_);
+        if (eyes_closed) {
+            lv_obj_add_flag(highlight_left_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(highlight_left_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(highlight_left_, LV_ALIGN_CENTER,
+                         metrics.highlight_x + (int)pupil_offset_x_,
+                         metrics.highlight_y + (int)pupil_offset_y_);
+        }
     }
     if (highlight_right_) {
-        lv_obj_align(highlight_right_, LV_ALIGN_CENTER, -8 + (int)pupil_offset_x_, -10 + (int)pupil_offset_y_);
+        if (eyes_closed) {
+            lv_obj_add_flag(highlight_right_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(highlight_right_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(highlight_right_, LV_ALIGN_CENTER,
+                         metrics.highlight_x + (int)pupil_offset_x_,
+                         metrics.highlight_y + (int)pupil_offset_y_);
+        }
     }
 
     // ===== 眉毛动画 =====
-    int eyebrow_y = -90;
+    int eyebrow_y = metrics.eyebrow_y;
     if (speaking) {
-        eyebrow_y = -92 + (int)(3 * sin(anim_tick_ * 0.15));
+        eyebrow_y = metrics.eyebrow_speaking_y + (int)(3 * sin(anim_tick_ * 0.15));
     } else if (listening) {
-        eyebrow_y = -95;
+        eyebrow_y = metrics.eyebrow_listening_y;
     } else if (emotion_ == "sad") {
-        eyebrow_y = -82;
+        eyebrow_y = metrics.eyebrow_sad_y;
     }
 
     if (eyebrow_left_) {
-        lv_obj_align(eyebrow_left_, LV_ALIGN_CENTER, -80, eyebrow_y);
+        lv_obj_align(eyebrow_left_, LV_ALIGN_CENTER, -metrics.eyebrow_x, eyebrow_y);
     }
     if (eyebrow_right_) {
-        lv_obj_align(eyebrow_right_, LV_ALIGN_CENTER, 80, eyebrow_y);
+        lv_obj_align(eyebrow_right_, LV_ALIGN_CENTER, metrics.eyebrow_x, eyebrow_y);
     }
 
     // ===== 嘴巴动画 =====
     if (speaking) {
-        static constexpr int mouth_heights[] = {20, 35, 28, 40, 24, 32};
         const int phase = anim_tick_ % 6;
-        lv_obj_set_height(mouth_, mouth_heights[phase]);
-        lv_obj_set_width(mouth_, 80 + (int)(15 * sin(anim_tick_ * 0.3)));
+        const int mouth_h = metrics.mouth_speaking_h[phase];
+        lv_obj_set_height(mouth_, mouth_h);
+        lv_obj_set_width(mouth_, metrics.mouth_speaking_w + (int)(metrics.mouth_speaking_w_amp * sin(anim_tick_ * 0.3)));
         lv_obj_set_style_bg_color(mouth_, COLOR_GREEN, 0);
-        lv_obj_set_style_radius(mouth_, mouth_heights[phase] / 3, 0);
+        lv_obj_set_style_radius(mouth_, mouth_h / 2, 0);
     } else if (listening) {
-        lv_obj_set_height(mouth_, 25);
-        lv_obj_set_width(mouth_, 70);
-        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
-        lv_obj_set_style_radius(mouth_, 12, 0);
+        lv_obj_set_height(mouth_, metrics.mouth_listening_h);
+        lv_obj_set_width(mouth_, metrics.mouth_listening_w);
+        lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
+        lv_obj_set_style_radius(mouth_, metrics.mouth_listening_h / 2, 0);
     } else {
-        lv_obj_set_height(mouth_, 16);
-        lv_obj_set_width(mouth_, 60);
-        lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
-        lv_obj_set_style_radius(mouth_, 8, 0);
+        lv_obj_set_height(mouth_, metrics.mouth_idle_h);
+        lv_obj_set_width(mouth_, metrics.mouth_idle_w);
+        lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
+        lv_obj_set_style_radius(mouth_, metrics.mouth_idle_h / 2, 0);
     }
-    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, 60);
+    lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, metrics.mouth_y);
 }
 
 // ===== Public API =====

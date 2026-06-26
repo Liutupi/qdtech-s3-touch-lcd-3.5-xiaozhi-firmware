@@ -35,14 +35,49 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-26 in the Windows workspace:
+Last verified on 2026-06-26 in the macOS workspace:
 
-- Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.50 Radio and Podcast audio quality polish
-- Build directory used for board verification: `build-qdtech`
-- Serial port used during the last device flash: `COM13`
+- Last verified update: 2026-06-26 v1.7.51 Theme-specific XiaoZhi face animation bounds
+- Build directory used for board verification: `/tmp/qdtech_flash_src/build-qdtech`
+- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.51 Theme-specific XiaoZhi Face Animation Bounds
+
+Scope:
+
+- Bumped firmware version to `1.7.51` so boards on `v1.7.50` can receive the theme-animation fix through OTA.
+- Fixed the XiaoZhi face animation so each theme keeps its own face metrics during live animation updates.
+- Cat theme now uses compact eye, pupil, highlight, eyebrow, and mouth metrics instead of being overwritten every frame by the larger Classic/Tupi face layout.
+- Blinking now hides pupil and highlight layers while the eyes are closed, then restores them when the eyes reopen. This prevents tiny facial parts from floating outside a narrowed blink.
+- Classic and Tupi Warm keep their previous larger XiaoZhi face proportions.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin` from a no-space temporary build path.
+- CMake/app version: `1.7.51`.
+- Final `xiaozhi.bin` size: `0x4e0a80`.
+- Full merged image size: `0x5e0a80`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x11f580`, about 19%.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Flash logs confirmed:
+  - Chip: ESP32-S3, 8 MB PSRAM.
+  - App, bootloader, partition table, OTA data, and speech models were written.
+  - Hash verification passed for every written region.
+  - Board hard-reset after flash.
+
+Release assets prepared in `releases/v1.7.51/`:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-app.bin`, SHA256 `E126BE2C68AEACF0E30D8AD72243BEC86B84A11F06FB3EA6F34F43676FEB578E`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-firmware.zip`, SHA256 `9A63F4AC1E342560EA8517C357F2090FE30EA380F2E87E150B8678A43DC74937`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.51-full.bin`, SHA256 `51B4157FBDF7CF7F109ED3B46A3AC93CAB4467E43F8D15BB1A2A4FC8D4C9EDBB`.
+
+Known follow-up:
+
+- On the physical LCD, switch through Classic, Cat, and Tupi Warm while XiaoZhi is idle/listening/speaking. Confirm Cat eyes stay inside the face frame during blinking and speaking.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.50 Radio And Podcast Audio Quality Polish
 
