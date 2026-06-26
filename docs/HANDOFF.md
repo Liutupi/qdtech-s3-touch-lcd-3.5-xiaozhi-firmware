@@ -40,9 +40,46 @@ Last verified on 2026-06-26 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.49 Photos portrait fit with same-photo blurred background
+- Last verified update: 2026-06-26 v1.7.50 Radio and Podcast audio quality polish
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.50 Radio And Podcast Audio Quality Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.50`.
+- Improved network radio output by adding the same style of lightweight automatic gain control and soft limiting used by Podcast playback.
+- Removed the old mono-path `* 2` sample boost from both Radio and Podcast output. That boost made quiet mono streams louder, but it could clip voice/music peaks and make some stations or episodes sound harsh.
+- Radio now resets its audio leveler whenever a new stream URL is opened, so gain history from one station does not carry into the next station.
+- Kept the existing MP3 decode and linear resampling path to avoid adding CPU/memory pressure on the ESP32-S3. This release targets steadier loudness and less clipping, not lossless-quality reconstruction from low-bitrate sources.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin`.
+- CMake/app version: `1.7.50`.
+- Final `xiaozhi.bin` size: `0x4ad9c0`.
+- Full merged image size: `0x5ad9c0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x152640`, about 22%.
+- Flashed successfully to `COM13`.
+- Boot/runtime logs confirmed:
+  - `App version: 1.7.50`.
+  - WiFi connected to `liutupi`, IP `192.168.4.177`.
+  - MQTT connected and app reached `STATE: idle`.
+  - Weather synced: `weather ok 28 C 中山 毛毛雨 17:30 H95% C100% raw=55 refined=55`.
+  - No reboot, panic, or backtrace during the observed startup window.
+
+Release assets prepared in `releases/v1.7.50/`:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-app.bin`, SHA256 `7546111FD59625F9A3282C75D34AC730BFA4BD0A9289808BE7E96F9D41FB0569`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-firmware.zip`, SHA256 `60BD51ECDE396FA6197728AE75297641F9774D58426DCE84C0261BC51B46064F`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-full.bin`, SHA256 `3C218C1EC1930DF9FBE185C50B5E5358C3A7221A5E4895E93F96D47EEDBDAF35`.
+
+Known follow-up:
+
+- Listen-test both a network radio station and several local Podcast episodes on hardware. The expected improvement is less clipping and steadier loudness; low-bitrate 64 kbps radio sources will still sound limited by their source stream.
+- For the next real audio-quality jump, prepare SD-card Podcast files with normalized loudness and replace low-bitrate `radio.json` station URLs with higher-bitrate MP3/AAC sources where available.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.49 Photos Portrait Fit And Blurred Background
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <string>
@@ -663,6 +664,7 @@ void RadioService::PlayCurrentStation() {
 bool RadioService::PlayUrl(const char* url, int url_index) {
     const auto& station = kStations[station_index_];
     SetUi("Connecting", url_index == 0 ? "Opening stream" : "Fallback source");
+    ResetAudioLeveler();
 
     esp_http_client_config_t config = {};
     config.url = url;
@@ -905,7 +907,7 @@ void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int s
         }
     } else {
         for (int i = 0; i < frames; ++i) {
-            pcm_mono_buf_[i] = Clamp16((int)pcm[i] * 2);
+            pcm_mono_buf_[i] = pcm[i];
         }
     }
 
@@ -930,8 +932,62 @@ void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int s
         }
     }
 
+    ApplyAudioLeveler(pcm_output_buf_);
     if (!codec->output_enabled()) {
         codec->EnableOutput(true);
     }
     codec->OutputData(pcm_output_buf_);
+}
+
+void RadioService::ResetAudioLeveler() {
+    audio_gain_q12_ = 4096;
+}
+
+void RadioService::ApplyAudioLeveler(std::vector<int16_t>& pcm) {
+    if (pcm.empty()) {
+        return;
+    }
+
+    int peak = 0;
+    int64_t abs_sum = 0;
+    for (int16_t sample : pcm) {
+        int v = std::abs(static_cast<int>(sample));
+        peak = std::max(peak, v);
+        abs_sum += v;
+    }
+
+    const int avg_abs = static_cast<int>(abs_sum / static_cast<int64_t>(pcm.size()));
+    if (avg_abs <= 0 || peak <= 0) {
+        return;
+    }
+
+    constexpr int kTargetAvg = 5000;
+    constexpr int kLimiterPeak = 24500;
+    constexpr int32_t kMinGainQ12 = 2300;   // about 0.56x
+    constexpr int32_t kMaxGainQ12 = 8200;   // about 2.00x
+
+    int32_t desired = static_cast<int32_t>((static_cast<int64_t>(kTargetAvg) * 4096) / avg_abs);
+    const int32_t peak_limited = static_cast<int32_t>((static_cast<int64_t>(kLimiterPeak) * 4096) / peak);
+    desired = std::min(desired, peak_limited);
+    desired = std::clamp(desired, kMinGainQ12, kMaxGainQ12);
+
+    if (desired < audio_gain_q12_) {
+        audio_gain_q12_ = (audio_gain_q12_ * 3 + desired) / 4;
+    } else {
+        audio_gain_q12_ = (audio_gain_q12_ * 31 + desired) / 32;
+    }
+
+    for (int16_t& sample : pcm) {
+        int32_t v = static_cast<int32_t>((static_cast<int64_t>(sample) * audio_gain_q12_) >> 12);
+        int32_t av = std::abs(v);
+        if (av > 23500) {
+            int32_t over = av - 23500;
+            av = 23500 + over / 4;
+            if (av > 29500) {
+                av = 29500;
+            }
+            v = v < 0 ? -av : av;
+        }
+        sample = Clamp16(v);
+    }
 }

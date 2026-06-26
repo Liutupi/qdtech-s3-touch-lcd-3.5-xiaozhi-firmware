@@ -2,15 +2,21 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.49 Photos Portrait Display Follow-Up
+## Current Active Task: v1.7.50 Audio Quality Follow-Up
 
 Current state:
 
-- Firmware base is merged through `v1.7.49`.
+- Firmware base is merged through `v1.7.50`.
 - 2026-06-26 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
-- Latest release build result: `xiaozhi.bin` `0x4ad8c0`, smallest app partition `0x600000`, free `0x152740` (about 22%).
-- Latest full merged image size: `0x5ad8c0`.
-- Release assets are in `releases/v1.7.49/`: app bin, full merged bin, and firmware zip.
+- Latest release build result: `xiaozhi.bin` `0x4ad9c0`, smallest app partition `0x600000`, free `0x152640` (about 22%).
+- Latest full merged image size: `0x5ad9c0`.
+- Release assets are in `releases/v1.7.50/`: app bin, full merged bin, and firmware zip.
+- `v1.7.50` updates Radio and Podcast audio output:
+  - Radio now has lightweight automatic gain control and soft limiting.
+  - Radio resets its gain when opening a new stream URL.
+  - Radio and Podcast no longer multiply mono samples by 2 before output, reducing clipping/harshness.
+  - MP3 decode and resampling are intentionally unchanged to avoid increasing memory or CPU pressure.
+- Latest `v1.7.50` boot verification logged `App version: 1.7.50`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 28 C 中山 毛毛雨 17:30 H95% C100%`.
 - `v1.7.49` updates Photos portrait handling:
   - landscape photos still use full-screen cover mode.
   - portrait photos fit fully and center on the 480x320 display.
@@ -83,8 +89,10 @@ Current state:
 
 Next work:
 
+- Listen-test network radio and several Podcast episodes on hardware. Confirm the expected improvement is steadier loudness and less clipping; low-bitrate 64 kbps station sources will still be source-limited.
+- For better Podcast quality, normalize the SD-card MP3 loudness offline and prefer voice-focused MP3 exports around 96-128 kbps. For better Radio quality, replace low-bitrate URLs in `/sdcard/radio.json` with higher-bitrate streams where available.
 - Physically open Photos with one landscape and one portrait photo. Confirm the portrait foreground is not cropped and the generated side background looks soft enough on the real LCD.
-- Verify Settings OTA from a board running `v1.7.48` to `v1.7.49`.
+- Verify Settings OTA from a board running `v1.7.49` to `v1.7.50`.
 - Stress test repeated Podcast list/detail/play/back cycles and FC ROM loading on the physical board. If freezes persist, add a central SD/media operation guard so SD-heavy features serialize expensive operations explicitly.
 - Do a physical screen pass of Media -> Podcast list/detail and confirm podcast Chinese titles no longer show missing glyph boxes or mojibake.
 - If arbitrary podcast titles still need complete Chinese coverage, prototype an SD-card backed full-font path instead of growing compiled font subsets.

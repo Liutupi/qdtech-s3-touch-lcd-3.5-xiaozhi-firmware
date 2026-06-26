@@ -883,7 +883,7 @@ void PodcastService::WritePcm(const int16_t* pcm, int samples, int channels, int
         }
     } else {
         for (int i = 0; i < frames; ++i) {
-            pcm_mono_buf_[i] = Clamp16((int)pcm[i] * 2);
+            pcm_mono_buf_[i] = pcm[i];
         }
     }
 

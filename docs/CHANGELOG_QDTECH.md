@@ -2,6 +2,36 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.50 Radio And Podcast Audio Quality Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.50` so boards on `v1.7.49` can receive the audio-quality update through OTA.
+- Added a lightweight automatic gain and soft-limiter stage to network radio playback.
+- Removed the previous mono-path `* 2` sample boost from both Radio and Podcast playback. The old boost raised quiet mono streams but also increased clipping risk on voice/music peaks.
+- Reset radio gain whenever opening a stream URL so station-to-station changes do not inherit old gain state.
+- Kept the MP3 decoder and resampling path unchanged to avoid increasing memory and CPU pressure in the heavy SD/network audio paths.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin`; app version logged as `1.7.50`.
+- Final `xiaozhi.bin` size: `0x4ad9c0`.
+- Full merged image size: `0x5ad9c0`.
+- Smallest app partition: `0x600000`; free app space `0x152640` (about 22%).
+- Flashed successfully to `COM13`.
+- Runtime logs confirmed:
+  - `App version: 1.7.50`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced: `weather ok 28 C 中山 毛毛雨 17:30 H95% C100%`
+  - No reboot, panic, or backtrace during the observed startup window
+
+Release asset SHA256:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-app.bin`: `7546111FD59625F9A3282C75D34AC730BFA4BD0A9289808BE7E96F9D41FB0569`
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-firmware.zip`: `60BD51ECDE396FA6197728AE75297641F9774D58426DCE84C0261BC51B46064F`
+- `qdtech-s3-touch-lcd-3.5-v1.7.50-full.bin`: `3C218C1EC1930DF9FBE185C50B5E5358C3A7221A5E4895E93F96D47EEDBDAF35`
+
 ## 2026-06-26: v1.7.49 Photos Portrait Fit And Blurred Background
 
 Scope:

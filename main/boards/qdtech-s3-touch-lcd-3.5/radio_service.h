@@ -48,6 +48,8 @@ private:
     void NextStation(int delta);
     void SetUi(const char* state, const char* detail);
     void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
+    void ResetAudioLeveler();
+    void ApplyAudioLeveler(std::vector<int16_t>& pcm);
     void LoadFavorites();
     void SaveFavorites();
     void LoadStationIndex();
@@ -65,4 +67,5 @@ private:
     int station_index_ = 0;
     std::vector<int16_t> pcm_mono_buf_;
     std::vector<int16_t> pcm_output_buf_;
+    int32_t audio_gain_q12_ = 4096;
 };
