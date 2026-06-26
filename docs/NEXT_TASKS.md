@@ -2,14 +2,21 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.46 Release Follow-Up
+## Current Active Task: v1.7.47 Podcast Release Follow-Up
 
 Current state:
 
-- Firmware base is merged through `v1.7.46`.
+- Firmware base is merged through `v1.7.47`.
 - 2026-06-26 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
-- Latest release build result: `xiaozhi.bin` `0x4a55b0`, smallest app partition `0x600000`, free `0x15aa50` (about 23%).
-- Release assets are in `releases/v1.7.46/`: app bin, full merged bin, and firmware zip.
+- Latest release build result: `xiaozhi.bin` `0x4acfe0`, smallest app partition `0x600000`, free `0x153020` (about 22%).
+- Latest full merged image size: `0x5acfe0`.
+- Release assets are in `releases/v1.7.47/`: app bin, full merged bin, and firmware zip.
+- `v1.7.47` adds the SD-card `Nothing Impossible` podcast player under a third `Media` page.
+- Podcast SD format is `/sdcard/podcast/index.json` plus `epNNN.mp3`, `epNNN.jpg`, and `epNNN.txt`; the prepared SD card currently contains 80 episodes.
+- Podcast UI has a list view and a detail/playback view. The list now shows 8 rows; the detail view has cover, summary, playback controls, and a seekable progress slider.
+- Podcast playback uses a lightweight leveler for inconsistent source volume and a safer command path so list navigation during MP3 decode does not do heavy cover/UI work inside the decode loop.
+- Podcast title rendering uses UTF-8-safe truncation and Puhui font helpers. Do not route arbitrary podcast titles through the narrow LXGW subset; it caused many Chinese glyphs to disappear on hardware.
+- Latest `v1.7.47` boot verification logged `App version: 1.7.47`, `PodcastService: loaded podcast episodes=80`, WiFi IP `192.168.4.177`, MQTT connected, and `STATE: idle`.
 - The main page uses the final accepted brand earth GIF direction: earth-only, transparent, `46x46`, no satellite, no latitude/longitude grid lines, and a clean blue-white rim.
 - Dynamic Chinese UI text now uses the broader Puhui font where user/weather/calendar strings previously risked missing glyphs.
 - WiFi reconnect prefers the strong remembered BSSID when absent; latest validation connected to `liutupi` BSSID `fc:94:35:08:0a:e8` at about `-16` RSSI.
@@ -64,8 +71,9 @@ Current state:
 
 Next work:
 
-- Publish the `v1.7.46` release assets to GitHub Releases if they have not been attached yet.
-- Verify Settings OTA from a board running `v1.7.45` to `v1.7.46`.
+- Verify Settings OTA from a board running `v1.7.46` to `v1.7.47`.
+- Do a physical screen pass of Media -> Podcast list/detail and confirm podcast Chinese titles no longer show missing glyph boxes or mojibake.
+- If arbitrary podcast titles still need complete Chinese coverage, prototype an SD-card backed full-font path instead of growing compiled font subsets.
 - If the user wants more accurate China-local weather, add a provider priority path: local Caiyun token present -> Caiyun realtime; missing token or fetch failure -> current refined Open-Meteo fallback. Do not commit a private token.
 - Polish the WiFi phone page UX and optionally add a QR code or clearer on-device URL display.
 - Consider adding a city search preview/confirmation if users often enter ambiguous city names.

@@ -40,6 +40,7 @@ LV_IMAGE_DECLARE(qd_weather_snow_scene);
 LV_IMAGE_DECLARE(qd_weather_fog_scene);
 LV_IMAGE_DECLARE(qd_weather_storm_scene);
 LV_IMAGE_DECLARE(qd_brand_earth);
+LV_IMAGE_DECLARE(qd_podcast_avatar);
 
 static const lv_font_t* qd_cn_font_16() {
     return &font_puhui_16_4;
@@ -621,6 +622,25 @@ static void radio_card_cb(lv_event_t* event) {
     }
 }
 
+static void podcast_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::PODCAST);
+        g_desktop_ui->ShowPodcastDetail(false);
+    }
+}
+
+static void podcast_open_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ShowPodcastDetail(true);
+    }
+}
+
+static void podcast_list_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ShowPodcastDetail(false);
+    }
+}
+
 static void photo_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(1);
@@ -660,8 +680,33 @@ static void settings_card_cb(lv_event_t* event) {
 static void apps_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
-    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+    if (!indev || !g_desktop_ui) {
+        return;
+    }
+    lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    if (dir == LV_DIR_RIGHT) {
         g_desktop_ui->ShowPage(DesktopPage::MAIN);
+    } else if (dir == LV_DIR_LEFT) {
+        g_desktop_ui->ShowPage(DesktopPage::MEDIA);
+    }
+}
+
+static void media_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (!indev || !g_desktop_ui) {
+        return;
+    }
+    if (lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void podcast_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::MEDIA);
     }
 }
 
@@ -859,6 +904,48 @@ static void radio_next_cb(lv_event_t* event) {
     }
 }
 
+static void podcast_prev_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_prev_) {
+        g_desktop_ui->podcast_prev_();
+    }
+}
+
+static void podcast_play_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_play_pause_) {
+        g_desktop_ui->podcast_play_pause_();
+    }
+}
+
+static void podcast_stop_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_stop_) {
+        g_desktop_ui->podcast_stop_();
+    }
+}
+
+static void podcast_next_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_next_) {
+        g_desktop_ui->podcast_next_();
+    }
+}
+
+static void podcast_up_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_up_) {
+        g_desktop_ui->podcast_up_();
+    }
+}
+
+static void podcast_down_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_down_) {
+        g_desktop_ui->podcast_down_();
+    }
+}
+
+static void podcast_seek_cb(lv_event_t* event) {
+    if (g_desktop_ui) {
+        g_desktop_ui->HandlePodcastSeekEvent(event);
+    }
+}
+
 static void focus_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -1001,6 +1088,8 @@ void DesktopUI::Create() {
     CreateFcPage(root);
     CreateCalendarPage(root);
     CreateRadioPage(root);
+    CreateMediaPage(root);
+    CreatePodcastPage(root);
     CreateFocusPage(root);
     CreateXiaozhiPage(root);
     CreateNetworkPage(root);
@@ -1035,6 +1124,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
         lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
+    if (media_page_) {
+        lv_obj_add_flag(media_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (podcast_page_) {
+        lv_obj_add_flag(podcast_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
     if (network_page_) {
         lv_obj_add_flag(network_page_, LV_OBJ_FLAG_HIDDEN);
@@ -1074,6 +1169,18 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::RADIO:
             lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show radio page");
+            break;
+        case DesktopPage::MEDIA:
+            if (media_page_) {
+                lv_obj_clear_flag(media_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show media page");
+            break;
+        case DesktopPage::PODCAST:
+            if (podcast_page_) {
+                lv_obj_clear_flag(podcast_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show podcast page");
             break;
         case DesktopPage::FOCUS:
             if (focus_page_) {
@@ -1134,6 +1241,8 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
         NavigateBack();
     } else if (current_page_ == DesktopPage::MAIN && dx < -min_dx) {
         ShowPage(DesktopPage::APPS);
+    } else if (current_page_ == DesktopPage::APPS && dx < -min_dx) {
+        ShowPage(DesktopPage::MEDIA);
     } else if (current_page_ != DesktopPage::MAIN && dx > min_dx) {
         NavigateBack();
     }
@@ -1144,9 +1253,14 @@ void DesktopUI::NavigateBack() {
         return;
     }
 
-    const DesktopPage target = current_page_ == DesktopPage::APPS
-        ? DesktopPage::MAIN
-        : DesktopPage::APPS;
+    DesktopPage target = DesktopPage::APPS;
+    if (current_page_ == DesktopPage::APPS) {
+        target = DesktopPage::MAIN;
+    } else if (current_page_ == DesktopPage::MEDIA) {
+        target = DesktopPage::APPS;
+    } else if (current_page_ == DesktopPage::PODCAST) {
+        target = DesktopPage::MEDIA;
+    }
     ESP_LOGI(TAG, "Navigate back page=%d target=%d",
              static_cast<int>(current_page_), static_cast<int>(target));
     ShowPage(target);
@@ -1240,6 +1354,10 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (current_page_ == DesktopPage::RADIO) {
         // Radio page buttons are now handled by LVGL click events
+        return;
+    }
+
+    if (current_page_ == DesktopPage::MEDIA || current_page_ == DesktopPage::PODCAST) {
         return;
     }
 
@@ -2360,6 +2478,197 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
+void DesktopUI::CreateMediaPage(lv_obj_t* root) {
+    media_page_ = lv_obj_create(root);
+    lv_obj_add_style(media_page_, &style_screen, 0);
+    lv_obj_set_size(media_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(media_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(media_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(media_page_, media_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(media_page_);
+
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(media_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
+    CreateStatusBar(media_page_);
+
+    lv_obj_t* title = label_en(media_page_, "Media", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(media_page_, "Third Page", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 92, 53);
+
+    lv_obj_t* back = CreateButton(media_page_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* card = lv_obj_create(media_page_);
+    lv_obj_add_style(card, &style_panel, 0);
+    lv_obj_set_size(card, 432, 160);
+    lv_obj_align(card, LV_ALIGN_TOP_LEFT, 24, 92);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(card, podcast_card_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(card, media_gesture_cb, LV_EVENT_GESTURE, NULL);
+    lv_obj_set_style_radius(card, 8, 0);
+    lv_obj_set_style_bg_color(card, is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x18, 0x10, 0x0b), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(card, is_tupi_warm_theme() ? COLOR_GOLD :
+                                  themed_color(LV_COLOR_MAKE(0x8a, 0x52, 0x2c), COLOR_LINE), 0);
+
+    lv_obj_t* badge = lv_obj_create(card);
+    lv_obj_remove_style_all(badge);
+    lv_obj_set_size(badge, 94, 94);
+    lv_obj_align(badge, LV_ALIGN_LEFT_MID, 16, 0);
+    lv_obj_set_style_radius(badge, 47, 0);
+    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(badge, themed_color(LV_COLOR_MAKE(0x10, 0x0c, 0x08), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_width(badge, 3, 0);
+    lv_obj_set_style_border_color(badge, COLOR_GOLD, 0);
+    lv_obj_set_style_clip_corner(badge, true, 0);
+
+    lv_obj_t* avatar = lv_gif_create(badge);
+    lv_gif_set_src(avatar, &qd_podcast_avatar);
+    lv_obj_center(avatar);
+    lv_obj_set_style_transform_pivot_x(avatar, 43, 0);
+    lv_obj_set_style_transform_pivot_y(avatar, 43, 0);
+    lv_obj_set_style_transform_width(avatar, 8, 0);
+    lv_obj_set_style_transform_height(avatar, 8, 0);
+
+    lv_anim_t avatar_spin;
+    lv_anim_init(&avatar_spin);
+    lv_anim_set_var(&avatar_spin, avatar);
+    lv_anim_set_values(&avatar_spin, 0, 3600);
+    lv_anim_set_time(&avatar_spin, 9000);
+    lv_anim_set_repeat_count(&avatar_spin, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_exec_cb(&avatar_spin, [](void* obj, int32_t value) {
+        lv_obj_set_style_transform_rotation(static_cast<lv_obj_t*>(obj), value, 0);
+    });
+    lv_anim_start(&avatar_spin);
+
+    lv_obj_t* name = label_en(card, "Nothing Impossible", &style_gold);
+    lv_obj_set_style_text_font(name, &lv_font_montserrat_20, 0);
+    lv_obj_align(name, LV_ALIGN_TOP_LEFT, 128, 22);
+
+    lv_obj_t* cn = label_en(card, "我的播客", &style_en);
+    lv_obj_set_style_text_font(cn, qd_cn_font_20(), 0);
+    lv_obj_align(cn, LV_ALIGN_TOP_LEFT, 128, 54);
+
+    lv_obj_t* desc = label_en(card, "只要你想，没有不可能", &style_muted);
+    lv_obj_set_style_text_font(desc, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(desc, COLOR_TEXT, 0);
+    lv_obj_set_width(desc, 270);
+    lv_label_set_long_mode(desc, LV_LABEL_LONG_WRAP);
+    lv_obj_align(desc, LV_ALIGN_TOP_LEFT, 128, 88);
+
+    lv_obj_t* hint = label_en(media_page_, "Tap card to open list  |  Swipe right: Apps", &style_muted);
+    lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -8);
+}
+
+void DesktopUI::CreatePodcastPage(lv_obj_t* root) {
+    podcast_page_ = lv_obj_create(root);
+    lv_obj_add_style(podcast_page_, &style_screen, 0);
+    lv_obj_set_size(podcast_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(podcast_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(podcast_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(podcast_page_, podcast_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(podcast_page_);
+
+    podcast_list_group_ = lv_obj_create(podcast_page_);
+    lv_obj_remove_style_all(podcast_list_group_);
+    lv_obj_set_size(podcast_list_group_, 456, 296);
+    lv_obj_align(podcast_list_group_, LV_ALIGN_TOP_LEFT, 12, 12);
+    lv_obj_clear_flag(podcast_list_group_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* list_title = label_en(podcast_list_group_, "Nothing Impossible", &style_gold);
+    lv_obj_set_style_text_font(list_title, &lv_font_montserrat_20, 0);
+    lv_obj_align(list_title, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    podcast_state_label_ = label_en(podcast_list_group_, "Ready", &style_green);
+    lv_obj_set_style_text_font(podcast_state_label_, qd_cn_font_16(), 0);
+    lv_obj_align(podcast_state_label_, LV_ALIGN_TOP_LEFT, 196, 4);
+
+    podcast_meta_label_ = label_en(podcast_list_group_, "Select one episode", &style_muted);
+    lv_obj_set_width(podcast_meta_label_, 220);
+    lv_label_set_long_mode(podcast_meta_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(podcast_meta_label_, LV_ALIGN_TOP_RIGHT, 0, 7);
+
+    podcast_list_label_ = label_en(podcast_list_group_, "No episodes loaded", &style_en);
+    lv_obj_set_style_text_font(podcast_list_label_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_line_space(podcast_list_label_, 5, 0);
+    lv_obj_set_width(podcast_list_label_, 456);
+    lv_obj_set_height(podcast_list_label_, 214);
+    lv_label_set_long_mode(podcast_list_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(podcast_list_label_, LV_ALIGN_TOP_LEFT, 0, 34);
+
+    lv_obj_t* back = CreateButton(podcast_list_group_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+
+    lv_obj_t* up = CreateButton(podcast_list_group_, "Up", podcast_up_cb);
+    lv_obj_align(up, LV_ALIGN_BOTTOM_LEFT, 126, 0);
+    lv_obj_t* open = CreateButton(podcast_list_group_, "Open", podcast_open_cb);
+    lv_obj_align(open, LV_ALIGN_BOTTOM_LEFT, 252, 0);
+    lv_obj_t* down = CreateButton(podcast_list_group_, "Down", podcast_down_cb);
+    lv_obj_align(down, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+
+    podcast_detail_group_ = lv_obj_create(podcast_page_);
+    lv_obj_remove_style_all(podcast_detail_group_);
+    lv_obj_set_size(podcast_detail_group_, 456, 296);
+    lv_obj_align(podcast_detail_group_, LV_ALIGN_TOP_LEFT, 12, 12);
+    lv_obj_clear_flag(podcast_detail_group_, LV_OBJ_FLAG_SCROLLABLE);
+
+    podcast_cover_image_ = lv_image_create(podcast_detail_group_);
+    lv_obj_set_size(podcast_cover_image_, 150, 150);
+    lv_obj_align(podcast_cover_image_, LV_ALIGN_TOP_LEFT, 0, 8);
+    lv_obj_set_style_radius(podcast_cover_image_, 8, 0);
+    lv_obj_set_style_clip_corner(podcast_cover_image_, true, 0);
+    lv_obj_set_style_bg_color(podcast_cover_image_, COLOR_SURFACE, 0);
+    lv_obj_set_style_bg_opa(podcast_cover_image_, LV_OPA_COVER, 0);
+
+    podcast_title_label_ = label_en(podcast_detail_group_, "Scanning SD card", &style_en);
+    lv_obj_set_style_text_font(podcast_title_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(podcast_title_label_, 290);
+    lv_label_set_long_mode(podcast_title_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(podcast_title_label_, LV_ALIGN_TOP_LEFT, 166, 4);
+
+    podcast_summary_label_ = label_en(podcast_detail_group_, "Select an episode from list.", &style_muted);
+    lv_obj_set_style_text_font(podcast_summary_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(podcast_summary_label_, 290);
+    lv_obj_set_height(podcast_summary_label_, 156);
+    lv_label_set_long_mode(podcast_summary_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(podcast_summary_label_, LV_ALIGN_TOP_LEFT, 166, 38);
+
+    podcast_progress_slider_ = lv_slider_create(podcast_detail_group_);
+    lv_obj_set_size(podcast_progress_slider_, 230, 12);
+    lv_obj_align(podcast_progress_slider_, LV_ALIGN_TOP_LEFT, 166, 212);
+    lv_slider_set_range(podcast_progress_slider_, 0, 100);
+    lv_slider_set_value(podcast_progress_slider_, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(podcast_progress_slider_, COLOR_SURFACE_2, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(podcast_progress_slider_, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(podcast_progress_slider_, COLOR_GREEN, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(podcast_progress_slider_, COLOR_GOLD, LV_PART_KNOB);
+    lv_obj_add_event_cb(podcast_progress_slider_, podcast_seek_cb, LV_EVENT_ALL, NULL);
+
+    podcast_progress_label_ = label_en(podcast_detail_group_, "0%", &style_muted);
+    lv_obj_set_width(podcast_progress_label_, 48);
+    lv_label_set_long_mode(podcast_progress_label_, LV_LABEL_LONG_CLIP);
+    lv_obj_align(podcast_progress_label_, LV_ALIGN_TOP_LEFT, 405, 205);
+
+    lv_obj_t* list = CreateButton(podcast_detail_group_, "List", podcast_list_cb);
+    lv_obj_align(list, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+    lv_obj_t* prev = CreateButton(podcast_detail_group_, "Prev", podcast_prev_cb);
+    lv_obj_align(prev, LV_ALIGN_BOTTOM_LEFT, 76, 0);
+    lv_obj_t* play_btn = CreateButton(podcast_detail_group_, "Play", podcast_play_cb);
+    lv_obj_align(play_btn, LV_ALIGN_BOTTOM_MID, -36, 0);
+    lv_obj_t* stop = CreateButton(podcast_detail_group_, "Stop", podcast_stop_cb);
+    lv_obj_align(stop, LV_ALIGN_BOTTOM_MID, 42, 0);
+    lv_obj_t* next = CreateButton(podcast_detail_group_, "Next", podcast_next_cb);
+    lv_obj_align(next, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+
+    ShowPodcastDetail(false);
 }
 
 void DesktopUI::CreateFocusPage(lv_obj_t* root) {
@@ -3999,6 +4308,107 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
     }
     if (radio_meta_label_ && meta) {
         lv_label_set_text(radio_meta_label_, meta);
+    }
+}
+
+void DesktopUI::SetPodcastActions(std::function<void()> play_pause, std::function<void()> stop,
+                                  std::function<void()> next, std::function<void()> prev,
+                                  std::function<void()> up, std::function<void()> down,
+                                  std::function<void(int)> seek) {
+    podcast_play_pause_ = std::move(play_pause);
+    podcast_stop_ = std::move(stop);
+    podcast_next_ = std::move(next);
+    podcast_prev_ = std::move(prev);
+    podcast_up_ = std::move(up);
+    podcast_down_ = std::move(down);
+    podcast_seek_ = std::move(seek);
+}
+
+void DesktopUI::SetPodcastState(const char* title, const char* state, const char* meta,
+                                const char* summary, const char* list) {
+    if (podcast_title_label_) {
+        lv_label_set_text(podcast_title_label_, title ? title : "Nothing Impossible");
+    }
+    if (podcast_state_label_) {
+        lv_label_set_text(podcast_state_label_, state ? state : "Ready");
+    }
+    if (podcast_meta_label_) {
+        lv_label_set_text(podcast_meta_label_, meta ? meta : "");
+    }
+    if (podcast_summary_label_) {
+        lv_label_set_text(podcast_summary_label_, summary ? summary : "");
+    }
+    if (podcast_list_label_) {
+        lv_label_set_text(podcast_list_label_, list ? list : "");
+    }
+}
+
+void DesktopUI::ShowPodcastDetail(bool detail) {
+    podcast_detail_view_ = detail;
+    if (podcast_list_group_) {
+        if (detail) {
+            lv_obj_add_flag(podcast_list_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(podcast_list_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (podcast_detail_group_) {
+        if (detail) {
+            lv_obj_clear_flag(podcast_detail_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(podcast_detail_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void DesktopUI::SetPodcastCover(const lv_img_dsc_t* image) {
+    if (!podcast_cover_image_ || !image) {
+        return;
+    }
+    lv_image_set_src(podcast_cover_image_, image);
+    int32_t scale_x = image->header.w > 0 ? (150 * 256) / image->header.w : 256;
+    int32_t scale_y = image->header.h > 0 ? (150 * 256) / image->header.h : 256;
+    int32_t scale = LV_MAX(scale_x, scale_y);
+    if (scale <= 0) {
+        scale = 256;
+    }
+    lv_image_set_scale(podcast_cover_image_, scale);
+}
+
+void DesktopUI::SetPodcastProgress(int percent) {
+    percent = std::clamp(percent, 0, 100);
+    if (podcast_progress_slider_ && !podcast_progress_dragging_) {
+        lv_slider_set_value(podcast_progress_slider_, percent, LV_ANIM_OFF);
+    }
+    if (podcast_progress_label_ && !podcast_progress_dragging_) {
+        char text[16];
+        snprintf(text, sizeof(text), "%d%%", percent);
+        lv_label_set_text(podcast_progress_label_, text);
+    }
+}
+
+void DesktopUI::HandlePodcastSeekEvent(lv_event_t* event) {
+    if (!event) {
+        return;
+    }
+    lv_obj_t* slider = static_cast<lv_obj_t*>(lv_event_get_target(event));
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_PRESSED) {
+        podcast_progress_dragging_ = true;
+        return;
+    }
+    if (code == LV_EVENT_VALUE_CHANGED && podcast_progress_label_) {
+        char text[16];
+        snprintf(text, sizeof(text), "%ld%%", static_cast<long>(lv_slider_get_value(slider)));
+        lv_label_set_text(podcast_progress_label_, text);
+        return;
+    }
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        const int value = static_cast<int>(lv_slider_get_value(slider));
+        podcast_progress_dragging_ = false;
+        if (podcast_seek_) {
+            podcast_seek_(value);
+        }
     }
 }
 

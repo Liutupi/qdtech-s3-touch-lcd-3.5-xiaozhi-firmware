@@ -13,6 +13,8 @@ enum class DesktopPage {
     FC,
     CALENDAR,
     RADIO,
+    MEDIA,
+    PODCAST,
     FOCUS,
     XIAOZHI,
     NETWORK,
@@ -44,6 +46,16 @@ public:
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
     void SetRadioState(const char* station, const char* state, const char* meta);
+    void SetPodcastActions(std::function<void()> play_pause, std::function<void()> stop,
+                           std::function<void()> next, std::function<void()> prev,
+                           std::function<void()> up, std::function<void()> down,
+                           std::function<void(int)> seek);
+    void ShowPodcastDetail(bool detail);
+    void SetPodcastState(const char* title, const char* state, const char* meta,
+                         const char* summary, const char* list);
+    void SetPodcastCover(const lv_img_dsc_t* image);
+    void SetPodcastProgress(int percent);
+    void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
@@ -78,6 +90,13 @@ public:
     std::function<void()> radio_stop_;
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
+    std::function<void()> podcast_play_pause_;
+    std::function<void()> podcast_stop_;
+    std::function<void()> podcast_next_;
+    std::function<void()> podcast_prev_;
+    std::function<void()> podcast_up_;
+    std::function<void()> podcast_down_;
+    std::function<void(int)> podcast_seek_;
     std::function<void()> fc_play_pause_;
     std::function<void()> fc_stop_;
     std::function<void()> fc_next_;
@@ -99,6 +118,8 @@ private:
     lv_obj_t* fc_page_ = nullptr;
     lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
+    lv_obj_t* media_page_ = nullptr;
+    lv_obj_t* podcast_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
     lv_obj_t* network_page_ = nullptr;
     lv_obj_t* settings_page_ = nullptr;
@@ -190,6 +211,20 @@ private:
     lv_obj_t* radio_meta_label_ = nullptr;
     lv_timer_t* radio_anim_timer_ = nullptr;
 
+    // Podcast page elements
+    lv_obj_t* podcast_list_group_ = nullptr;
+    lv_obj_t* podcast_detail_group_ = nullptr;
+    lv_obj_t* podcast_cover_image_ = nullptr;
+    lv_obj_t* podcast_title_label_ = nullptr;
+    lv_obj_t* podcast_state_label_ = nullptr;
+    lv_obj_t* podcast_meta_label_ = nullptr;
+    lv_obj_t* podcast_summary_label_ = nullptr;
+    lv_obj_t* podcast_list_label_ = nullptr;
+    lv_obj_t* podcast_progress_slider_ = nullptr;
+    lv_obj_t* podcast_progress_label_ = nullptr;
+    bool podcast_detail_view_ = false;
+    bool podcast_progress_dragging_ = false;
+
     // Focus timer page elements
     lv_obj_t* focus_page_ = nullptr;
     lv_obj_t* focus_arc_ = nullptr;
@@ -264,6 +299,8 @@ private:
     void CreateFcPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
+    void CreateMediaPage(lv_obj_t* root);
+    void CreatePodcastPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);

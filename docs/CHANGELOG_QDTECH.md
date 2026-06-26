@@ -2,6 +2,41 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.47 Podcast SD Player And List Font Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.47` so boards already on `v1.7.46` can receive the podcast update through OTA.
+- Added a third `Media` page with a `Nothing Impossible` podcast card.
+- Added `PodcastService` for SD-card podcasts under `/sdcard/podcast`, using `index.json` plus per-episode MP3, JPG cover, and TXT summary files.
+- Added a two-level podcast UI: episode list first, then detail view with cover, summary, play/stop/prev/next controls, and a seekable progress slider.
+- Removed the Podcast page top status/brand bar so the content can use almost the full 480x320 screen.
+- Normalized podcast audio loudness during playback with a lightweight peak/average leveler.
+- Fixed playback/list switching stability by keeping list navigation lightweight while MP3 decoding is active; switching playback exits the decode loop cleanly before opening the next file.
+- Expanded the podcast list from 5 visible rows to 8 visible rows.
+- Fixed podcast title mojibake by replacing unsafe byte-count truncation with UTF-8-safe truncation, and by normalizing high-risk punctuation such as smart quotes and long dashes for the current embedded font.
+- Reverted podcast labels from the narrow LXGW UI subset back to the broader Puhui Chinese font after hardware feedback showed the LXGW subset missed many podcast-title Chinese glyphs.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin`; app version logged as `1.7.47`.
+- Final `xiaozhi.bin` size: `0x4acfe0`.
+- Full merged image size: `0x5acfe0`.
+- Smallest app partition: `0x600000`; free app space `0x153020` (about 22%).
+- Flashed successfully to `COM13`.
+- Runtime logs confirmed:
+  - `App version: 1.7.47`
+  - `PodcastService: loaded podcast episodes=80`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather retry succeeded: `weather ok 28 C 中山 雷雨 13:30 H90% C100%`
+
+Release asset SHA256:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-app.bin`: `481522E7171428C274409EDC8628D6C88A25F4A051302702E0FC105885ECDCF6`
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-firmware.zip`: `9FEEEB16EA63AAD5AB5065162053FCD5BD1F0D43808AC8362CE1EBC7822C6481`
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-full.bin`: `C5BE37D2832CEE18BF02BB5A7F80D650931367922C0B01122B675C4464B654A0`
+
 ## 2026-06-26: v1.7.46 Font, Phone Web, Brand Earth, And Weather Accuracy
 
 Scope:

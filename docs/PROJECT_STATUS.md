@@ -37,6 +37,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.44 (2026-06-25): Added persistent profile/weather config plumbing, a verified WiFi phone config page/API, automatic city geocoding, Chinese weather text rendering, memory-guarded BLE prototype code, and a fixed main-page logo/name brand layout
 - v1.7.45 (2026-06-25): Brand text auto-wrap for long text, weather refresh on page switch, BLE compilation fix
 - v1.7.46 (2026-06-26): Broader Chinese UI font coverage, stable Phone Web IP/status display, delayed/retried Phone Web startup, strongest-BSSID WiFi preference, cleaned brand earth GIF, and refined Open-Meteo weather accuracy using rain/cloud/humidity context
+- v1.7.47 (2026-06-26): SD-card `Nothing Impossible` podcast player with a third Media page, two-level episode UI, seekable progress bar, volume leveling, playback/list stability fixes, and UTF-8-safe podcast list rendering
 
 ## Confirmed Hardware From Source
 
@@ -169,6 +170,15 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Current hardware validation after WiFi startup skipped BLE with `BLE low memory` (`free_internal=14743`, `largest_internal=14336`) to avoid rebooting the board.
 - Weather location MCP tool: `self.weather.set_location`.
 - MP3 network radio with built-in station list.
+- SD-card podcast player:
+  - Media page card `Nothing Impossible` opens the podcast list.
+  - Reads `/sdcard/podcast/index.json` and per-episode MP3/JPG/TXT files.
+  - Current prepared SD card contains 80 episodes.
+  - List view shows 8 visible rows with Back / Up / Open / Down controls.
+  - Detail view shows cover, title, summary, progress slider, and playback controls.
+  - Progress slider can seek by percent.
+  - MP3 playback uses a lightweight leveler to reduce inconsistent source volume.
+  - Podcast list rendering uses UTF-8-safe truncation and broad Puhui font helpers for dynamic Chinese titles; do not switch arbitrary podcast titles to the narrow LXGW subset.
 - Radio MCP tools:
   - `self.radio.get_status`
   - `self.radio.play`
@@ -196,6 +206,7 @@ After flashing, look for these logs:
 - MQTT connected.
 - AFE/wake word startup.
 - `Application: STATE: idle`
+- `PodcastService: loaded podcast episodes=80` when the SD card has `/podcast/index.json`.
 - `TimeWeather: Time synchronized`
 - `TimeWeather: Daily card updated for YYYY-MM-DD`
 - `DesktopUI: Weather visual code=...`

@@ -9,6 +9,7 @@
 #include "fc_emulator_service.h"
 #include "firmware_update_service.h"
 #include "photo_service.h"
+#include "podcast_service.h"
 #include "qd_ble_config_service.h"
 #include "qd_wifi_config_server.h"
 #include "radio_service.h"
@@ -642,6 +643,7 @@ public:
         InitializeButtons();
         InitializeTools();
         InitializeRadio();
+        InitializePodcast();
         InitializePhotos();
         InitializeFcEmulator();
         InitializeFirmwareUpdate();
@@ -1104,6 +1106,14 @@ private:
         radio_service_.Start(desktop_ui);
     }
 
+    void InitializePodcast() {
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        podcast_service_.Start(desktop_ui);
+    }
+
     void InitializePhotos() {
         if (!display_) {
             return;
@@ -1294,6 +1304,7 @@ private:
     QdtechBatteryMonitor battery_monitor_;
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
+    PodcastService podcast_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
     QdBleConfigService ble_config_service_;

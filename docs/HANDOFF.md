@@ -40,9 +40,63 @@ Last verified on 2026-06-26 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.46 Chinese font coverage, WiFi/Phone Web stability, brand earth GIF, and refined weather accuracy
+- Last verified update: 2026-06-26 v1.7.47 SD-card podcast player, podcast UI polish, playback stability, and podcast font fallback
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.47 SD Podcast Player And Font Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.47` so GitHub/OTA sees this as newer than the previous `v1.7.46` weather/UI release.
+- Added a third `Media` page and a `Nothing Impossible` podcast card.
+- Added `PodcastService` for local SD-card podcasts at `/sdcard/podcast`.
+- Expected SD structure:
+  - `/sdcard/podcast/index.json`
+  - `/sdcard/podcast/epNNN.mp3`
+  - `/sdcard/podcast/epNNN.jpg`
+  - `/sdcard/podcast/epNNN.txt`
+- `index.json` entries provide `vol`, `title`, `audio`, `cover`, and `desc`.
+- The user SD card was prepared with 80 podcast episodes; source files remain outside the repo.
+- Podcast UI now has two levels:
+  - list view with 8 visible rows and Back / Up / Open / Down controls.
+  - detail view with cover on the left, title/summary on the right, progress slider, and List / Prev / Play / Stop / Next controls.
+- Removed the Podcast page top status/brand bar so podcast content can use almost the whole 480x320 screen.
+- Added seek support by percent through the progress slider.
+- Added a lightweight playback leveler to reduce large volume differences between MP3 files.
+- Fixed the playback/list-navigation freeze path by not decoding covers or doing heavy UI work from inside the MP3 decode command loop.
+- Fixed podcast title mojibake by replacing unsafe byte-count truncation with UTF-8-safe truncation.
+- Normalized smart quotes and long dashes to embedded-font-safe punctuation for podcast display.
+- Important font lesson: do not use the narrow `qd_font_lxgw_16/20` subset for arbitrary podcast titles. It misses many Chinese glyphs. Podcast dynamic text is back on the broader Puhui font helpers (`qd_cn_font_16/20`). If truly full Chinese coverage is required later, use an SD-card font/font-engine approach rather than small compiled subsets.
+
+Verification:
+
+- Build passed with `idf.py -B build-qdtech build merge-bin`.
+- CMake/app version: `1.7.47`.
+- Final `xiaozhi.bin` size: `0x4acfe0`.
+- Full merged image size: `0x5acfe0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x153020`, about 22%.
+- Flashed successfully to `COM13`.
+- Boot/runtime logs confirmed:
+  - `App version: 1.7.47`.
+  - `RadioService: radio sd mounted width=4`.
+  - `PodcastService: loaded podcast episodes=80`.
+  - Strong WiFi AP selected: `bssid = fc:94:35:08:0a:e8`, RSSI about `-15`.
+  - IP address: `192.168.4.177`.
+  - MQTT connected and app reached `STATE: idle`.
+  - Weather retried after an `ESP_ERR_HTTP_EAGAIN` and then succeeded: `weather ok 28 C 中山 雷雨 13:30 H90% C100% raw=99 refined=99`.
+
+Release assets prepared in `releases/v1.7.47/`:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-app.bin`, SHA256 `481522E7171428C274409EDC8628D6C88A25F4A051302702E0FC105885ECDCF6`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-firmware.zip`, SHA256 `9FEEEB16EA63AAD5AB5065162053FCD5BD1F0D43808AC8362CE1EBC7822C6481`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.47-full.bin`, SHA256 `C5BE37D2832CEE18BF02BB5A7F80D650931367922C0B01122B675C4464B654A0`.
+
+Known issues / next podcast checks:
+
+- The current embedded Puhui font is broader than the LXGW subset but still not a true all-CJK solution. If future podcast titles include rare characters, build a real full-font path, probably SD-card backed.
+- The latest hardware check verified boot/services/logs. Visual confirmation of the corrected list text should be done on the physical screen after opening Media -> Podcast.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.46 Font, Phone Web, Brand Earth, And Weather Accuracy
 
