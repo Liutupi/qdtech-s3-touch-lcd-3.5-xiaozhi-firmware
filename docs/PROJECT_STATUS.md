@@ -39,6 +39,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.46 (2026-06-26): Broader Chinese UI font coverage, stable Phone Web IP/status display, delayed/retried Phone Web startup, strongest-BSSID WiFi preference, cleaned brand earth GIF, and refined Open-Meteo weather accuracy using rain/cloud/humidity context
 - v1.7.47 (2026-06-26): SD-card `Nothing Impossible` podcast player with a third Media page, two-level episode UI, seekable progress bar, volume leveling, playback/list stability fixes, and UTF-8-safe podcast list rendering
 - v1.7.48 (2026-06-26): System-level smoothness pass for Podcast and FC/NES: lazy podcast startup, lighter episode selection, asynchronous ROM loading, and media mutual exclusion to reduce SD/audio contention and UI freezes
+- v1.7.49 (2026-06-26): Photos portrait display polish: landscape photos still fill the screen, while portrait photos show fully centered with a generated dark blurred background from the same image
 
 ## Confirmed Hardware From Source
 
@@ -120,6 +121,8 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Skips macOS resource files such as `._001.jpg`.
   - Uses SDMMC 4-bit bus from the product specification, with a 1-bit low-speed fallback if 4-bit mount fails.
   - Displays photos as a pure full-screen 480x320 slideshow with no status bar, Back button, Refresh button, or text overlay.
+  - Landscape photos fill the screen.
+  - Portrait photos are fit fully and centered, with a generated same-photo dark blurred background filling both sides.
   - Exits the photo page with either left or right swipe back to Apps.
   - Cross-fades between decoded photos.
   - Photo task lazy-starts only when opening Photos.

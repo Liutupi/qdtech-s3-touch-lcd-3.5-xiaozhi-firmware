@@ -25,6 +25,9 @@ private:
         lv_img_dsc_t dsc = {};
         uint8_t* data = nullptr;
         size_t data_size = 0;
+        lv_img_dsc_t background_dsc = {};
+        uint8_t* background_data = nullptr;
+        size_t background_data_size = 0;
     };
 
     DesktopUI* desktop_ui_ = nullptr;
@@ -52,5 +55,6 @@ private:
     void FreeFrame(Frame& frame);
     void ClearFrames();
     void SetUiState(const char* title, const char* detail);
-    void SetUiFrame(const lv_img_dsc_t* frame, const char* title, const char* detail);
+    void SetUiFrame(const lv_img_dsc_t* frame, const lv_img_dsc_t* background,
+                    const char* title, const char* detail);
 };

@@ -2,22 +2,27 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.48 Podcast/FC Smoothness Follow-Up
+## Current Active Task: v1.7.49 Photos Portrait Display Follow-Up
 
 Current state:
 
-- Firmware base is merged through `v1.7.48`.
+- Firmware base is merged through `v1.7.49`.
 - 2026-06-26 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
-- Latest release build result: `xiaozhi.bin` `0x4ad510`, smallest app partition `0x600000`, free `0x152af0` (about 22%).
-- Latest full merged image size: `0x5ad510`.
-- Release assets are in `releases/v1.7.48/`: app bin, full merged bin, and firmware zip.
+- Latest release build result: `xiaozhi.bin` `0x4ad8c0`, smallest app partition `0x600000`, free `0x152740` (about 22%).
+- Latest full merged image size: `0x5ad8c0`.
+- Release assets are in `releases/v1.7.49/`: app bin, full merged bin, and firmware zip.
+- `v1.7.49` updates Photos portrait handling:
+  - landscape photos still use full-screen cover mode.
+  - portrait photos fit fully and center on the 480x320 display.
+  - portrait photos get a generated same-photo dark blurred 480x320 background.
+  - no SD format change is required; use the existing `/sdcard/photos` JPG/JPEG path.
+- Latest `v1.7.49` boot verification logged `App version: 1.7.49`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 28 C 中山 雷雨 15:30 H94% C100%`.
 - `v1.7.48` is a system smoothness release for the heavy SD/audio paths:
   - Podcast service starts lazily when the Podcast card is opened instead of during boot.
   - Podcast index loading no longer reads every episode summary up front.
   - Podcast list Up/Down no longer decodes JPG covers during selection.
   - FC/NES Play no longer validates ROMs from the UI callback; it requests `Loading ROM` and lets the FC task do SD validation/start work in the background.
   - Entering Podcast stops Radio and FC; entering FC stops Radio and Podcast.
-- Latest `v1.7.48` boot verification logged `App version: 1.7.48`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 27 C 中山 雷雨 14:00 H95% C100%` without `weather low memory`.
 - A pre-version-bump interaction check opened Media -> Podcast and confirmed lazy podcast task startup, SD mount, and `PodcastService: loaded podcast episodes=80`.
 - `v1.7.47` adds the SD-card `Nothing Impossible` podcast player under a third `Media` page.
 - Podcast SD format is `/sdcard/podcast/index.json` plus `epNNN.mp3`, `epNNN.jpg`, and `epNNN.txt`; the prepared SD card currently contains 80 episodes.
@@ -78,8 +83,9 @@ Current state:
 
 Next work:
 
+- Physically open Photos with one landscape and one portrait photo. Confirm the portrait foreground is not cropped and the generated side background looks soft enough on the real LCD.
+- Verify Settings OTA from a board running `v1.7.48` to `v1.7.49`.
 - Stress test repeated Podcast list/detail/play/back cycles and FC ROM loading on the physical board. If freezes persist, add a central SD/media operation guard so SD-heavy features serialize expensive operations explicitly.
-- Verify Settings OTA from a board running `v1.7.47` to `v1.7.48`.
 - Do a physical screen pass of Media -> Podcast list/detail and confirm podcast Chinese titles no longer show missing glyph boxes or mojibake.
 - If arbitrary podcast titles still need complete Chinese coverage, prototype an SD-card backed full-font path instead of growing compiled font subsets.
 - If the user wants more accurate China-local weather, add a provider priority path: local Caiyun token present -> Caiyun realtime; missing token or fetch failure -> current refined Open-Meteo fallback. Do not commit a private token.

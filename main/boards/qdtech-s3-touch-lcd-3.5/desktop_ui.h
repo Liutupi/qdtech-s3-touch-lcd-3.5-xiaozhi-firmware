@@ -73,7 +73,8 @@ public:
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
     void SetPhotoState(const char* title, const char* detail);
-    void SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail);
+    void SetPhotoFrame(const lv_img_dsc_t* image, const lv_img_dsc_t* background,
+                       const char* title, const char* detail);
     void RequestPhotoRefresh();
     void SetFcActiveCallback(std::function<void(bool)> callback);
     void SetFcExitCallback(std::function<void()> callback);
@@ -172,6 +173,8 @@ private:
     int current_weather_scene_ = -1;
 
     // Photo page elements
+    lv_obj_t* photo_bg_a_ = nullptr;
+    lv_obj_t* photo_bg_b_ = nullptr;
     lv_obj_t* photo_image_a_ = nullptr;
     lv_obj_t* photo_image_b_ = nullptr;
     lv_obj_t* photo_title_label_ = nullptr;

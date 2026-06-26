@@ -37,6 +37,8 @@ constexpr const char* kPhotoDirs[] = {
 };
 constexpr size_t kMaxInputBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxOutputBytes = 960 * 640 * 2;
+constexpr size_t kBackgroundPixels = DISPLAY_WIDTH * DISPLAY_HEIGHT;
+constexpr size_t kBackgroundBytes = kBackgroundPixels * 2;
 constexpr TickType_t kSlideDelay = pdMS_TO_TICKS(6000);
 constexpr TickType_t kIdleDelay = pdMS_TO_TICKS(500);
 constexpr int kSdFreqDefaultKhz = SDMMC_FREQ_DEFAULT;
@@ -73,6 +75,56 @@ esp_jpeg_image_scale_t choose_scale(uint16_t width, uint16_t height) {
         return JPEG_IMAGE_SCALE_1_4;
     }
     return JPEG_IMAGE_SCALE_1_8;
+}
+
+uint16_t darken_rgb565(uint16_t color) {
+    const uint16_t r = (color >> 11) & 0x1f;
+    const uint16_t g = (color >> 5) & 0x3f;
+    const uint16_t b = color & 0x1f;
+    return static_cast<uint16_t>(((r * 3 / 5) << 11) | ((g * 3 / 5) << 5) | (b * 3 / 5));
+}
+
+uint16_t blur_sample_rgb565(const uint16_t* source, uint16_t width, uint16_t height, int x, int y) {
+    uint32_t r = 0;
+    uint32_t g = 0;
+    uint32_t b = 0;
+    uint32_t count = 0;
+    for (int dy = -3; dy <= 3; dy += 2) {
+        int sy = std::clamp(y + dy, 0, static_cast<int>(height) - 1);
+        for (int dx = -3; dx <= 3; dx += 2) {
+            int sx = std::clamp(x + dx, 0, static_cast<int>(width) - 1);
+            const uint16_t color = source[sy * width + sx];
+            r += (color >> 11) & 0x1f;
+            g += (color >> 5) & 0x3f;
+            b += color & 0x1f;
+            ++count;
+        }
+    }
+    return static_cast<uint16_t>(((r / count) << 11) | ((g / count) << 5) | (b / count));
+}
+
+void fill_portrait_background(const uint8_t* source_data, uint16_t source_width, uint16_t source_height,
+                              uint8_t* background_data) {
+    auto* background = reinterpret_cast<uint16_t*>(background_data);
+    const auto* source = reinterpret_cast<const uint16_t*>(source_data);
+
+    const int32_t scale_x = (DISPLAY_WIDTH * 256) / source_width;
+    const int32_t scale_y = (DISPLAY_HEIGHT * 256) / source_height;
+    const int32_t scale = std::max(scale_x, scale_y);
+    const int32_t scaled_width = (source_width * scale) / 256;
+    const int32_t scaled_height = (source_height * scale) / 256;
+    const int32_t x_offset = (scaled_width - DISPLAY_WIDTH) / 2;
+    const int32_t y_offset = (scaled_height - DISPLAY_HEIGHT) / 2;
+
+    for (int y = 0; y < DISPLAY_HEIGHT; ++y) {
+        for (int x = 0; x < DISPLAY_WIDTH; ++x) {
+            const int raw_x = static_cast<int>(((x + x_offset) * 256) / scale);
+            const int raw_y = static_cast<int>(((y + y_offset) * 256) / scale);
+            const int sx = std::clamp(raw_x, 0, static_cast<int>(source_width) - 1);
+            const int sy = std::clamp(raw_y, 0, static_cast<int>(source_height) - 1);
+            background[y * DISPLAY_WIDTH + x] = darken_rgb565(blur_sample_rgb565(source, source_width, source_height, sx, sy));
+        }
+    }
 }
 } // namespace
 
@@ -187,7 +239,7 @@ void PhotoService::TaskLoop() {
                      static_cast<unsigned>(width),
                      static_cast<unsigned>(height),
                      path.substr(path.find_last_of('/') + 1).c_str());
-            SetUiFrame(&frame.dsc, title, detail);
+            SetUiFrame(&frame.dsc, frame.background_data ? &frame.background_dsc : nullptr, title, detail);
             frame_slot_ = (frame_slot_ + 1) % 2;
             current_index_ = (current_index_ + 1) % photos_.size();
         } else {
@@ -439,6 +491,26 @@ bool PhotoService::DecodePhoto(const std::string& path, Frame& frame, uint16_t& 
     width = out.width;
     height = out.height;
 
+    if (height > width) {
+        uint8_t* background = static_cast<uint8_t*>(heap_caps_malloc(kBackgroundBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (background) {
+            fill_portrait_background(output, out.width, out.height, background);
+            memset(&frame.background_dsc, 0, sizeof(frame.background_dsc));
+            frame.background_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+            frame.background_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+            frame.background_dsc.header.flags = LV_IMAGE_FLAGS_ALLOCATED;
+            frame.background_dsc.header.w = DISPLAY_WIDTH;
+            frame.background_dsc.header.h = DISPLAY_HEIGHT;
+            frame.background_dsc.header.stride = DISPLAY_WIDTH * 2;
+            frame.background_dsc.data_size = kBackgroundBytes;
+            frame.background_dsc.data = background;
+            frame.background_data = background;
+            frame.background_data_size = kBackgroundBytes;
+        } else {
+            ESP_LOGW(TAG, "photo portrait background alloc failed");
+        }
+    }
+
     ESP_LOGI(TAG, "photo decoded %s %ux%u len=%u scale=%d",
              path.c_str(), static_cast<unsigned>(width), static_cast<unsigned>(height),
              static_cast<unsigned>(out.output_len), static_cast<int>(info_cfg.out_scale));
@@ -452,6 +524,12 @@ void PhotoService::FreeFrame(Frame& frame) {
     }
     frame.data_size = 0;
     memset(&frame.dsc, 0, sizeof(frame.dsc));
+    if (frame.background_data) {
+        heap_caps_free(frame.background_data);
+        frame.background_data = nullptr;
+    }
+    frame.background_data_size = 0;
+    memset(&frame.background_dsc, 0, sizeof(frame.background_dsc));
 }
 
 void PhotoService::ClearFrames() {
@@ -469,12 +547,13 @@ void PhotoService::SetUiState(const char* title, const char* detail) {
     }
 }
 
-void PhotoService::SetUiFrame(const lv_img_dsc_t* frame, const char* title, const char* detail) {
+void PhotoService::SetUiFrame(const lv_img_dsc_t* frame, const lv_img_dsc_t* background,
+                              const char* title, const char* detail) {
     if (!desktop_ui_) {
         return;
     }
     if (lvgl_port_lock(100)) {
-        desktop_ui_->SetPhotoFrame(frame, title, detail);
+        desktop_ui_->SetPhotoFrame(frame, background, title, detail);
         lvgl_port_unlock();
     }
 }

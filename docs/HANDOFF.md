@@ -40,9 +40,52 @@ Last verified on 2026-06-26 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.48 system smoothness for Podcast and FC/NES loading
+- Last verified update: 2026-06-26 v1.7.49 Photos portrait fit with same-photo blurred background
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-26 v1.7.49 Photos Portrait Fit And Blurred Background
+
+Scope:
+
+- Bumped firmware version to `1.7.49`.
+- Photos still scans JPG/JPEG files from the existing SD-card photo directories; no SD format change is required.
+- Landscape photos continue using the existing full-screen cover presentation.
+- Portrait photos now fit fully and are centered, instead of being cropped by the previous full-screen cover scaling.
+- Portrait photos automatically get a generated same-photo 480x320 background frame:
+  - cover-scaled to the screen
+  - lightly sampled/blurred
+  - darkened for foreground contrast
+  - allocated in PSRAM as part of the active photo frame
+- The Photos page now uses two image layers per fade slot: background and foreground. Both layers cross-fade together.
+
+Verification:
+
+- Build passed with `idf.py -B build-qdtech build merge-bin`.
+- CMake/app version: `1.7.49`.
+- Final `xiaozhi.bin` size: `0x4ad8c0`.
+- Full merged image size: `0x5ad8c0`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x152740`, about 22%.
+- Flashed successfully to `COM13`.
+- Boot/runtime logs confirmed:
+  - `App version: 1.7.49`.
+  - WiFi connected to `liutupi`, IP `192.168.4.177`.
+  - MQTT connected and app reached `STATE: idle`.
+  - Weather synced: `weather ok 28 C 中山 雷雨 15:30 H94% C100% raw=96 refined=96`.
+  - Deferred Phone Web services started after the memory guard check.
+  - No reboot, panic, or backtrace during the observed startup window.
+
+Release assets prepared in `releases/v1.7.49/`:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-app.bin`, SHA256 `DAD8E4B31DC4E59291A445AEA6F0B3536C3F4BDB901984C7756EF0EFB567495C`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-firmware.zip`, SHA256 `FDC9556E3FB60F2E3CC52B7A45F5DC4FA1C46035CB94D5E083B0C30586EFCD9D`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-full.bin`, SHA256 `1012D6463DB5DDF1B09526B6B46FDBE06AC255933732F61E5872CED304608049`.
+
+Known follow-up:
+
+- Physically open Photos with both a 480x320 landscape photo and a 320x480 portrait photo. Confirm portrait people/faces are not cropped and the side background looks soft enough on the real LCD.
+- If the generated background feels too sharp on hardware, increase the sampling radius or generate a lower-resolution background first, but watch decode time.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.48 System Smoothness For Podcast And FC
 

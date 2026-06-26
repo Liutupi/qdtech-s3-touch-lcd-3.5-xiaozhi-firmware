@@ -2084,12 +2084,20 @@ void DesktopUI::CreatePhotoPage(lv_obj_t* root) {
     lv_obj_set_style_radius(frame, 0, 0);
     lv_obj_move_background(frame);
 
+    photo_bg_a_ = lv_image_create(frame);
+    photo_bg_b_ = lv_image_create(frame);
     photo_image_a_ = lv_image_create(frame);
     photo_image_b_ = lv_image_create(frame);
+    lv_obj_set_style_opa(photo_bg_a_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_opa(photo_bg_b_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_opa(photo_image_a_, LV_OPA_TRANSP, 0);
     lv_obj_set_style_opa(photo_image_b_, LV_OPA_TRANSP, 0);
+    lv_obj_center(photo_bg_a_);
+    lv_obj_center(photo_bg_b_);
     lv_obj_center(photo_image_a_);
     lv_obj_center(photo_image_b_);
+    add_gesture_bubble(photo_bg_a_);
+    add_gesture_bubble(photo_bg_b_);
     add_gesture_bubble(photo_image_a_);
     add_gesture_bubble(photo_image_b_);
 }
@@ -3701,9 +3709,16 @@ void DesktopUI::SetPhotoState(const char* title, const char* detail) {
     }
 }
 
-void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, const char* detail) {
+void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const lv_img_dsc_t* background,
+                              const char* title, const char* detail) {
     SetPhotoState(title, detail);
-    if (!photo_image_a_ || !photo_image_b_ || !image) {
+    if (!photo_bg_a_ || !photo_bg_b_ || !photo_image_a_ || !photo_image_b_ || !image) {
+        if (photo_bg_a_) {
+            lv_obj_set_style_opa(photo_bg_a_, LV_OPA_TRANSP, 0);
+        }
+        if (photo_bg_b_) {
+            lv_obj_set_style_opa(photo_bg_b_, LV_OPA_TRANSP, 0);
+        }
         if (photo_image_a_) {
             lv_obj_set_style_opa(photo_image_a_, LV_OPA_TRANSP, 0);
         }
@@ -3713,6 +3728,8 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
         return;
     }
 
+    lv_obj_t* next_bg = photo_show_a_ ? photo_bg_b_ : photo_bg_a_;
+    lv_obj_t* prev_bg = photo_show_a_ ? photo_bg_a_ : photo_bg_b_;
     lv_obj_t* next = photo_show_a_ ? photo_image_b_ : photo_image_a_;
     lv_obj_t* prev = photo_show_a_ ? photo_image_a_ : photo_image_b_;
     photo_show_a_ = !photo_show_a_;
@@ -3724,10 +3741,26 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
         lv_obj_add_flag(photo_detail_label_, LV_OBJ_FLAG_HIDDEN);
     }
 
+    if (background) {
+        lv_image_set_src(next_bg, background);
+        int32_t bg_scale_x = background->header.w > 0 ? (DISPLAY_WIDTH * 256) / background->header.w : 256;
+        int32_t bg_scale_y = background->header.h > 0 ? (DISPLAY_HEIGHT * 256) / background->header.h : 256;
+        int32_t bg_scale = LV_MAX(bg_scale_x, bg_scale_y);
+        if (bg_scale <= 0) {
+            bg_scale = 256;
+        }
+        lv_image_set_scale(next_bg, bg_scale);
+        lv_obj_center(next_bg);
+        lv_obj_set_style_opa(next_bg, LV_OPA_TRANSP, 0);
+        lv_obj_move_background(next_bg);
+    } else {
+        lv_obj_set_style_opa(next_bg, LV_OPA_TRANSP, 0);
+    }
+
     lv_image_set_src(next, image);
     int32_t scale_x = image->header.w > 0 ? (DISPLAY_WIDTH * 256) / image->header.w : 256;
     int32_t scale_y = image->header.h > 0 ? (DISPLAY_HEIGHT * 256) / image->header.h : 256;
-    int32_t scale = LV_MAX(scale_x, scale_y);
+    int32_t scale = background ? LV_MIN(scale_x, scale_y) : LV_MAX(scale_x, scale_y);
     if (scale <= 0) {
         scale = 256;
     }
@@ -3735,21 +3768,27 @@ void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const char* title, cons
     lv_obj_center(next);
     lv_obj_set_style_opa(next, LV_OPA_TRANSP, 0);
 
-    lv_anim_t fade_in;
-    lv_anim_init(&fade_in);
-    lv_anim_set_var(&fade_in, next);
-    lv_anim_set_values(&fade_in, LV_OPA_TRANSP, LV_OPA_COVER);
-    lv_anim_set_time(&fade_in, 650);
-    lv_anim_set_exec_cb(&fade_in, ObjOpaCb);
-    lv_anim_start(&fade_in);
+    lv_obj_t* fade_in_objs[] = {next_bg, next};
+    for (lv_obj_t* obj : fade_in_objs) {
+        lv_anim_t fade_in;
+        lv_anim_init(&fade_in);
+        lv_anim_set_var(&fade_in, obj);
+        lv_anim_set_values(&fade_in, LV_OPA_TRANSP, obj == next_bg && !background ? LV_OPA_TRANSP : LV_OPA_COVER);
+        lv_anim_set_time(&fade_in, 650);
+        lv_anim_set_exec_cb(&fade_in, ObjOpaCb);
+        lv_anim_start(&fade_in);
+    }
 
-    lv_anim_t fade_out;
-    lv_anim_init(&fade_out);
-    lv_anim_set_var(&fade_out, prev);
-    lv_anim_set_values(&fade_out, lv_obj_get_style_opa(prev, 0), LV_OPA_TRANSP);
-    lv_anim_set_time(&fade_out, 650);
-    lv_anim_set_exec_cb(&fade_out, ObjOpaCb);
-    lv_anim_start(&fade_out);
+    lv_obj_t* fade_out_objs[] = {prev_bg, prev};
+    for (lv_obj_t* obj : fade_out_objs) {
+        lv_anim_t fade_out;
+        lv_anim_init(&fade_out);
+        lv_anim_set_var(&fade_out, obj);
+        lv_anim_set_values(&fade_out, lv_obj_get_style_opa(obj, 0), LV_OPA_TRANSP);
+        lv_anim_set_time(&fade_out, 650);
+        lv_anim_set_exec_cb(&fade_out, ObjOpaCb);
+        lv_anim_start(&fade_out);
+    }
 }
 
 void DesktopUI::SetFcActiveCallback(std::function<void(bool)> callback) {

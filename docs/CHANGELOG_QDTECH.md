@@ -2,6 +2,39 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-26: v1.7.49 Photos Portrait Fit And Blurred Background
+
+Scope:
+
+- Bumped firmware version to `1.7.49` so boards on `v1.7.48` can receive the Photos portrait-display update through OTA.
+- Changed the Photos page from one image layer per fade slot to two image layers per slot: a background image and a foreground image.
+- Kept landscape photos in the previous full-screen cover mode so 480x320 / 800x480 style images still fill the screen.
+- Added portrait-photo detection. Portrait photos now fit fully and remain centered instead of being enlarged and cropped.
+- For portrait photos, `PhotoService` generates a 480x320 same-photo background frame in PSRAM, using cover scaling, lightweight sampled blur, and darkening.
+- The generated background and the centered foreground cross-fade together, preserving the existing slideshow feel.
+- This does not require extra files on the SD card. Users can keep placing JPG/JPEG files under `/sdcard/photos`; recommended portrait preparation remains `320x480`, JPG quality 80-85, preferably under 500 KB.
+
+Verification:
+
+- Built with `idf.py -B build-qdtech build merge-bin`; app version logged as `1.7.49`.
+- Final `xiaozhi.bin` size: `0x4ad8c0`.
+- Full merged image size: `0x5ad8c0`.
+- Smallest app partition: `0x600000`; free app space `0x152740` (about 22%).
+- Flashed successfully to `COM13`.
+- Runtime logs confirmed:
+  - `App version: 1.7.49`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced: `weather ok 28 C 中山 雷雨 15:30 H94% C100%`
+  - Deferred Phone Web services started after the memory guard check
+  - No reboot, panic, or backtrace during the observed startup window
+
+Release asset SHA256:
+
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-app.bin`: `DAD8E4B31DC4E59291A445AEA6F0B3536C3F4BDB901984C7756EF0EFB567495C`
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-firmware.zip`: `FDC9556E3FB60F2E3CC52B7A45F5DC4FA1C46035CB94D5E083B0C30586EFCD9D`
+- `qdtech-s3-touch-lcd-3.5-v1.7.49-full.bin`: `1012D6463DB5DDF1B09526B6B46FDBE06AC255933732F61E5872CED304608049`
+
 ## 2026-06-26: v1.7.48 System Smoothness For Podcast And FC
 
 Scope:
