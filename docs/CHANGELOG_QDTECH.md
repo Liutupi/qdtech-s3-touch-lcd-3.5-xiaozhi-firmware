@@ -2,6 +2,44 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-27: Cat Theme XiaoZhi Animated Face Pack
+
+Scope:
+
+- Replaced the Cat theme XiaoZhi vector face with an animated kitten GIF pack derived from the supplied orange-and-white kitten expression grid.
+- Bumped firmware version to `1.7.52` so boards on `v1.7.51` can receive the Cat XiaoZhi face update through OTA.
+- Added nine state resources: standby, listening, speaking, thinking, happy, surprised, sad, angry, and sleepy.
+- Sized the Cat XiaoZhi character at `300x238` so it fills the 480x320 XiaoZhi page instead of leaving the screen visually empty.
+- Each GIF keeps the original reference proportions, fur color, eye style, cheeks, ears, and soft illustrated finish instead of using the simplified vector redraw.
+- Added 8-frame breathing loops, listening pulse accents, and speaking animation that switches between complete original-style closed-mouth/open-mouth frames so highlights and mouths do not overlap.
+- Removed extra eye highlight/pupil overlays after frame inspection showed they overlapped the reference eyes.
+- Removed the Cat XiaoZhi long message subtitle so mixed Chinese/runtime text cannot render as garbled glyphs in the compact status area.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build merge-bin`.
+- Build passed; `xiaozhi.bin` size was `0x579c40`, smallest app partition `0x600000`, free app space `0x863c0` (about 9%).
+- Full merged image size was `0x679c40`.
+- Flashed successfully to `COM13` at 921600 baud.
+- Short serial verification confirmed:
+  - `App version: 1.7.52`
+  - `Ota: Current version: 1.7.52`
+  - `Desktop UI created`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced: `weather ok 30 C Zhongshan thunderstorm 14:45 H83% C100%`
+  - No panic, abort, or backtrace appeared in the captured startup window
+
+Release assets:
+
+- `releases/v1.7.52/qdtech-s3-touch-lcd-3.5-v1.7.52-app.bin`: `1A0FBA14020E9927AC7331453E0B26D0B94CBFA9F43D17AC7DC5068E0FC2A125`
+- `releases/v1.7.52/qdtech-s3-touch-lcd-3.5-v1.7.52-firmware.zip`: `90403EDFC28A4DFD7C5C046CA3C2E0B897FE193387F224102FE4599CC6397A48`
+- `releases/v1.7.52/qdtech-s3-touch-lcd-3.5-v1.7.52-full.bin`: `963CEE028AE949B70D1CB255CB0D35E24D1AD8EB162BAD49ED47CCCA774A179E`
+
+Follow-up:
+
+- Do a physical screen taste pass on the 480x320 LCD and tune speaking frame cadence or expression crop placement from hardware feedback if needed.
+
 ## 2026-06-26: v1.7.51 Theme-specific XiaoZhi Face Animation Bounds
 
 Scope:

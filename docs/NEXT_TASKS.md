@@ -2,21 +2,24 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.50 Audio Quality Follow-Up
+## Current Active Task: v1.7.52 Cat XiaoZhi Face Follow-Up
 
 Current state:
 
-- Firmware base is merged through `v1.7.50`.
-- 2026-06-26 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
-- Latest release build result: `xiaozhi.bin` `0x4ad9c0`, smallest app partition `0x600000`, free `0x152640` (about 22%).
-- Latest full merged image size: `0x5ad9c0`.
-- Release assets are in `releases/v1.7.50/`: app bin, full merged bin, and firmware zip.
-- `v1.7.50` updates Radio and Podcast audio output:
-  - Radio now has lightweight automatic gain control and soft limiting.
-  - Radio resets its gain when opening a new stream URL.
-  - Radio and Podcast no longer multiply mono samples by 2 before output, reducing clipping/harshness.
-  - MP3 decode and resampling are intentionally unchanged to avoid increasing memory or CPU pressure.
-- Latest `v1.7.50` boot verification logged `App version: 1.7.50`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 28 C 中山 毛毛雨 17:30 H95% C100%`.
+- Firmware base is merged through `v1.7.52`.
+- 2026-06-27 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
+- Latest release build result: `xiaozhi.bin` `0x579c40`, smallest app partition `0x600000`, free `0x863c0` (about 9%).
+- Latest full merged image size: `0x679c40`.
+- Release assets are in `releases/v1.7.52/`: app bin, full merged bin, and firmware zip.
+- `v1.7.52` updates Cat theme XiaoZhi:
+  - Replaces the vector Cat XiaoZhi face with GIF resources derived from the supplied orange-and-white kitten expression grid.
+  - Adds standby, listening, speaking, thinking, happy, surprised, sad, angry, and sleepy state resources.
+  - Speaking switches between complete original-style closed-mouth/open-mouth frames so the mouth does not overlap or appear twice.
+  - Extra eye highlight/pupil overlays were removed after frame inspection showed they overlapped the reference eyes.
+  - Cat XiaoZhi no longer shows the long runtime subtitle in the compact status pill, avoiding garbled Chinese/mixed text.
+- Latest `v1.7.52` boot verification logged `App version: 1.7.52`, `Ota: Current version: 1.7.52`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 30 C Zhongshan thunderstorm 14:45 H83% C100%`.
+- Next visual pass should be on the physical LCD only: if needed, tune speaking frame cadence or crop placement without reintroducing separate eye/mouth overlays.
+
 - `v1.7.49` updates Photos portrait handling:
   - landscape photos still use full-screen cover mode.
   - portrait photos fit fully and center on the 480x320 display.

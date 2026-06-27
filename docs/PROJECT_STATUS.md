@@ -2,7 +2,7 @@
 
 ## Snapshot
 
-Date: 2026-06-26
+Date: 2026-06-27
 
 This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape XiaoZhi firmware. It should be treated as a working firmware base, not an experimental scratch tree.
 
@@ -42,6 +42,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.49 (2026-06-26): Photos portrait display polish: landscape photos still fill the screen, while portrait photos show fully centered with a generated dark blurred background from the same image
 - v1.7.50 (2026-06-26): Radio and Podcast audio quality polish: radio automatic gain/soft limiting, per-stream gain reset, and removal of mono sample over-boosting to reduce clipping
 - v1.7.51 (2026-06-26): Theme-specific XiaoZhi face animation metrics so Cat, Classic, and Tupi Warm keep their intended eye/mouth bounds during idle, listening, speaking, and blink animation
+- v1.7.52 (2026-06-27): Cat theme XiaoZhi animated kitten face pack derived from the supplied reference expression grid, with no overlapping eye highlights or duplicate speaking mouths
 
 ## Confirmed Hardware From Source
 

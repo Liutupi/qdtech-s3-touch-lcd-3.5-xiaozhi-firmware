@@ -41,6 +41,15 @@ LV_IMAGE_DECLARE(qd_weather_fog_scene);
 LV_IMAGE_DECLARE(qd_weather_storm_scene);
 LV_IMAGE_DECLARE(qd_brand_earth);
 LV_IMAGE_DECLARE(qd_podcast_avatar);
+LV_IMAGE_DECLARE(qd_cat_standby);
+LV_IMAGE_DECLARE(qd_cat_listening);
+LV_IMAGE_DECLARE(qd_cat_speaking);
+LV_IMAGE_DECLARE(qd_cat_thinking);
+LV_IMAGE_DECLARE(qd_cat_happy);
+LV_IMAGE_DECLARE(qd_cat_surprised);
+LV_IMAGE_DECLARE(qd_cat_sad);
+LV_IMAGE_DECLARE(qd_cat_angry);
+LV_IMAGE_DECLARE(qd_cat_sleepy);
 
 static const lv_font_t* qd_cn_font_16() {
     return &font_puhui_16_4;
@@ -193,6 +202,9 @@ static constexpr lv_color_t RADIO_BAR_COLORS[16] = {
     LV_COLOR_MAKE(0xf0, 0x7c, 0xbe), LV_COLOR_MAKE(0xff, 0x88, 0x9a),
 };
 
+static lv_color_t cat_fur_shadow() { return LV_COLOR_MAKE(0xeb, 0x90, 0x42); }
+static lv_color_t cat_nose_color() { return LV_COLOR_MAKE(0xff, 0x70, 0x76); }
+
 // Styles
 static lv_style_t style_screen;
 static lv_style_t style_en;
@@ -282,23 +294,23 @@ struct FaceMetrics {
 static FaceMetrics face_metrics() {
     if (is_cat_theme()) {
         return {
-            38, -46,
-            34, 40,
-            37, 3,
-            42,
+            42, -46,
+            42, 48,
+            43, 4,
+            50,
             8,
-            20,
-            12, 14,
-            4,
-            3, 2,
-            -5, -8,
-            6,
-            38, -72, -74, -76, -68,
-            6,
-            36, 8,
-            42, 10,
-            44, 6,
-            {10, 16, 13, 18, 11, 15},
+            22,
+            15, 18,
+            5,
+            4, 3,
+            -6, -10,
+            7,
+            42, -72, -75, -78, -66,
+            8,
+            28, 7,
+            40, 10,
+            44, 8,
+            {10, 17, 13, 19, 12, 16},
         };
     }
 
@@ -3242,33 +3254,36 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     const FaceMetrics metrics = face_metrics();
 
     if (is_cat_theme()) {
-        lv_obj_t* head = circle(parent, 154, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_border_color(head, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(head, 2, 0);
-        lv_obj_align(head, LV_ALIGN_CENTER, 0, -24);
+        lv_obj_set_style_bg_color(parent, COLOR_SURFACE, 0);
+        lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-        lv_obj_t* ear_l = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_radius(ear_l, 8, 0);
-        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(ear_l, 2, 0);
-        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
-        lv_obj_align(ear_l, LV_ALIGN_CENTER, -48, -110);
+        cat_face_gif_ = lv_gif_create(parent);
+        cat_face_src_ = &qd_cat_standby;
+        lv_gif_set_src(cat_face_gif_, cat_face_src_);
+        lv_obj_set_size(cat_face_gif_, 300, 238);
+        lv_obj_set_style_bg_color(cat_face_gif_, COLOR_SURFACE, 0);
+        lv_obj_set_style_bg_opa(cat_face_gif_, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(cat_face_gif_, 0, 0);
+        lv_obj_align(cat_face_gif_, LV_ALIGN_CENTER, 0, -18);
+        add_gesture_bubble(cat_face_gif_);
 
-        lv_obj_t* ear_r = bar(parent, 58, 58, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_radius(ear_r, 8, 0);
-        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(ear_r, 2, 0);
-        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
-        lv_obj_align(ear_r, LV_ALIGN_CENTER, 48, -110);
+        lv_obj_t* status_pill = lv_obj_create(parent);
+        lv_obj_remove_style_all(status_pill);
+        lv_obj_set_size(status_pill, 392, 42);
+        lv_obj_set_style_radius(status_pill, 21, 0);
+        lv_obj_set_style_bg_color(status_pill, COLOR_SURFACE_2, 0);
+        lv_obj_set_style_bg_opa(status_pill, LV_OPA_90, 0);
+        lv_obj_set_style_border_color(status_pill, COLOR_LINE, 0);
+        lv_obj_set_style_border_width(status_pill, 1, 0);
+        lv_obj_align(status_pill, LV_ALIGN_BOTTOM_MID, 0, -14);
+        add_gesture_bubble(status_pill);
 
-        for (int i = 0; i < 3; ++i) {
-            lv_obj_t* whisker_l = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
-            lv_obj_set_style_transform_rotation(whisker_l, (i - 1) * 80, 0);
-            lv_obj_align(whisker_l, LV_ALIGN_CENTER, -102, -18 + i * 18);
-            lv_obj_t* whisker_r = bar(parent, 58, 2, COLOR_PURPLE, LV_OPA_70);
-            lv_obj_set_style_transform_rotation(whisker_r, (1 - i) * 80, 0);
-            lv_obj_align(whisker_r, LV_ALIGN_CENTER, 102, -18 + i * 18);
-        }
+        xiaozhi_state_label_ = label_en(status_pill, "Standby", &style_gold);
+        lv_obj_set_style_text_font(xiaozhi_state_label_, &lv_font_montserrat_14, 0);
+        lv_obj_center(xiaozhi_state_label_);
+
+        xiaozhi_message_label_ = nullptr;
+        return;
     }
     // 全屏黑色背景，直接在parent上创建元素
 
@@ -3277,7 +3292,7 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_size(eye_left_, metrics.eye_w, metrics.eye_h);
     lv_obj_align(eye_left_, LV_ALIGN_CENTER, -metrics.eye_x, metrics.eye_y);
     lv_obj_set_style_radius(eye_left_, metrics.eye_radius, 0);
-    lv_obj_set_style_bg_color(eye_left_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
+    lv_obj_set_style_bg_color(eye_left_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_left_, 0, 0);
     add_gesture_bubble(eye_left_);
@@ -3305,7 +3320,7 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_size(eye_right_, metrics.eye_w, metrics.eye_h);
     lv_obj_align(eye_right_, LV_ALIGN_CENTER, metrics.eye_x, metrics.eye_y);
     lv_obj_set_style_radius(eye_right_, metrics.eye_radius, 0);
-    lv_obj_set_style_bg_color(eye_right_, is_cat_theme() ? COLOR_TEXT : COLOR_CREAM, 0);
+    lv_obj_set_style_bg_color(eye_right_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eye_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eye_right_, 0, 0);
     add_gesture_bubble(eye_right_);
@@ -3336,9 +3351,6 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_left_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_left_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_left_, 0, 0);
-    if (is_cat_theme()) {
-        lv_obj_add_flag(eyebrow_left_, LV_OBJ_FLAG_HIDDEN);
-    }
     add_gesture_bubble(eyebrow_left_);
 
     // 右眉毛
@@ -3349,9 +3361,6 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(eyebrow_right_, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(eyebrow_right_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(eyebrow_right_, 0, 0);
-    if (is_cat_theme()) {
-        lv_obj_add_flag(eyebrow_right_, LV_OBJ_FLAG_HIDDEN);
-    }
     add_gesture_bubble(eyebrow_right_);
 
     // 嘴巴
@@ -3359,10 +3368,11 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     lv_obj_set_size(mouth_, metrics.mouth_idle_w, metrics.mouth_idle_h);
     lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, metrics.mouth_y);
     lv_obj_set_style_radius(mouth_, metrics.mouth_idle_h / 2, 0);
-    lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
+    lv_obj_set_style_bg_color(mouth_, COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(mouth_, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mouth_, 0, 0);
     add_gesture_bubble(mouth_);
+
 }
 
 // ===== Helper functions =====
@@ -3607,13 +3617,79 @@ void DesktopUI::SetFacePart(lv_obj_t* obj, int x, int y, int w, int h, int radiu
     lv_obj_set_pos(obj, x, y);
 }
 
+static const lv_image_dsc_t* cat_face_for_state(DeviceState state, const std::string& emotion) {
+    if (state == kDeviceStateSpeaking) {
+        return &qd_cat_speaking;
+    }
+    if (state == kDeviceStateListening || state == kDeviceStateConnecting) {
+        return &qd_cat_listening;
+    }
+    if (emotion == "happy" || emotion == "laughing" || emotion == "funny" ||
+        emotion == "loving" || emotion == "delicious" || emotion == "kissy") {
+        return &qd_cat_happy;
+    }
+    if (emotion == "sad" || emotion == "crying") {
+        return &qd_cat_sad;
+    }
+    if (emotion == "angry") {
+        return &qd_cat_angry;
+    }
+    if (emotion == "surprised" || emotion == "shocked") {
+        return &qd_cat_surprised;
+    }
+    if (emotion == "thinking" || emotion == "confused") {
+        return &qd_cat_thinking;
+    }
+    if (emotion == "sleepy" || emotion == "relaxed") {
+        return &qd_cat_sleepy;
+    }
+    return &qd_cat_standby;
+}
+
+static const char* cat_state_text(DeviceState state) {
+    switch (state) {
+        case kDeviceStateConnecting:
+            return "Connecting";
+        case kDeviceStateListening:
+            return "Listening";
+        case kDeviceStateSpeaking:
+            return "Speaking";
+        default:
+            return "Standby";
+    }
+}
+
 void DesktopUI::UpdateFaceAnimation() {
+    if (is_cat_theme()) {
+        if (!cat_face_gif_) {
+            return;
+        }
+        const DeviceState state = Application::GetInstance().GetDeviceState();
+        const lv_image_dsc_t* next_src = cat_face_for_state(state, emotion_);
+        if (next_src != cat_face_src_) {
+            cat_face_src_ = next_src;
+            lv_gif_set_src(cat_face_gif_, cat_face_src_);
+            lv_gif_restart(cat_face_gif_);
+        }
+        return;
+    }
+
     if (!eye_left_ || !eye_right_ || !mouth_) return;
 
     const FaceMetrics metrics = face_metrics();
     const DeviceState state = Application::GetInstance().GetDeviceState();
     const bool speaking = state == kDeviceStateSpeaking;
     const bool listening = state == kDeviceStateListening || state == kDeviceStateConnecting;
+    const bool cat = is_cat_theme();
+    const bool happy = emotion_ == "happy" || emotion_ == "laughing" ||
+                       emotion_ == "funny" || emotion_ == "loving" ||
+                       emotion_ == "delicious" || emotion_ == "kissy";
+    const bool sad = emotion_ == "sad" || emotion_ == "crying";
+    const bool angry = emotion_ == "angry";
+    const bool surprised = emotion_ == "surprised" || emotion_ == "shocked";
+    const bool thinking = emotion_ == "thinking" || emotion_ == "confused";
+    const bool sleepy = emotion_ == "sleepy" || emotion_ == "relaxed";
+    const bool winking = emotion_ == "winking";
 
     // ===== 眨眼动画 =====
     int eye_h = metrics.eye_h;
@@ -3621,6 +3697,14 @@ void DesktopUI::UpdateFaceAnimation() {
         eye_h = metrics.eye_h_speaking_base + (int)(metrics.eye_h_speaking_amp * sin(anim_tick_ * 0.2));
     } else if (listening) {
         eye_h = metrics.eye_h_listening;
+    } else if (cat && (happy || sleepy || winking)) {
+        eye_h = metrics.eye_h_blink;
+    } else if (cat && sad) {
+        eye_h = metrics.eye_h - 8;
+    } else if (cat && angry) {
+        eye_h = metrics.eye_h - 10;
+    } else if (cat && surprised) {
+        eye_h = metrics.eye_h + 4;
     } else {
         const int blink_phase = anim_tick_ % 60;
         if (blink_phase >= 55) {
@@ -3644,6 +3728,7 @@ void DesktopUI::UpdateFaceAnimation() {
     }
     pupil_offset_x_ += (pupil_target_x_ - pupil_offset_x_) * 0.08f;
     pupil_offset_y_ += (pupil_target_y_ - pupil_offset_y_) * 0.08f;
+    const int emotion_pupil_y = cat && sad ? 4 : (cat && surprised ? -2 : 0);
 
     const bool eyes_closed = eye_h <= metrics.eye_h_blink + 2;
     if (pupil_left_) {
@@ -3653,7 +3738,8 @@ void DesktopUI::UpdateFaceAnimation() {
             lv_obj_add_flag(pupil_left_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_clear_flag(pupil_left_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_align(pupil_left_, LV_ALIGN_CENTER, (int)pupil_offset_x_, metrics.pupil_y + (int)pupil_offset_y_);
+            lv_obj_align(pupil_left_, LV_ALIGN_CENTER, (int)pupil_offset_x_,
+                         metrics.pupil_y + (int)pupil_offset_y_ + emotion_pupil_y);
         }
     }
     if (pupil_right_) {
@@ -3663,7 +3749,8 @@ void DesktopUI::UpdateFaceAnimation() {
             lv_obj_add_flag(pupil_right_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_clear_flag(pupil_right_, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_align(pupil_right_, LV_ALIGN_CENTER, (int)pupil_offset_x_, metrics.pupil_y + (int)pupil_offset_y_);
+            lv_obj_align(pupil_right_, LV_ALIGN_CENTER, (int)pupil_offset_x_,
+                         metrics.pupil_y + (int)pupil_offset_y_ + emotion_pupil_y);
         }
     }
     if (highlight_left_) {
@@ -3673,7 +3760,7 @@ void DesktopUI::UpdateFaceAnimation() {
             lv_obj_clear_flag(highlight_left_, LV_OBJ_FLAG_HIDDEN);
             lv_obj_align(highlight_left_, LV_ALIGN_CENTER,
                          metrics.highlight_x + (int)pupil_offset_x_,
-                         metrics.highlight_y + (int)pupil_offset_y_);
+                         metrics.highlight_y + (int)pupil_offset_y_ + emotion_pupil_y);
         }
     }
     if (highlight_right_) {
@@ -3683,7 +3770,7 @@ void DesktopUI::UpdateFaceAnimation() {
             lv_obj_clear_flag(highlight_right_, LV_OBJ_FLAG_HIDDEN);
             lv_obj_align(highlight_right_, LV_ALIGN_CENTER,
                          metrics.highlight_x + (int)pupil_offset_x_,
-                         metrics.highlight_y + (int)pupil_offset_y_);
+                         metrics.highlight_y + (int)pupil_offset_y_ + emotion_pupil_y);
         }
     }
 
@@ -3693,15 +3780,58 @@ void DesktopUI::UpdateFaceAnimation() {
         eyebrow_y = metrics.eyebrow_speaking_y + (int)(3 * sin(anim_tick_ * 0.15));
     } else if (listening) {
         eyebrow_y = metrics.eyebrow_listening_y;
-    } else if (emotion_ == "sad") {
+    } else if (sad) {
         eyebrow_y = metrics.eyebrow_sad_y;
+    } else if (cat && angry) {
+        eyebrow_y = metrics.eyebrow_y + 10;
+    } else if (cat && surprised) {
+        eyebrow_y = metrics.eyebrow_y - 7;
     }
 
     if (eyebrow_left_) {
+        if (cat) {
+            lv_obj_set_size(eyebrow_left_, 30, 5);
+            lv_obj_set_style_radius(eyebrow_left_, 3, 0);
+            lv_obj_set_style_transform_rotation(eyebrow_left_, angry ? -140 : (sad ? 120 : 0), 0);
+        }
         lv_obj_align(eyebrow_left_, LV_ALIGN_CENTER, -metrics.eyebrow_x, eyebrow_y);
     }
     if (eyebrow_right_) {
+        if (cat) {
+            lv_obj_set_size(eyebrow_right_, 30, 5);
+            lv_obj_set_style_radius(eyebrow_right_, 3, 0);
+            lv_obj_set_style_transform_rotation(eyebrow_right_, angry ? 140 : (sad ? -120 : 0), 0);
+        }
         lv_obj_align(eyebrow_right_, LV_ALIGN_CENTER, metrics.eyebrow_x, eyebrow_y);
+    }
+
+    if (blush_left_ && blush_right_) {
+        const lv_opa_t blush_opa = (cat && (happy || speaking || listening)) ? LV_OPA_60 :
+                                   (cat && sad) ? LV_OPA_30 : LV_OPA_40;
+        lv_obj_set_style_bg_opa(blush_left_, blush_opa, 0);
+        lv_obj_set_style_bg_opa(blush_right_, blush_opa, 0);
+        lv_obj_align(blush_left_, LV_ALIGN_CENTER, -62, cat && sad ? 6 : 0);
+        lv_obj_align(blush_right_, LV_ALIGN_CENTER, 62, cat && sad ? 6 : 0);
+    }
+
+    if (cat_status_mark_1_) {
+        const bool show = cat && (thinking || listening || sad);
+        lv_label_set_text(cat_status_mark_1_, thinking ? "?" : (sad ? "." : "("));
+        if (show) lv_obj_clear_flag(cat_status_mark_1_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(cat_status_mark_1_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (cat_status_mark_2_) {
+        const bool show = cat && (surprised || angry);
+        lv_label_set_text(cat_status_mark_2_, angry ? "!!" : "!");
+        lv_obj_set_style_text_color(cat_status_mark_2_, angry ? cat_nose_color() : cat_fur_shadow(), 0);
+        if (show) lv_obj_clear_flag(cat_status_mark_2_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(cat_status_mark_2_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (cat_status_mark_3_) {
+        const bool show = cat && sleepy;
+        lv_label_set_text(cat_status_mark_3_, (anim_tick_ / 18) % 2 ? "z" : "Z");
+        if (show) lv_obj_clear_flag(cat_status_mark_3_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(cat_status_mark_3_, LV_OBJ_FLAG_HIDDEN);
     }
 
     // ===== 嘴巴动画 =====
@@ -3710,20 +3840,38 @@ void DesktopUI::UpdateFaceAnimation() {
         const int mouth_h = metrics.mouth_speaking_h[phase];
         lv_obj_set_height(mouth_, mouth_h);
         lv_obj_set_width(mouth_, metrics.mouth_speaking_w + (int)(metrics.mouth_speaking_w_amp * sin(anim_tick_ * 0.3)));
-        lv_obj_set_style_bg_color(mouth_, COLOR_GREEN, 0);
+        lv_obj_set_style_bg_color(mouth_, cat ? cat_nose_color() : COLOR_GREEN, 0);
         lv_obj_set_style_radius(mouth_, mouth_h / 2, 0);
     } else if (listening) {
         lv_obj_set_height(mouth_, metrics.mouth_listening_h);
         lv_obj_set_width(mouth_, metrics.mouth_listening_w);
-        lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
+        lv_obj_set_style_bg_color(mouth_, cat ? cat_nose_color() : COLOR_GOLD, 0);
         lv_obj_set_style_radius(mouth_, metrics.mouth_listening_h / 2, 0);
+    } else if (cat && surprised) {
+        lv_obj_set_height(mouth_, 22);
+        lv_obj_set_width(mouth_, 22);
+        lv_obj_set_style_bg_color(mouth_, cat_nose_color(), 0);
+        lv_obj_set_style_radius(mouth_, 11, 0);
+    } else if (cat && happy) {
+        lv_obj_set_height(mouth_, 14);
+        lv_obj_set_width(mouth_, 38);
+        lv_obj_set_style_bg_color(mouth_, cat_nose_color(), 0);
+        lv_obj_set_style_radius(mouth_, 7, 0);
+    } else if (cat && (sad || angry || thinking || sleepy)) {
+        lv_obj_set_height(mouth_, sad ? 5 : 6);
+        lv_obj_set_width(mouth_, sad ? 24 : (angry ? 30 : 20));
+        lv_obj_set_style_bg_color(mouth_, cat_nose_color(), 0);
+        lv_obj_set_style_radius(mouth_, 3, 0);
     } else {
         lv_obj_set_height(mouth_, metrics.mouth_idle_h);
         lv_obj_set_width(mouth_, metrics.mouth_idle_w);
-        lv_obj_set_style_bg_color(mouth_, is_cat_theme() ? COLOR_PURPLE : COLOR_GOLD, 0);
+        lv_obj_set_style_bg_color(mouth_, cat ? cat_nose_color() : COLOR_GOLD, 0);
         lv_obj_set_style_radius(mouth_, metrics.mouth_idle_h / 2, 0);
     }
     lv_obj_align(mouth_, LV_ALIGN_CENTER, 0, metrics.mouth_y);
+    if (cat_nose_) {
+        lv_obj_align(cat_nose_, LV_ALIGN_CENTER, 0, cat && sad ? 10 : 7);
+    }
 }
 
 // ===== Public API =====
@@ -4566,10 +4714,14 @@ void DesktopUI::HandlePodcastSeekEvent(lv_event_t* event) {
 
 void DesktopUI::SetXiaozhiState(const char* state, const char* message, const char* emotion) {
     if (xiaozhi_state_label_) {
-        lv_label_set_text(xiaozhi_state_label_, state ? state : "Standby");
+        if (is_cat_theme()) {
+            lv_label_set_text(xiaozhi_state_label_, cat_state_text(Application::GetInstance().GetDeviceState()));
+        } else {
+            lv_label_set_text(xiaozhi_state_label_, state ? state : "Standby");
+        }
     }
     if (xiaozhi_message_label_) {
-        lv_label_set_text(xiaozhi_message_label_, message ? message : "");
+        lv_label_set_text(xiaozhi_message_label_, is_cat_theme() ? "" : (message ? message : ""));
     }
     if (xiaozhi_hint_label_) {
         lv_label_set_text(xiaozhi_hint_label_, state ? state : "");

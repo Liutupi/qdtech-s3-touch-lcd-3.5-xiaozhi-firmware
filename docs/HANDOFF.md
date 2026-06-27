@@ -35,49 +35,55 @@ Important files:
 
 ## Current Verified State
 
-Last verified on 2026-06-26 in the macOS workspace:
+Last verified on 2026-06-27 in the Windows workspace:
 
-- Workspace: `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Last verified update: 2026-06-26 v1.7.51 Theme-specific XiaoZhi face animation bounds
-- Build directory used for board verification: `/tmp/qdtech_flash_src/build-qdtech`
-- Serial port used during the last device flash: `/dev/cu.usbmodem212401`
+- Last verified update: 2026-06-27 v1.7.52 Cat theme XiaoZhi animated reference face pack
+- Build directory used for board verification: `build-qdtech`
+- Serial port used during the last device flash: `COM13`
 
-## Latest Runtime Notes: 2026-06-26 v1.7.51 Theme-specific XiaoZhi Face Animation Bounds
+## Latest Runtime Notes: 2026-06-27 v1.7.52 Cat Theme XiaoZhi Animated Face Pack
 
 Scope:
 
-- Bumped firmware version to `1.7.51` so boards on `v1.7.50` can receive the theme-animation fix through OTA.
-- Fixed the XiaoZhi face animation so each theme keeps its own face metrics during live animation updates.
-- Cat theme now uses compact eye, pupil, highlight, eyebrow, and mouth metrics instead of being overwritten every frame by the larger Classic/Tupi face layout.
-- Blinking now hides pupil and highlight layers while the eyes are closed, then restores them when the eyes reopen. This prevents tiny facial parts from floating outside a narrowed blink.
-- Classic and Tupi Warm keep their previous larger XiaoZhi face proportions.
+- Bumped firmware version to `1.7.52` so boards on `v1.7.51` can receive the Cat XiaoZhi face update through OTA.
+- Replaced the Cat theme XiaoZhi vector face with a GIF pack derived from the supplied orange-and-white kitten expression grid.
+- Added nine Cat XiaoZhi state resources: standby, listening, speaking, thinking, happy, surprised, sad, angry, and sleepy.
+- Kept the original reference proportions, fur color, eye style, cheeks, ears, and soft illustrated finish instead of the simplified vector redraw.
+- Speaking animation now switches between complete original-style closed-mouth and open-mouth frames, so the mouth does not overlap or appear twice.
+- Removed extra eye highlight/pupil overlays after frame inspection showed they overlapped the reference eyes.
+- Removed the Cat XiaoZhi long message subtitle so mixed Chinese/runtime text cannot render as garbled glyphs in the compact status area.
 
 Verification:
 
-- Built with `idf.py -B build-qdtech build merge-bin` from a no-space temporary build path.
-- CMake/app version: `1.7.51`.
-- Final `xiaozhi.bin` size: `0x4e0a80`.
-- Full merged image size: `0x5e0a80`.
+- Built on Windows with `idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build merge-bin`.
+- CMake/app version: `1.7.52`.
+- Final `xiaozhi.bin` size: `0x579c40`.
+- Full merged image size: `0x679c40`.
 - Smallest app partition: `0x600000`.
-- Free app partition space: `0x11f580`, about 19%.
-- Flashed successfully to `/dev/cu.usbmodem212401`.
-- Flash logs confirmed:
-  - Chip: ESP32-S3, 8 MB PSRAM.
-  - App, bootloader, partition table, OTA data, and speech models were written.
-  - Hash verification passed for every written region.
-  - Board hard-reset after flash.
+- Free app partition space: `0x863c0`, about 9%.
+- Flashed successfully to `COM13` at 921600 baud.
+- Flash logs confirmed ESP32-S3 with 8 MB PSRAM, app/bootloader/partition/OTA data/srmodels writes, hash verification for every region, and hard reset after flash.
+- Short serial verification confirmed:
+  - `App version: 1.7.52`
+  - `Ota: Current version: 1.7.52`
+  - `Desktop UI created`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced: `weather ok 30 C Zhongshan thunderstorm 14:45 H83% C100%`
+  - No panic, abort, or backtrace appeared in the captured startup window
 
-Release assets prepared in `releases/v1.7.51/`:
+Release assets prepared in `releases/v1.7.52/`:
 
-- `qdtech-s3-touch-lcd-3.5-v1.7.51-app.bin`, SHA256 `E126BE2C68AEACF0E30D8AD72243BEC86B84A11F06FB3EA6F34F43676FEB578E`.
-- `qdtech-s3-touch-lcd-3.5-v1.7.51-firmware.zip`, SHA256 `9A63F4AC1E342560EA8517C357F2090FE30EA380F2E87E150B8678A43DC74937`.
-- `qdtech-s3-touch-lcd-3.5-v1.7.51-full.bin`, SHA256 `51B4157FBDF7CF7F109ED3B46A3AC93CAB4467E43F8D15BB1A2A4FC8D4C9EDBB`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.52-app.bin`, SHA256 `1A0FBA14020E9927AC7331453E0B26D0B94CBFA9F43D17AC7DC5068E0FC2A125`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.52-firmware.zip`, SHA256 `90403EDFC28A4DFD7C5C046CA3C2E0B897FE193387F224102FE4599CC6397A48`.
+- `qdtech-s3-touch-lcd-3.5-v1.7.52-full.bin`, SHA256 `963CEE028AE949B70D1CB255CB0D35E24D1AD8EB162BAD49ED47CCCA774A179E`.
 
 Known follow-up:
 
-- On the physical LCD, switch through Classic, Cat, and Tupi Warm while XiaoZhi is idle/listening/speaking. Confirm Cat eyes stay inside the face frame during blinking and speaking.
+- Do a physical LCD taste pass in Cat theme XiaoZhi speaking/listening states and tune speaking frame cadence or expression crop placement from hardware feedback if needed.
 
 ## Latest Runtime Notes: 2026-06-26 v1.7.50 Radio And Podcast Audio Quality Polish
 
