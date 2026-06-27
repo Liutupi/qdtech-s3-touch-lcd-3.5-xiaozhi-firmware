@@ -2,9 +2,27 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.52 Cat XiaoZhi Face Follow-Up
+## Current Active Task: v1.7.53 Tupi Warm XiaoZhi Face Follow-Up
 
 Current state:
+
+- Firmware base is currently built and flashed locally as `v1.7.53`.
+- 2026-06-27 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
+- Latest local build result: `xiaozhi.bin` `0x59dc00`, smallest app partition `0x600000`, free `0x62400` (about 6%).
+- Latest full merged image size: `0x69dc00`.
+- Release assets are in `releases/v1.7.53/`: app bin, full merged bin, and firmware zip.
+- `v1.7.53` updates Tupi Warm XiaoZhi:
+  - Replaces the old LVGL geometric XiaoZhi face in Tupi Warm with a full-character warm robot GIF pack based on the supplied reference image.
+  - Adds standby, listening, speaking, thinking, happy, surprised, sad, angry, and sleepy state resources.
+  - Connecting, upgrading, and fatal-error paths reuse the closest robot states to avoid pushing the app partition too close to full.
+  - Speaking uses complete robot mouth frames, so the animated mouth cannot drift away from the correct mouth position or overlap with another mouth.
+  - The robot GIF includes breathing/bobbing motion and listening signal accents for a more alive feel.
+  - Tupi Warm now shares the compact no-long-subtitle GIF layout, avoiding garbled runtime message text in the XiaoZhi face area.
+- Latest `v1.7.53` boot verification logged `App version: 1.7.53`, `Ota: Current version: 1.7.53`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, and `weather ok 31 C Zhongshan cloudy 15:30 H78% C66%`.
+- Touch I2C still has intermittent transaction failure/reset logs. Treat that as the existing separate touch timing issue, not as a Tupi Warm face-pack failure.
+- Next visual pass should be on the physical LCD: tune robot vertical placement, speaking cadence, and warm-background blending only from screen feedback.
+
+Previous verified release:
 
 - Firmware base is merged through `v1.7.52`.
 - 2026-06-27 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.

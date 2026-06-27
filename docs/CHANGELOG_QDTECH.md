@@ -2,6 +2,43 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-27: Tupi Warm XiaoZhi Animated Robot Face Pack
+
+Scope:
+
+- Bumped firmware version to `1.7.53` so the Tupi Warm XiaoZhi face update can be distinguished from the `v1.7.52` Cat release.
+- Added a compact Tupi Warm robot GIF pack derived from the supplied warm robot reference: standby, listening, speaking, thinking, happy, surprised, sad, angry, and sleepy.
+- Reused the closest robot states for connecting, upgrading, and fatal-error paths to keep the app partition from becoming dangerously full.
+- Reused the proven full-character GIF path from the Cat theme instead of layering LVGL eyes, pupils, highlights, and mouths on top of a static face.
+- Kept the robot at `300x238` so the XiaoZhi page remains visually full on the 480x320 display.
+- Speaking uses complete mouth-frame swaps inside the robot face, avoiding duplicate mouths or misplaced mouth overlays.
+- Listening animates with ear/signal accents; idle and emotion states keep subtle breathing/bobbing for a more alive feel.
+- Tupi Warm now hides the long XiaoZhi runtime subtitle in the GIF face layout, matching the Cat fix that avoided garbled mixed text in the compact status area.
+
+Verification:
+
+- Generated a local contact-sheet preview and visually checked size, face placement, mouth placement, and warm-background blending.
+- Built on Windows with `idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" reconfigure build merge-bin`.
+- Build passed; CMake/app version was `1.7.53`.
+- Final `xiaozhi.bin` size was `0x59dc00`, smallest app partition `0x600000`, free app space `0x62400` (about 6%).
+- Full merged image size was `0x69dc00`.
+- Flashed successfully to `COM13` at 921600 baud.
+- Short serial verification confirmed:
+  - `App version: 1.7.53`
+  - `Ota: Current version: 1.7.53`
+  - `Desktop UI created`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected and app reached `STATE: idle`
+  - Weather synced: `weather ok 31 C 中山 多云 15:30 H78% C66%`
+  - No panic, abort, or backtrace appeared in the captured startup window
+- Touch I2C still logged intermittent transaction failures and a reset after repeated failures; this matches the existing separate touch-driver/timing issue and did not stop boot, WiFi, MQTT, or weather.
+
+Release assets:
+
+- `releases/v1.7.53/qdtech-s3-touch-lcd-3.5-v1.7.53-app.bin`: `30931C7F906438ACED6C6DA58DB31156FF265E78556F7D0476A744709C2EA9FB`
+- `releases/v1.7.53/qdtech-s3-touch-lcd-3.5-v1.7.53-firmware.zip`: `D47F596A57424F06B459FBA8E9FFB4603C45E712583195DADF2E5995C7604966`
+- `releases/v1.7.53/qdtech-s3-touch-lcd-3.5-v1.7.53-full.bin`: `4DB3D8C93B6C1FA98CBB11956A2F7010B66AD0ACE9C8639E680121036A7AB4CD`
+
 ## 2026-06-27: Cat Theme XiaoZhi Animated Face Pack
 
 Scope:

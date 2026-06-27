@@ -285,8 +285,8 @@ private:
     lv_obj_t* mouth_ = nullptr;
     lv_obj_t* blush_left_ = nullptr;
     lv_obj_t* blush_right_ = nullptr;
-    lv_obj_t* cat_face_gif_ = nullptr;
-    const lv_image_dsc_t* cat_face_src_ = nullptr;
+    lv_obj_t* themed_face_gif_ = nullptr;
+    const lv_image_dsc_t* themed_face_src_ = nullptr;
     lv_obj_t* cat_nose_ = nullptr;
     lv_obj_t* cat_status_mark_1_ = nullptr;
     lv_obj_t* cat_status_mark_2_ = nullptr;

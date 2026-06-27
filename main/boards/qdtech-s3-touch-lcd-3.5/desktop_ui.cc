@@ -50,6 +50,15 @@ LV_IMAGE_DECLARE(qd_cat_surprised);
 LV_IMAGE_DECLARE(qd_cat_sad);
 LV_IMAGE_DECLARE(qd_cat_angry);
 LV_IMAGE_DECLARE(qd_cat_sleepy);
+LV_IMAGE_DECLARE(qd_tupi_bot_standby);
+LV_IMAGE_DECLARE(qd_tupi_bot_listening);
+LV_IMAGE_DECLARE(qd_tupi_bot_speaking);
+LV_IMAGE_DECLARE(qd_tupi_bot_thinking);
+LV_IMAGE_DECLARE(qd_tupi_bot_happy);
+LV_IMAGE_DECLARE(qd_tupi_bot_surprised);
+LV_IMAGE_DECLARE(qd_tupi_bot_sad);
+LV_IMAGE_DECLARE(qd_tupi_bot_angry);
+LV_IMAGE_DECLARE(qd_tupi_bot_sleepy);
 
 static const lv_font_t* qd_cn_font_16() {
     return &font_puhui_16_4;
@@ -143,6 +152,10 @@ static bool is_cat_theme() {
 
 static bool is_tupi_warm_theme() {
     return current_theme == UiTheme::TUPI_WARM;
+}
+
+static bool is_themed_face_gif_theme() {
+    return is_cat_theme() || is_tupi_warm_theme();
 }
 
 static void load_theme() {
@@ -3253,19 +3266,19 @@ void DesktopUI::UpdateWifiList() {
 void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
     const FaceMetrics metrics = face_metrics();
 
-    if (is_cat_theme()) {
+    if (is_themed_face_gif_theme()) {
         lv_obj_set_style_bg_color(parent, COLOR_SURFACE, 0);
         lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-        cat_face_gif_ = lv_gif_create(parent);
-        cat_face_src_ = &qd_cat_standby;
-        lv_gif_set_src(cat_face_gif_, cat_face_src_);
-        lv_obj_set_size(cat_face_gif_, 300, 238);
-        lv_obj_set_style_bg_color(cat_face_gif_, COLOR_SURFACE, 0);
-        lv_obj_set_style_bg_opa(cat_face_gif_, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(cat_face_gif_, 0, 0);
-        lv_obj_align(cat_face_gif_, LV_ALIGN_CENTER, 0, -18);
-        add_gesture_bubble(cat_face_gif_);
+        themed_face_gif_ = lv_gif_create(parent);
+        themed_face_src_ = is_tupi_warm_theme() ? &qd_tupi_bot_standby : &qd_cat_standby;
+        lv_gif_set_src(themed_face_gif_, themed_face_src_);
+        lv_obj_set_size(themed_face_gif_, 300, 238);
+        lv_obj_set_style_bg_color(themed_face_gif_, COLOR_SURFACE, 0);
+        lv_obj_set_style_bg_opa(themed_face_gif_, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(themed_face_gif_, 0, 0);
+        lv_obj_align(themed_face_gif_, LV_ALIGN_CENTER, 0, -18);
+        add_gesture_bubble(themed_face_gif_);
 
         lv_obj_t* status_pill = lv_obj_create(parent);
         lv_obj_remove_style_all(status_pill);
@@ -3646,30 +3659,82 @@ static const lv_image_dsc_t* cat_face_for_state(DeviceState state, const std::st
     return &qd_cat_standby;
 }
 
-static const char* cat_state_text(DeviceState state) {
+static const lv_image_dsc_t* tupi_bot_face_for_state(DeviceState state, const std::string& emotion) {
+    if (state == kDeviceStateFatalError) {
+        return &qd_tupi_bot_sad;
+    }
+    if (state == kDeviceStateUpgrading) {
+        return &qd_tupi_bot_thinking;
+    }
+    if (state == kDeviceStateSpeaking) {
+        return &qd_tupi_bot_speaking;
+    }
+    if (state == kDeviceStateListening || state == kDeviceStateAudioTesting) {
+        return &qd_tupi_bot_listening;
+    }
+    if (state == kDeviceStateConnecting || state == kDeviceStateStarting ||
+        state == kDeviceStateWifiConfiguring || state == kDeviceStateActivating) {
+        return &qd_tupi_bot_listening;
+    }
+    if (emotion == "happy" || emotion == "laughing" || emotion == "funny" ||
+        emotion == "loving" || emotion == "delicious" || emotion == "kissy") {
+        return &qd_tupi_bot_happy;
+    }
+    if (emotion == "sad" || emotion == "crying") {
+        return &qd_tupi_bot_sad;
+    }
+    if (emotion == "angry") {
+        return &qd_tupi_bot_angry;
+    }
+    if (emotion == "surprised" || emotion == "shocked") {
+        return &qd_tupi_bot_surprised;
+    }
+    if (emotion == "thinking" || emotion == "confused") {
+        return &qd_tupi_bot_thinking;
+    }
+    if (emotion == "sleepy" || emotion == "relaxed") {
+        return &qd_tupi_bot_sleepy;
+    }
+    return &qd_tupi_bot_standby;
+}
+
+static const lv_image_dsc_t* themed_face_for_state(DeviceState state, const std::string& emotion) {
+    return is_tupi_warm_theme() ? tupi_bot_face_for_state(state, emotion)
+                                : cat_face_for_state(state, emotion);
+}
+
+static const char* themed_face_state_text(DeviceState state) {
     switch (state) {
+        case kDeviceStateStarting:
+        case kDeviceStateWifiConfiguring:
+        case kDeviceStateActivating:
         case kDeviceStateConnecting:
             return "Connecting";
         case kDeviceStateListening:
+        case kDeviceStateAudioTesting:
             return "Listening";
         case kDeviceStateSpeaking:
             return "Speaking";
+        case kDeviceStateUpgrading:
+            return "Upgrading";
+        case kDeviceStateFatalError:
+            return "Error";
         default:
             return "Standby";
     }
 }
 
 void DesktopUI::UpdateFaceAnimation() {
-    if (is_cat_theme()) {
-        if (!cat_face_gif_) {
+    if (is_themed_face_gif_theme()) {
+        if (!themed_face_gif_) {
             return;
         }
         const DeviceState state = Application::GetInstance().GetDeviceState();
-        const lv_image_dsc_t* next_src = cat_face_for_state(state, emotion_);
-        if (next_src != cat_face_src_) {
-            cat_face_src_ = next_src;
-            lv_gif_set_src(cat_face_gif_, cat_face_src_);
-            lv_gif_restart(cat_face_gif_);
+        const lv_image_dsc_t* next_src = themed_face_for_state(state, emotion_);
+        if (next_src != themed_face_src_) {
+            themed_face_src_ = next_src;
+            lv_gif_set_src(themed_face_gif_, themed_face_src_);
+            lv_gif_restart(themed_face_gif_);
         }
         return;
     }
@@ -4714,14 +4779,16 @@ void DesktopUI::HandlePodcastSeekEvent(lv_event_t* event) {
 
 void DesktopUI::SetXiaozhiState(const char* state, const char* message, const char* emotion) {
     if (xiaozhi_state_label_) {
-        if (is_cat_theme()) {
-            lv_label_set_text(xiaozhi_state_label_, cat_state_text(Application::GetInstance().GetDeviceState()));
+        if (is_themed_face_gif_theme()) {
+            lv_label_set_text(xiaozhi_state_label_,
+                              themed_face_state_text(Application::GetInstance().GetDeviceState()));
         } else {
             lv_label_set_text(xiaozhi_state_label_, state ? state : "Standby");
         }
     }
     if (xiaozhi_message_label_) {
-        lv_label_set_text(xiaozhi_message_label_, is_cat_theme() ? "" : (message ? message : ""));
+        lv_label_set_text(xiaozhi_message_label_,
+                          is_themed_face_gif_theme() ? "" : (message ? message : ""));
     }
     if (xiaozhi_hint_label_) {
         lv_label_set_text(xiaozhi_hint_label_, state ? state : "");
