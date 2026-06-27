@@ -44,6 +44,7 @@ This fork currently builds and runs as the QDTech ESP32-S3 3.5 inch landscape Xi
 - v1.7.51 (2026-06-26): Theme-specific XiaoZhi face animation metrics so Cat, Classic, and Tupi Warm keep their intended eye/mouth bounds during idle, listening, speaking, and blink animation
 - v1.7.52 (2026-06-27): Cat theme XiaoZhi animated kitten face pack derived from the supplied reference expression grid, with no overlapping eye highlights or duplicate speaking mouths
 - v1.7.53 (2026-06-27): Tupi Warm XiaoZhi animated warm robot face pack derived from the supplied reference image, with full-character GIF motion and complete speaking mouth frames
+- v1.7.54 (2026-06-27): Podcast cover memory recovery by lazily creating Cat/Tupi Warm XiaoZhi GIF objects only while the XiaoZhi page is visible, plus a Cat daily-card kitten mark matching the animated Cat face pack
 
 ## Confirmed Hardware From Source
 

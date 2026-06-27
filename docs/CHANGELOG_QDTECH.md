@@ -2,6 +2,33 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-27: v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
+
+Scope:
+
+- Bumped firmware version to `1.7.54` for the podcast-cover recovery build.
+- Root cause: after adding Cat and Tupi Warm full-character GIF faces, the hidden XiaoZhi page could still keep a themed GIF object and decoded GIF cache alive even while the user was on Media/Podcast.
+- The board was already running with very low internal SRAM after WiFi/MQTT/Phone Web startup, so entering Podcast left too little margin for JPEG cover decode work.
+- Changed Cat/Tupi Warm XiaoZhi GIF lifecycle to create the GIF only when the XiaoZhi page is shown, and delete it when leaving the XiaoZhi page.
+- Added Podcast cover decode diagnostics so future failures log whether the cover path, JPG input size, PSRAM allocation, scaled output size, or JPEG decoder failed.
+- Replaced the Cat theme daily-card geometric cat mark with a compact `64x52` RGB565 kitten image derived from the Cat standby face resource, keeping the daily card visually consistent without adding another GIF decoder/cache user.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" reconfigure build merge-bin`.
+- Build passed; CMake/app version was `1.7.54`.
+- Final `xiaozhi.bin` size was `0x59f910`, smallest app partition `0x600000`, free app space `0x606f0` (about 6%).
+- Full merged image size was `0x69f910`.
+- Flashed successfully to `COM13` at 921600 baud; flash logs verified every written region.
+- Short serial verification confirmed `App version: 1.7.54`, `Ota: Current version: 1.7.54`, MQTT connected, and app reached `STATE: idle` with no panic/backtrace.
+- Podcast-card tap verification is still pending; the 90 second filtered serial capture did not include a Podcast page entry or cover decode attempt.
+
+Release assets:
+
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-app.bin`: `2A4645511374F36D09985C64B1E3D9C7B5D2F0A78557CE3A96BA7CDCE44008D9`
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-firmware.zip`: `D240538F67CA8B60CA3EE7DEB9126FFA9540B515535CCE2DFA6117B020A74CB0`
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-full.bin`: `F2574B34C5BE583E0D9BC1EFF9EF7009A7E64F8CD48605AD29968537741AC048`
+
 ## 2026-06-27: Tupi Warm XiaoZhi Animated Robot Face Pack
 
 Scope:

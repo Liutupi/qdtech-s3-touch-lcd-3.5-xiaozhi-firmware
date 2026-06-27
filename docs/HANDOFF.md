@@ -40,10 +40,51 @@ Last verified on 2026-06-27 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Latest verified update: 2026-06-27 v1.7.53 Tupi Warm XiaoZhi animated robot face pack
-- Last published GitHub release: 2026-06-27 v1.7.53 Tupi Warm XiaoZhi animated robot face pack
+- Latest local update: 2026-06-27 v1.7.54 Podcast cover memory recovery plus Cat daily-card kitten mark
+- Last published GitHub release: 2026-06-27 v1.7.54 Podcast cover memory recovery plus Cat daily-card kitten mark
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-27 v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
+
+Scope:
+
+- Bumped firmware version to `1.7.54`.
+- Investigated the report that entering the Podcast card no longer showed episode cover images.
+- Root cause is most likely memory pressure introduced by the new full-character Cat/Tupi Warm XiaoZhi GIF path:
+  - `CreateXiaozhiPage()` runs during UI startup even though the page is hidden.
+  - The themed XiaoZhi GIF object and LVGL GIF decoded-data cache could remain allocated while the user is on Media/Podcast.
+  - `v1.7.53` boot logs showed only about 5-7 KB free internal SRAM after WiFi/MQTT/Phone Web startup, leaving poor margin for Podcast JPEG cover decode.
+- Changed Cat/Tupi Warm XiaoZhi GIF lifecycle:
+  - Create the themed GIF only when showing the XiaoZhi page.
+  - Delete the themed GIF when leaving the XiaoZhi page.
+  - Do not run themed GIF animation updates while another page is active.
+- Added Podcast cover decode diagnostics for path/size/input allocation/output allocation/JPEG decode failures.
+- Replaced the Cat theme daily-card geometric cat mark with a compact `64x52` RGB565 kitten image derived from the Cat standby face resource.
+- The daily-card kitten is static on purpose: it matches the Cat XiaoZhi visual language while avoiding another small GIF allocation on the main page.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech -D SDKCONFIG="build-qdtech/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" reconfigure build merge-bin`.
+- CMake/app version: `1.7.54`.
+- Final `xiaozhi.bin` size: `0x59f910`.
+- Full merged image size: `0x69f910`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x606f0`, about 6%.
+- Flashed successfully to `COM13` at 921600 baud; flash logs verified every written region.
+- Short filtered serial verification confirmed:
+  - `App version: 1.7.54`
+  - `Ota: Current version: 1.7.54`
+  - MQTT connected
+  - `Application: STATE: idle`
+  - No panic, abort, or backtrace appeared in the captured startup window
+- Podcast-card tap verification is still pending; the 90 second filtered serial capture did not include a Podcast page entry or cover decode attempt.
+
+Release assets:
+
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-app.bin`: `2A4645511374F36D09985C64B1E3D9C7B5D2F0A78557CE3A96BA7CDCE44008D9`
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-firmware.zip`: `D240538F67CA8B60CA3EE7DEB9126FFA9540B515535CCE2DFA6117B020A74CB0`
+- `releases/v1.7.54/qdtech-s3-touch-lcd-3.5-v1.7.54-full.bin`: `F2574B34C5BE583E0D9BC1EFF9EF7009A7E64F8CD48605AD29968537741AC048`
 
 ## Latest Runtime Notes: 2026-06-27 v1.7.53 Tupi Warm XiaoZhi Animated Robot Face Pack
 

@@ -41,6 +41,7 @@ LV_IMAGE_DECLARE(qd_weather_fog_scene);
 LV_IMAGE_DECLARE(qd_weather_storm_scene);
 LV_IMAGE_DECLARE(qd_brand_earth);
 LV_IMAGE_DECLARE(qd_podcast_avatar);
+LV_IMAGE_DECLARE(qd_cat_daily);
 LV_IMAGE_DECLARE(qd_cat_standby);
 LV_IMAGE_DECLARE(qd_cat_listening);
 LV_IMAGE_DECLARE(qd_cat_speaking);
@@ -1219,7 +1220,11 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_main = current_page_ == DesktopPage::MAIN;
     const bool was_photo = current_page_ == DesktopPage::PHOTO;
     const bool was_fc = current_page_ == DesktopPage::FC;
+    const bool was_xiaozhi = current_page_ == DesktopPage::XIAOZHI;
     current_page_ = page;
+    if (was_xiaozhi && page != DesktopPage::XIAOZHI) {
+        ReleaseThemedFaceGif();
+    }
     lv_obj_add_flag(main_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
     if (photo_page_) {
@@ -1301,6 +1306,7 @@ void DesktopUI::ShowPage(DesktopPage page) {
             ESP_LOGI(TAG, "Show focus page");
             break;
         case DesktopPage::XIAOZHI:
+            EnsureThemedFaceGif();
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show xiaozhi page");
             break;
@@ -1858,50 +1864,29 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
                  is_tupi_warm_theme() ? 10 : 16);
 
     if (is_cat_theme()) {
-        lv_obj_t* cat = circle(daily_card_panel_, 38, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_border_color(cat, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(cat, 1, 0);
-        lv_obj_align(cat, LV_ALIGN_TOP_LEFT, 134, 24);
-
-        lv_obj_t* ear_l = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_radius(ear_l, 3, 0);
-        lv_obj_set_style_border_color(ear_l, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(ear_l, 1, 0);
-        lv_obj_set_style_transform_rotation(ear_l, 450, 0);
-        lv_obj_align(ear_l, LV_ALIGN_TOP_LEFT, 139, 18);
-
-        lv_obj_t* ear_r = bar(daily_card_panel_, 15, 15, COLOR_CREAM, LV_OPA_COVER);
-        lv_obj_set_style_radius(ear_r, 3, 0);
-        lv_obj_set_style_border_color(ear_r, COLOR_PURPLE, 0);
-        lv_obj_set_style_border_width(ear_r, 1, 0);
-        lv_obj_set_style_transform_rotation(ear_r, 450, 0);
-        lv_obj_align(ear_r, LV_ALIGN_TOP_LEFT, 156, 18);
-
-        lv_obj_t* eye_l = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
-        lv_obj_align(eye_l, LV_ALIGN_TOP_LEFT, 146, 39);
-        lv_obj_t* eye_r = circle(daily_card_panel_, 4, COLOR_TEXT, LV_OPA_COVER);
-        lv_obj_align(eye_r, LV_ALIGN_TOP_LEFT, 160, 39);
-        lv_obj_t* nose = circle(daily_card_panel_, 4, COLOR_PURPLE, LV_OPA_COVER);
-        lv_obj_align(nose, LV_ALIGN_TOP_LEFT, 153, 49);
+        lv_obj_t* cat = lv_image_create(daily_card_panel_);
+        lv_image_set_src(cat, &qd_cat_daily);
+        lv_obj_align(cat, LV_ALIGN_TOP_LEFT, 128, 21);
+        lv_obj_add_flag(cat, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
+    lv_obj_set_width(quote_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 220 : 266));
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(quote_label_, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
     lv_obj_set_style_text_line_space(quote_label_,
                                      is_tupi_warm_theme() ? 2 : (is_cat_theme() ? 1 : 0), 0);
     lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT,
-                 is_tupi_warm_theme() ? 146 : (is_cat_theme() ? 186 : 152),
+                 is_tupi_warm_theme() ? 146 : (is_cat_theme() ? 200 : 152),
                  is_tupi_warm_theme() ? 16 : 10);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 232 : 266));
+    lv_obj_set_width(network_status_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 218 : 266));
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
     lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT,
-                 is_tupi_warm_theme() ? 148 : (is_cat_theme() ? 190 : 152),
+                 is_tupi_warm_theme() ? 148 : (is_cat_theme() ? 202 : 152),
                  is_tupi_warm_theme() ? -9 : -7);
     if (is_tupi_warm_theme()) {
         lv_obj_add_flag(network_status_label_, LV_OBJ_FLAG_HIDDEN);
@@ -3270,16 +3255,6 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
         lv_obj_set_style_bg_color(parent, COLOR_SURFACE, 0);
         lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-        themed_face_gif_ = lv_gif_create(parent);
-        themed_face_src_ = is_tupi_warm_theme() ? &qd_tupi_bot_standby : &qd_cat_standby;
-        lv_gif_set_src(themed_face_gif_, themed_face_src_);
-        lv_obj_set_size(themed_face_gif_, 300, 238);
-        lv_obj_set_style_bg_color(themed_face_gif_, COLOR_SURFACE, 0);
-        lv_obj_set_style_bg_opa(themed_face_gif_, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(themed_face_gif_, 0, 0);
-        lv_obj_align(themed_face_gif_, LV_ALIGN_CENTER, 0, -18);
-        add_gesture_bubble(themed_face_gif_);
-
         lv_obj_t* status_pill = lv_obj_create(parent);
         lv_obj_remove_style_all(status_pill);
         lv_obj_set_size(status_pill, 392, 42);
@@ -3703,6 +3678,31 @@ static const lv_image_dsc_t* themed_face_for_state(DeviceState state, const std:
                                 : cat_face_for_state(state, emotion);
 }
 
+void DesktopUI::EnsureThemedFaceGif() {
+    if (!is_themed_face_gif_theme() || !xiaozhi_page_ || themed_face_gif_) {
+        return;
+    }
+    const DeviceState state = Application::GetInstance().GetDeviceState();
+    themed_face_src_ = themed_face_for_state(state, emotion_);
+    themed_face_gif_ = lv_gif_create(xiaozhi_page_);
+    lv_gif_set_src(themed_face_gif_, themed_face_src_);
+    lv_obj_set_size(themed_face_gif_, 300, 238);
+    lv_obj_set_style_bg_color(themed_face_gif_, COLOR_SURFACE, 0);
+    lv_obj_set_style_bg_opa(themed_face_gif_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(themed_face_gif_, 0, 0);
+    lv_obj_align(themed_face_gif_, LV_ALIGN_CENTER, 0, -18);
+    lv_obj_move_to_index(themed_face_gif_, 0);
+    add_gesture_bubble(themed_face_gif_);
+}
+
+void DesktopUI::ReleaseThemedFaceGif() {
+    if (themed_face_gif_) {
+        lv_obj_del(themed_face_gif_);
+        themed_face_gif_ = nullptr;
+        themed_face_src_ = nullptr;
+    }
+}
+
 static const char* themed_face_state_text(DeviceState state) {
     switch (state) {
         case kDeviceStateStarting:
@@ -3726,6 +3726,10 @@ static const char* themed_face_state_text(DeviceState state) {
 
 void DesktopUI::UpdateFaceAnimation() {
     if (is_themed_face_gif_theme()) {
+        if (current_page_ != DesktopPage::XIAOZHI) {
+            return;
+        }
+        EnsureThemedFaceGif();
         if (!themed_face_gif_) {
             return;
         }

@@ -323,6 +323,8 @@ private:
     void CreateQuotePanel(lv_obj_t* parent);
     lv_obj_t* CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color);
     void CreateFaceUI(lv_obj_t* parent);
+    void EnsureThemedFaceGif();
+    void ReleaseThemedFaceGif();
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();

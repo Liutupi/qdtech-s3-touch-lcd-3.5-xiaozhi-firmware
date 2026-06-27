@@ -2,9 +2,21 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.53 Tupi Warm XiaoZhi Face Follow-Up
+## Current Active Task: v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
 
 Current state:
+
+- Firmware base is built and flashed locally as `v1.7.54`.
+- `v1.7.54` addresses the report that Podcast covers no longer appeared after entering the Podcast card.
+- Probable root cause: Cat/Tupi Warm full-character XiaoZhi GIF objects were created at UI startup on the hidden XiaoZhi page, keeping GIF decode/cache memory alive while the user was on Podcast.
+- Fix in progress: Cat/Tupi Warm GIF faces are now created only when the XiaoZhi page is shown and deleted when leaving that page; Podcast cover decode now logs path/allocation/JPEG failures.
+- Cat theme daily-card polish is included in the same local build: the old geometric cat mark next to the daily quote was replaced by a compact static kitten image derived from the Cat standby face resource.
+- Build/flash/boot verification passed on `COM13`: `App version: 1.7.54`, `Ota: Current version: 1.7.54`, MQTT connected, `STATE: idle`, no panic/backtrace.
+- Latest local build result: `xiaozhi.bin` `0x59f910`, smallest app partition `0x600000`, free `0x606f0` (about 6%).
+- Latest full merged image size: `0x69f910`.
+- Podcast-card tap verification is still pending; the latest filtered serial capture did not include a Podcast page entry or cover decode attempt.
+
+Previous verified release:
 
 - Firmware base is currently built and flashed locally as `v1.7.53`.
 - 2026-06-27 Windows hardware build/flash passed on `COM13` from `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.

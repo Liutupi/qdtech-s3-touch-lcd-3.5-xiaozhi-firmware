@@ -457,21 +457,33 @@ bool PodcastService::DecodeCover(const std::string& path) {
     struct stat st = {};
     if (path.empty() || stat(path.c_str(), &st) != 0 || st.st_size <= 0 ||
         static_cast<size_t>(st.st_size) > kMaxCoverInputBytes) {
+        ESP_LOGW(TAG, "cover skipped path=%s size=%ld max=%u",
+                 path.c_str(), static_cast<long>(st.st_size),
+                 static_cast<unsigned>(kMaxCoverInputBytes));
         return false;
     }
     FILE* file = fopen(path.c_str(), "rb");
     if (!file) {
+        ESP_LOGW(TAG, "cover open failed path=%s", path.c_str());
         return false;
     }
+    ESP_LOGI(TAG, "cover decode path=%s size=%ld free_internal=%u largest_internal=%u free_spiram=%u",
+             path.c_str(), static_cast<long>(st.st_size),
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)));
     uint8_t* input = static_cast<uint8_t*>(heap_caps_malloc(st.st_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (!input) {
         fclose(file);
+        ESP_LOGW(TAG, "cover input alloc failed len=%ld", static_cast<long>(st.st_size));
         return false;
     }
     size_t read = fread(input, 1, st.st_size, file);
     fclose(file);
     if (read != static_cast<size_t>(st.st_size)) {
         heap_caps_free(input);
+        ESP_LOGW(TAG, "cover read short path=%s read=%u size=%ld",
+                 path.c_str(), static_cast<unsigned>(read), static_cast<long>(st.st_size));
         return false;
     }
 
@@ -495,6 +507,7 @@ bool PodcastService::DecodeCover(const std::string& path) {
     esp_err_t err = esp_jpeg_get_image_info(&cfg, &info);
     if (err != ESP_OK || info.width == 0 || info.height == 0) {
         heap_caps_free(input);
+        ESP_LOGW(TAG, "cover info failed path=%s err=%s", path.c_str(), esp_err_to_name(err));
         return false;
     }
     cfg.out_scale = ChooseCoverScale(info.width, info.height);
@@ -502,11 +515,17 @@ bool PodcastService::DecodeCover(const std::string& path) {
     err = esp_jpeg_get_image_info(&cfg, &out);
     if (err != ESP_OK || out.output_len == 0 || out.output_len > kMaxCoverOutputBytes) {
         heap_caps_free(input);
+        ESP_LOGW(TAG, "cover scaled info failed path=%s err=%s out=%u max=%u",
+                 path.c_str(), esp_err_to_name(err), static_cast<unsigned>(out.output_len),
+                 static_cast<unsigned>(kMaxCoverOutputBytes));
         return false;
     }
     uint8_t* output = static_cast<uint8_t*>(heap_caps_malloc(out.output_len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     if (!output) {
         heap_caps_free(input);
+        ESP_LOGW(TAG, "cover output alloc failed len=%u free_spiram=%u",
+                 static_cast<unsigned>(out.output_len),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_SPIRAM)));
         return false;
     }
     cfg.outbuf = output;
@@ -515,6 +534,7 @@ bool PodcastService::DecodeCover(const std::string& path) {
     heap_caps_free(input);
     if (err != ESP_OK) {
         heap_caps_free(output);
+        ESP_LOGW(TAG, "cover decode failed path=%s err=%s", path.c_str(), esp_err_to_name(err));
         return false;
     }
     FreeCover();
