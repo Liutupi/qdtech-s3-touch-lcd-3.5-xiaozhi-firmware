@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-27: v1.7.55 Classic XiaoZhi Robot Face Pack + Daily Avatar
+
+Scope:
+
+- Bumped firmware version to `1.7.55` for the Classic theme XiaoZhi visual update.
+- Added Classic theme full-character robot GIF resources for standby, listening, and speaking states, based on the supplied black/gold cat-ear robot reference.
+- Reused the proven Cat/Tupi Warm GIF face pipeline for Classic so the robot face is drawn as complete frames instead of separate LVGL eye, pupil, highlight, and mouth overlays.
+- Speaking now swaps complete mouth frames inside the GIF, avoiding duplicate mouths or a mouth animated at the wrong position.
+- Added a compact XiaoZhi bottom subtitle bar for Classic and sanitized assistant/user subtitle text with UTF-8 validation, control-character filtering, trimming, and a codepoint cap to avoid garbled text.
+- Limited XiaoZhi subtitle updates to user/assistant chat content so system messages do not appear in the on-screen dialogue strip.
+- Added a Classic daily-card robot avatar beside the daily quote, compressed from the user-approved reference crop and blended into the Classic dark card background.
+- Kept the daily-card avatar static and RGB565 to avoid adding another GIF/cache allocation on the main page.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech build merge-bin`.
+- Build passed; CMake/app version was `1.7.55`.
+- Final `xiaozhi.bin` size was `0x5f6020`, smallest app partition `0x600000`, free app space `0x9fe0` (about 1%).
+- Full merged image size was `0x6f6020`.
+- Flashed app-only successfully to `COM13` at 921600 baud so WiFi/NVS stayed intact.
+- Short serial verification confirmed `App version: 1.7.55`, `Ota: Current version: 1.7.55`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, daily card updated for `2026-06-28`, and weather displayed `27 C 中山 阴`.
+
+Release assets:
+
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-app.bin`: `5174212A46460B1769475B6DD53E91EC6E4B8AC29424C15B9BC0D20B9263161A`
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-firmware.zip`: `485DE1216D45BC76800706C219426ADF31DA01FFBBEB8F3639467BCE70845E40`
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-full.bin`: `28BE202C60026D040FB9515FED01F5B028AF8E504C1D7DF75031DF1F7711CF7F`
+
 ## 2026-06-27: v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
 
 Scope:

@@ -2,15 +2,29 @@
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.
 
-## Current Active Task: v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
+## Current Active Task: v1.7.55 Classic XiaoZhi Robot Face Pack + Daily Avatar
 
 Current state:
+
+- Firmware base is shipped as `v1.7.55`.
+- `v1.7.55` updates the Classic theme XiaoZhi page to use complete robot GIF frames for standby, listening, and speaking, derived from the user-supplied black/gold cat-ear robot reference.
+- The Classic speaking state now uses full mouth-frame swaps inside the robot art instead of layered LVGL mouth overlays.
+- The Classic XiaoZhi bottom strip is now a real compact dialogue subtitle; subtitle text is UTF-8-cleaned and capped before display to avoid garbled bytes.
+- Only user and assistant chat content is forwarded to the XiaoZhi subtitle strip; system messages are filtered out.
+- The main daily-card quote area now has a compact Classic robot avatar next to the quote, compressed from the user-approved reference crop and blended into the Classic dark card.
+- Build/flash/boot verification passed on `COM13`: `App version: 1.7.55`, `Ota: Current version: 1.7.55`, WiFi IP `192.168.4.177`, MQTT connected, `STATE: idle`, daily card updated, and weather displayed `27 C 中山 阴`.
+- Latest local build result: `xiaozhi.bin` `0x5f6020`, smallest app partition `0x600000`, free `0x9fe0` (about 1%).
+- Latest full merged image size: `0x6f6020`.
+- Release assets are in `releases/v1.7.55/`: app bin, full merged bin, and firmware zip.
+- The app partition is now very tight; future visual work should remove or consolidate assets before adding new GIF states.
+
+Previous verified release:
 
 - Firmware base is built and flashed locally as `v1.7.54`.
 - `v1.7.54` addresses the report that Podcast covers no longer appeared after entering the Podcast card.
 - Probable root cause: Cat/Tupi Warm full-character XiaoZhi GIF objects were created at UI startup on the hidden XiaoZhi page, keeping GIF decode/cache memory alive while the user was on Podcast.
-- Fix in progress: Cat/Tupi Warm GIF faces are now created only when the XiaoZhi page is shown and deleted when leaving that page; Podcast cover decode now logs path/allocation/JPEG failures.
-- Cat theme daily-card polish is included in the same local build: the old geometric cat mark next to the daily quote was replaced by a compact static kitten image derived from the Cat standby face resource.
+- Cat/Tupi Warm GIF faces are created only when the XiaoZhi page is shown and deleted when leaving that page; Podcast cover decode logs path/allocation/JPEG failures.
+- Cat theme daily-card polish is included: the old geometric cat mark next to the daily quote was replaced by a compact static kitten image derived from the Cat standby face resource.
 - Build/flash/boot verification passed on `COM13`: `App version: 1.7.54`, `Ota: Current version: 1.7.54`, MQTT connected, `STATE: idle`, no panic/backtrace.
 - Latest local build result: `xiaozhi.bin` `0x59f910`, smallest app partition `0x600000`, free `0x606f0` (about 6%).
 - Latest full merged image size: `0x69f910`.

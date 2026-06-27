@@ -40,10 +40,46 @@ Last verified on 2026-06-27 in the Windows workspace:
 - Workspace: `D:\3.5inch_ESP32-S3\qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Branch: `main`
 - User remote branch: `origin/main`
-- Latest local update: 2026-06-27 v1.7.54 Podcast cover memory recovery plus Cat daily-card kitten mark
-- Last published GitHub release: 2026-06-27 v1.7.54 Podcast cover memory recovery plus Cat daily-card kitten mark
+- Latest local update: 2026-06-27 v1.7.55 Classic XiaoZhi robot face pack plus daily-card robot avatar
+- Last published GitHub release: 2026-06-27 v1.7.55 Classic XiaoZhi robot face pack plus daily-card robot avatar
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
+
+## Latest Runtime Notes: 2026-06-27 v1.7.55 Classic XiaoZhi Robot Face Pack + Daily Avatar
+
+Scope:
+
+- Bumped firmware version to `1.7.55`.
+- Added Classic theme robot GIF faces for standby, listening, and speaking using the same complete-frame approach that was accepted for the Cat and Tupi Warm themes.
+- Classic XiaoZhi now uses full robot frames instead of layered LVGL eyes/pupils/highlights/mouth objects, avoiding doubled mouths and misaligned highlights.
+- Speaking frames animate the mouth at the correct face position inside the robot art.
+- Classic XiaoZhi has a compact bottom subtitle/dialogue strip, and subtitle text is UTF-8-cleaned before display to avoid garbled mixed bytes.
+- Board chat-message forwarding now sends only user and assistant text into the XiaoZhi subtitle strip, so system messages do not leak into the UI.
+- The main daily-card quote area now includes a compact Classic robot avatar beside the quote, generated from the user-approved reference crop and blended into the dark Classic card background.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech build merge-bin`.
+- CMake/app version: `1.7.55`.
+- Final `xiaozhi.bin` size: `0x5f6020`.
+- Full merged image size: `0x6f6020`.
+- Smallest app partition: `0x600000`.
+- Free app partition space: `0x9fe0`, about 1%.
+- App-only flashed successfully to `COM13` at 921600 baud so WiFi/NVS was preserved.
+- Short serial verification confirmed:
+  - `App version: 1.7.55`
+  - `Ota: Current version: 1.7.55`
+  - WiFi connected to `liutupi`, IP `192.168.4.177`
+  - MQTT connected
+  - `Application: STATE: idle`
+  - `Daily card updated for 2026-06-28 kind=quote`
+  - `weather ok 27 C 中山 阴 00:00 H98% C98%`
+
+Release assets:
+
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-app.bin`: `5174212A46460B1769475B6DD53E91EC6E4B8AC29424C15B9BC0D20B9263161A`
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-firmware.zip`: `485DE1216D45BC76800706C219426ADF31DA01FFBBEB8F3639467BCE70845E40`
+- `releases/v1.7.55/qdtech-s3-touch-lcd-3.5-v1.7.55-full.bin`: `28BE202C60026D040FB9515FED01F5B028AF8E504C1D7DF75031DF1F7711CF7F`
 
 ## Latest Runtime Notes: 2026-06-27 v1.7.54 Podcast Cover Memory Recovery + Cat Daily Card Kitten
 

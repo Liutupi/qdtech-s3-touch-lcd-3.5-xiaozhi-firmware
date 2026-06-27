@@ -170,11 +170,18 @@ public:
         LcdDisplay::SetChatMessage(role, content);
 
         DisplayLockGuard lock(this);
-        const char* state = "System";
-        if (role && strcmp(role, "user") == 0) {
+        const bool is_user = role && strcmp(role, "user") == 0;
+        const bool is_assistant = role && strcmp(role, "assistant") == 0;
+        if (!is_user && !is_assistant) {
+            if (!content || strlen(content) == 0) {
+                desktop_ui_.SetXiaozhiState("Standby", "", nullptr);
+            }
+            return;
+        }
+
+        const char* state = "XiaoZhi";
+        if (is_user) {
             state = "You";
-        } else if (role && strcmp(role, "assistant") == 0) {
-            state = "XiaoZhi";
         }
 
         if (content && strlen(content) > 0) {

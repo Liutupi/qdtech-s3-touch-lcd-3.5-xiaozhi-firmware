@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <ctime>
+#include <string>
 #include <utility>
 
 #include <esp_app_desc.h>
@@ -42,6 +43,10 @@ LV_IMAGE_DECLARE(qd_weather_storm_scene);
 LV_IMAGE_DECLARE(qd_brand_earth);
 LV_IMAGE_DECLARE(qd_podcast_avatar);
 LV_IMAGE_DECLARE(qd_cat_daily);
+LV_IMAGE_DECLARE(qd_classic_daily);
+LV_IMAGE_DECLARE(qd_classic_bot_standby);
+LV_IMAGE_DECLARE(qd_classic_bot_listening);
+LV_IMAGE_DECLARE(qd_classic_bot_speaking);
 LV_IMAGE_DECLARE(qd_cat_standby);
 LV_IMAGE_DECLARE(qd_cat_listening);
 LV_IMAGE_DECLARE(qd_cat_speaking);
@@ -68,6 +73,68 @@ static const lv_font_t* qd_cn_font_16() {
 static const lv_font_t* qd_cn_font_20() {
     // Puhui has broader Chinese coverage than the compact LXGW subsets.
     return &font_puhui_16_4;
+}
+
+static std::string clean_subtitle_text(const char* text, size_t max_codepoints = 42) {
+    if (!text) {
+        return {};
+    }
+
+    std::string out;
+    out.reserve(128);
+    size_t count = 0;
+    const auto* p = reinterpret_cast<const uint8_t*>(text);
+    while (*p && count < max_codepoints) {
+        uint32_t cp = 0;
+        size_t len = 0;
+        if (*p < 0x80) {
+            cp = *p;
+            len = 1;
+        } else if ((*p & 0xe0) == 0xc0) {
+            cp = *p & 0x1f;
+            len = 2;
+        } else if ((*p & 0xf0) == 0xe0) {
+            cp = *p & 0x0f;
+            len = 3;
+        } else if ((*p & 0xf8) == 0xf0) {
+            cp = *p & 0x07;
+            len = 4;
+        } else {
+            ++p;
+            continue;
+        }
+
+        bool valid = true;
+        for (size_t i = 1; i < len; ++i) {
+            if ((p[i] & 0xc0) != 0x80) {
+                valid = false;
+                break;
+            }
+            cp = (cp << 6) | (p[i] & 0x3f);
+        }
+        if (!valid || (len == 2 && cp < 0x80) || (len == 3 && cp < 0x800) ||
+            (len == 4 && (cp < 0x10000 || cp > 0x10ffff)) ||
+            (cp >= 0xd800 && cp <= 0xdfff)) {
+            ++p;
+            continue;
+        }
+
+        if (cp == '\r' || cp == '\n' || cp == '\t') {
+            if (!out.empty() && out.back() != ' ') {
+                out.push_back(' ');
+                ++count;
+            }
+        } else if (cp >= 0x20 && cp != 0x7f) {
+            out.append(reinterpret_cast<const char*>(p), len);
+            ++count;
+        }
+        p += len;
+    }
+
+    while (!out.empty() && out.back() == ' ') {
+        out.pop_back();
+    }
+    return out;
 }
 
 // Theme palette
@@ -155,8 +222,12 @@ static bool is_tupi_warm_theme() {
     return current_theme == UiTheme::TUPI_WARM;
 }
 
+static bool is_classic_theme() {
+    return current_theme == UiTheme::CLASSIC;
+}
+
 static bool is_themed_face_gif_theme() {
-    return is_cat_theme() || is_tupi_warm_theme();
+    return true;
 }
 
 static void load_theme() {
@@ -1860,7 +1931,8 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
 
     lv_obj_t* divider = bar(daily_card_panel_, 2, 62, COLOR_LINE, LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT,
-                 is_tupi_warm_theme() ? 124 : (is_cat_theme() ? 120 : 132),
+                 is_tupi_warm_theme() ? 124 :
+                 ((is_cat_theme() || is_classic_theme()) ? 120 : 132),
                  is_tupi_warm_theme() ? 10 : 16);
 
     if (is_cat_theme()) {
@@ -1868,25 +1940,37 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
         lv_image_set_src(cat, &qd_cat_daily);
         lv_obj_align(cat, LV_ALIGN_TOP_LEFT, 128, 21);
         lv_obj_add_flag(cat, LV_OBJ_FLAG_EVENT_BUBBLE);
+    } else if (is_classic_theme()) {
+        lv_obj_t* bot = lv_image_create(daily_card_panel_);
+        lv_image_set_src(bot, &qd_classic_daily);
+        lv_obj_align(bot, LV_ALIGN_TOP_LEFT, 126, 18);
+        lv_obj_add_flag(bot, LV_OBJ_FLAG_EVENT_BUBBLE);
     }
 
     quote_label_ = label_en(daily_card_panel_, "正在同步今日卡片", &style_en);
-    lv_obj_set_width(quote_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 220 : 266));
+    lv_obj_set_width(quote_label_,
+                     is_tupi_warm_theme() ? 278 :
+                     ((is_cat_theme() || is_classic_theme()) ? 220 : 266));
     lv_label_set_long_mode(quote_label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_color(quote_label_, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(quote_label_, &qd_font_lxgw_20, 0);
     lv_obj_set_style_text_line_space(quote_label_,
-                                     is_tupi_warm_theme() ? 2 : (is_cat_theme() ? 1 : 0), 0);
+                                     is_tupi_warm_theme() ? 2 :
+                                     ((is_cat_theme() || is_classic_theme()) ? 1 : 0), 0);
     lv_obj_align(quote_label_, LV_ALIGN_TOP_LEFT,
-                 is_tupi_warm_theme() ? 146 : (is_cat_theme() ? 200 : 152),
+                 is_tupi_warm_theme() ? 146 :
+                 ((is_cat_theme() || is_classic_theme()) ? 200 : 152),
                  is_tupi_warm_theme() ? 16 : 10);
 
     network_status_label_ = label_en(daily_card_panel_, "XiaoZhi AI", &style_muted);
-    lv_obj_set_width(network_status_label_, is_tupi_warm_theme() ? 278 : (is_cat_theme() ? 218 : 266));
+    lv_obj_set_width(network_status_label_,
+                     is_tupi_warm_theme() ? 278 :
+                     ((is_cat_theme() || is_classic_theme()) ? 218 : 266));
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
     lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT,
-                 is_tupi_warm_theme() ? 148 : (is_cat_theme() ? 202 : 152),
+                 is_tupi_warm_theme() ? 148 :
+                 ((is_cat_theme() || is_classic_theme()) ? 202 : 152),
                  is_tupi_warm_theme() ? -9 : -7);
     if (is_tupi_warm_theme()) {
         lv_obj_add_flag(network_status_label_, LV_OBJ_FLAG_HIDDEN);
@@ -3257,20 +3341,31 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
         lv_obj_t* status_pill = lv_obj_create(parent);
         lv_obj_remove_style_all(status_pill);
-        lv_obj_set_size(status_pill, 392, 42);
-        lv_obj_set_style_radius(status_pill, 21, 0);
+        lv_obj_set_size(status_pill, 420, 44);
+        lv_obj_set_style_radius(status_pill, 22, 0);
         lv_obj_set_style_bg_color(status_pill, COLOR_SURFACE_2, 0);
         lv_obj_set_style_bg_opa(status_pill, LV_OPA_90, 0);
         lv_obj_set_style_border_color(status_pill, COLOR_LINE, 0);
         lv_obj_set_style_border_width(status_pill, 1, 0);
-        lv_obj_align(status_pill, LV_ALIGN_BOTTOM_MID, 0, -14);
+        lv_obj_align(status_pill, LV_ALIGN_BOTTOM_MID, 0, -12);
         add_gesture_bubble(status_pill);
 
-        xiaozhi_state_label_ = label_en(status_pill, "Standby", &style_gold);
-        lv_obj_set_style_text_font(xiaozhi_state_label_, &lv_font_montserrat_14, 0);
-        lv_obj_center(xiaozhi_state_label_);
+        lv_obj_t* audio_mark = label_en(status_pill, "|||", &style_gold);
+        lv_obj_set_style_text_font(audio_mark, &lv_font_montserrat_20, 0);
+        lv_obj_align(audio_mark, LV_ALIGN_LEFT_MID, 18, 0);
 
-        xiaozhi_message_label_ = nullptr;
+        xiaozhi_state_label_ = label_en(status_pill, "Standby", &style_gold);
+        lv_obj_set_width(xiaozhi_state_label_, 72);
+        lv_obj_set_style_text_font(xiaozhi_state_label_, &lv_font_montserrat_12, 0);
+        lv_label_set_long_mode(xiaozhi_state_label_, LV_LABEL_LONG_DOT);
+        lv_obj_align(xiaozhi_state_label_, LV_ALIGN_LEFT_MID, 54, 0);
+
+        xiaozhi_message_label_ = label_en(status_pill, "Ready", &style_en);
+        lv_obj_set_width(xiaozhi_message_label_, 260);
+        lv_obj_set_style_text_font(xiaozhi_message_label_, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_align(xiaozhi_message_label_, LV_TEXT_ALIGN_LEFT, 0);
+        lv_label_set_long_mode(xiaozhi_message_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_align(xiaozhi_message_label_, LV_ALIGN_LEFT_MID, 132, 0);
         return;
     }
     // 全屏黑色背景，直接在parent上创建元素
@@ -3634,6 +3729,21 @@ static const lv_image_dsc_t* cat_face_for_state(DeviceState state, const std::st
     return &qd_cat_standby;
 }
 
+static const lv_image_dsc_t* classic_bot_face_for_state(DeviceState state, const std::string& emotion) {
+    if (state == kDeviceStateSpeaking) {
+        return &qd_classic_bot_speaking;
+    }
+    if (state == kDeviceStateListening || state == kDeviceStateAudioTesting ||
+        state == kDeviceStateConnecting || state == kDeviceStateStarting ||
+        state == kDeviceStateWifiConfiguring || state == kDeviceStateActivating) {
+        return &qd_classic_bot_listening;
+    }
+    if (emotion == "surprised" || emotion == "shocked") {
+        return &qd_classic_bot_speaking;
+    }
+    return &qd_classic_bot_standby;
+}
+
 static const lv_image_dsc_t* tupi_bot_face_for_state(DeviceState state, const std::string& emotion) {
     if (state == kDeviceStateFatalError) {
         return &qd_tupi_bot_sad;
@@ -3674,8 +3784,13 @@ static const lv_image_dsc_t* tupi_bot_face_for_state(DeviceState state, const st
 }
 
 static const lv_image_dsc_t* themed_face_for_state(DeviceState state, const std::string& emotion) {
-    return is_tupi_warm_theme() ? tupi_bot_face_for_state(state, emotion)
-                                : cat_face_for_state(state, emotion);
+    if (is_tupi_warm_theme()) {
+        return tupi_bot_face_for_state(state, emotion);
+    }
+    if (is_cat_theme()) {
+        return cat_face_for_state(state, emotion);
+    }
+    return classic_bot_face_for_state(state, emotion);
 }
 
 void DesktopUI::EnsureThemedFaceGif() {
@@ -4791,8 +4906,11 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
         }
     }
     if (xiaozhi_message_label_) {
-        lv_label_set_text(xiaozhi_message_label_,
-                          is_themed_face_gif_theme() ? "" : (message ? message : ""));
+        std::string clean_message = clean_subtitle_text(message);
+        if (is_themed_face_gif_theme() && clean_message.empty()) {
+            clean_message = clean_subtitle_text(state);
+        }
+        lv_label_set_text(xiaozhi_message_label_, clean_message.c_str());
     }
     if (xiaozhi_hint_label_) {
         lv_label_set_text(xiaozhi_hint_label_, state ? state : "");
