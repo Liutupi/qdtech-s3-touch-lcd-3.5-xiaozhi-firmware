@@ -41,7 +41,7 @@ Last verified on 2026-06-27 in the Windows workspace:
 - Branch: `main`
 - User remote branch: `origin/main`
 - Latest verified update: 2026-06-27 v1.7.53 Tupi Warm XiaoZhi animated robot face pack
-- Last published GitHub release: pending push/release for 2026-06-27 v1.7.53 Tupi Warm XiaoZhi animated robot face pack
+- Last published GitHub release: 2026-06-27 v1.7.53 Tupi Warm XiaoZhi animated robot face pack
 - Build directory used for board verification: `build-qdtech`
 - Serial port used during the last device flash: `COM13`
 
