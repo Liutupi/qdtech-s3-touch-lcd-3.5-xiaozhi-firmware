@@ -2,6 +2,43 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-28 Handoff: v1.7.60 New-Board WiFi Provisioning Fix
+
+Current repo state:
+
+- Branch: `main`.
+- Remote used for this handoff: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Firmware version target: `v1.7.60`.
+- Build directory: `build-qdtech`.
+- New board flash/monitor port used: `COM16`.
+
+What changed:
+
+- Changed the QDTech default WiFi BSSID memory to off. This avoids locking a new board to the wrong AP in same-SSID or mesh environments.
+- Patched the local `78__esp-wifi-connect` component for this fork so provisioning starts in pure SoftAP mode instead of AP+STA scanning immediately.
+- Fixed setup hotspot discoverability by using channel 1, limiting setup AP clients to 2, and setting max TX power.
+- Changed WiFi list scanning to run only when the web page requests `/scan`; the handler now preserves the scan results populated by the WiFi scan event instead of reading and clearing them a second time.
+- Added setup-time diagnostics for manual scan requests, scan result counts, and STA disconnect reason codes.
+
+Hardware evidence:
+
+- App-only flashed `build-qdtech\xiaozhi.bin` to the new board on `COM16`; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.60`.
+- Setup hotspot started as `Xiaozhi-85A1` with `wifi:mode : softAP` and web server at `192.168.4.1`.
+- Refreshing the provisioning web page triggered `manual scan done ap_num=15`.
+- The scan list included the user's WiFi `liutupi` with strong signal, `RSSI: -7`.
+
+Release assets:
+
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-app.bin`: `88AB96580CA77073B72E1C66C4322F6AB34AF2244701AC09C158ADAB8368FC1E`
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-firmware.zip`: `9ED8E7DDF38B14758C1B88B6D2E0BBDA1FA62DC443CC65B12F2A35B60FCB04CA`
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-full.bin`: `7772DCF18FBB745F70BEB9EA2BC5D50BFF5584AA0A355CC1B11CEC39F23B286A`
+
+Important follow-up:
+
+- After selecting `liutupi` on the provisioning page, watch serial for `STA disconnected during setup reason=...` if the password still fails. The hotspot/listing problem is fixed; any remaining failure should be treated as credential/auth/router compatibility.
+- The patched `managed_components/78__esp-wifi-connect` files are intentionally tracked with `git add -f` because the upstream managed component is normally ignored.
+
 ## 2026-06-28 Handoff: v1.7.56 FC/NES Mapper Compatibility Pass
 
 Current repo state:

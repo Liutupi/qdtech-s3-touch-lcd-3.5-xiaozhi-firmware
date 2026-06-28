@@ -2,6 +2,37 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-28: v1.7.60 New-Board WiFi Provisioning Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.60`.
+- Disabled QDTech's default BSSID memory for WiFi joins so same-SSID AP/mesh networks do not pin the board to a bad BSSID.
+- Patched the local `78__esp-wifi-connect` component so provisioning starts in pure SoftAP mode and the phone can reliably see `Xiaozhi-85A1`.
+- Moved WiFi list scanning to manual `/scan` requests from the provisioning page.
+- Fixed the manual scan handler so it no longer reads and clears the scan results after the event handler has already populated the list.
+- Added serial diagnostics for manual scan and STA disconnect reasons.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech build merge-bin`.
+- App-only flashed `build-qdtech\xiaozhi.bin` to the new board on `COM16` at `0x100000`; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.60`.
+- Setup hotspot log confirmed `wifi:mode : softAP`, `Access Point started with SSID Xiaozhi-85A1`, and `Web server started`.
+- Provisioning page scan log confirmed `manual scan done ap_num=15`.
+- Serial scan results included `SSID: liutupi, RSSI: -7, Authmode: 3`.
+
+Release assets:
+
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-app.bin`: `88AB96580CA77073B72E1C66C4322F6AB34AF2244701AC09C158ADAB8368FC1E`
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-firmware.zip`: `9ED8E7DDF38B14758C1B88B6D2E0BBDA1FA62DC443CC65B12F2A35B60FCB04CA`
+- `releases/v1.7.60/qdtech-s3-touch-lcd-3.5-v1.7.60-full.bin`: `7772DCF18FBB745F70BEB9EA2BC5D50BFF5584AA0A355CC1B11CEC39F23B286A`
+
+Known limitations:
+
+- App partition remains very tight at about `0x80d0` bytes free.
+- If WiFi join still fails after selecting the visible SSID, use the new `STA disconnected during setup reason=...` log to separate wrong password/auth/router rejection from hotspot/list scan issues.
+
 ## 2026-06-28: v1.7.56 FC/NES Mapper Diagnostics
 
 Scope:

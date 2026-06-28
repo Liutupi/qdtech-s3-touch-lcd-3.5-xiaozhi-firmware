@@ -1198,13 +1198,13 @@ private:
 
         uint8_t remember_bssid = 0;
         err = nvs_get_u8(nvs, "remember_bssid", &remember_bssid);
-        if (err == ESP_ERR_NVS_NOT_FOUND) {
-            err = nvs_set_u8(nvs, "remember_bssid", 1);
+        if (err == ESP_ERR_NVS_NOT_FOUND || remember_bssid != 0) {
+            err = nvs_set_u8(nvs, "remember_bssid", 0);
             if (err == ESP_OK) {
                 err = nvs_commit(nvs);
             }
             if (err == ESP_OK) {
-                ESP_LOGI(TAG, "Defaulted WiFi BSSID memory on");
+                ESP_LOGI(TAG, "Defaulted WiFi BSSID memory off for mesh/AP compatibility");
             } else {
                 ESP_LOGW(TAG, "save WiFi BSSID default failed: %s", esp_err_to_name(err));
             }

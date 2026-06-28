@@ -1,3 +1,22 @@
+# 2026-06-28 Project Status: v1.7.60
+
+Firmware:
+
+- Version bumped to `1.7.60`.
+- Build target: QDTech ESP32-S3 3.5 inch touch LCD.
+- Build directory: `build-qdtech`.
+- Latest app image: `build-qdtech\xiaozhi.bin`.
+- Latest observed app size: `0x5f7f30`, leaving about `0x80d0` bytes in the `0x600000` app partition.
+- Latest flash method: app-only flash to new board `COM16` at `0x100000`; hash verified and boot verified as `App version: 1.7.60`.
+- Release assets are in `releases/v1.7.60/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+WiFi provisioning status:
+
+- New board setup hotspot is visible as `Xiaozhi-85A1`.
+- Provisioning now starts in pure SoftAP mode and performs WiFi scanning only when the web page requests `/scan`.
+- Hardware log verified `manual scan done ap_num=15`, including `liutupi` at `RSSI: -7`.
+- Default BSSID memory is off for QDTech to avoid same-SSID mesh/AP lock-in.
+
 # 2026-06-28 Project Status: v1.7.56
 
 Firmware:
