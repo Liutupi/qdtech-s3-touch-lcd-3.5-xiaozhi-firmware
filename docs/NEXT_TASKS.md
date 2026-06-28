@@ -1,3 +1,25 @@
+# 2026-06-28 FC/NES Mapper Follow-Up
+
+Current v1.7.56 state:
+
+- `轩辕剑` dumps are now playable through CRC correction to mapper 224.
+- `快打旋风 [Cony Soft].nes` is confirmed as `crc=fdec419f`, corrected to mapper 83, but still flower-screens.
+- `吞食天地2 [先锋卡通汉化 (laopix简体中文名字版)].nes` is confirmed as `crc=3963f12a`, corrected to mapper 198, but still black/solid-color frames.
+- Keep the `rom diag path=... corrected_mapper=... crc=...` log while continuing mapper work.
+
+Next steps:
+
+- For mapper 83, port the remaining FCEUmm `83_264.c` behavior instead of adding one-off guesses:
+  - submapper/CHR grouping behavior,
+  - `$5000-$5FFF` scratch/pad handling,
+  - scanline and CPU-cycle IRQ behavior,
+  - PRG-RAM/open-bus behavior.
+- For mapper 198, compare against FCEUmm MMC3 `Mapper198_Init` and PRG/CHR RAM handling:
+  - 16KB WRAM and `$5000-$5FFF` mapping,
+  - PRG bank remap for `V >= 0x50`,
+  - CHR-RAM/PPU write timing.
+- If app partition pressure blocks further mapper ports, remove temporary FC diagnostics or evaluate a larger partition/release strategy before adding more code.
+
 # QDTech Next Tasks
 
 This list is intentionally ordered. Future work should start at the top unless the user gives a more specific request.

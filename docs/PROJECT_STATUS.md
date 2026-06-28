@@ -1,3 +1,23 @@
+# 2026-06-28 Project Status: v1.7.56
+
+Firmware:
+
+- Version bumped to `1.7.56`.
+- Build target: QDTech ESP32-S3 3.5 inch touch LCD.
+- Build directory: `build-qdtech`.
+- Latest app image: `build-qdtech\xiaozhi.bin`.
+- Latest observed app size: `0x5f7c00`, leaving about `0x8400` bytes in the `0x600000` app partition.
+- Latest flash method: app-only flash to `COM13` at `0x100000`; hash verified and boot verified as `App version: 1.7.56`.
+- Release assets are in `releases/v1.7.56/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+FC/NES status:
+
+- Mapper correction and diagnostics are in place for tested problematic ROMs.
+- `轩辕剑` is improved and now runs through mapper 224.
+- `快打旋风 [Cony Soft]` is identified as mapper 83 but still flower-screens.
+- `吞食天地2` is identified as mapper 198 but still black/solid-color output.
+- CPU/audio/frame generation continue for the two failing ROMs, so the remaining work is mapper/PPU correctness rather than SD loading or display transport.
+
 # QDTech Project Status
 
 ## Snapshot

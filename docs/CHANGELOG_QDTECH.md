@@ -2,6 +2,37 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-28: v1.7.56 FC/NES Mapper Diagnostics
+
+Scope:
+
+- Bumped firmware version to `1.7.56`.
+- Added CRC-based mapper correction for known FC/NES problem ROMs.
+- Added mapper 83, mapper 198, and mapper 224 scaffolds to nofrendo.
+- Improved `轩辕剑` compatibility; tested dumps now run through mapper 224.
+- Added ROM diagnostics logging path, PRG/CHR counts, header mapper, corrected mapper, CRC, and size before launching nofrendo.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech build merge-bin`.
+- App-only flashed `build-qdtech\xiaozhi.bin` to `COM13` at `0x100000`; esptool hash verification passed.
+- Post-flash boot log confirmed `App version: 1.7.56`, WiFi, MQTT, `Application: STATE: idle`, and live Zhongshan weather sync.
+- Serial evidence:
+  - `快打旋风 [Cony Soft].nes`: `crc=fdec419f`, `header_mapper=4`, `corrected_mapper=83`.
+  - `吞食天地2 [先锋卡通汉化 (laopix简体中文名字版)].nes`: `crc=3963f12a`, `header_mapper=4`, `corrected_mapper=198`.
+
+Release assets:
+
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-app.bin`: `F9217510EB5701206158D5AC254D6F90D8B0EFEA6E2C0ADAE3F0756C559793A0`
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-firmware.zip`: `4BD15AAC17BCA83821125490B3C232E9B136DFE5C7D8C99E8BAA9BEEE70158DB`
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-full.bin`: `5E31B83C3F2AF1AFC4C45EC7D23CB344B44927D3E0C59C2757DE8A04D32E7FDC`
+
+Known limitations:
+
+- `快打旋风 [Cony Soft]` still flower-screens after mapper 83 routing.
+- `吞食天地2` still renders black/solid-color frames after mapper 198 routing.
+- App partition is now very tight; future FC mapper work should budget flash size carefully.
+
 ## 2026-06-27: v1.7.55 Classic XiaoZhi Robot Face Pack + Daily Avatar
 
 Scope:

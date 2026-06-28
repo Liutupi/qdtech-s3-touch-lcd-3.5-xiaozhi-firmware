@@ -171,8 +171,9 @@ int16_t clamp16(int value) {
 bool is_supported_nofrendo_mapper(uint8_t mapper) {
     static constexpr uint8_t kSupportedMappers[] = {
         0, 1, 2, 3, 4, 5, 7, 8, 9, 11, 15, 16, 18, 19,
-        21, 22, 23, 24, 25, 32, 33, 34, 40, 64, 65, 66,
-        70, 75, 78, 79, 85, 94, 99, 231,
+        21, 22, 23, 24, 25, 32, 33, 34, 40, 41, 42, 46,
+        50, 64, 65, 66, 70, 73, 75, 78, 79, 83, 85, 87, 93,
+        94, 99, 160, 198, 224, 229, 231,
     };
     for (uint8_t supported : kSupportedMappers) {
         if (supported == mapper) {
@@ -188,6 +189,32 @@ uint8_t ines_mapper(const uint8_t header[16]) {
 
 bool is_nes2_header(const uint8_t header[16]) {
     return (header[7] & 0x0c) == 0x08;
+}
+
+uint32_t crc32_update(uint32_t crc, const uint8_t* data, size_t length) {
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+        }
+    }
+    return crc;
+}
+
+uint8_t corrected_mapper_for_crc(uint8_t mapper, uint32_t crc) {
+    if (mapper != 4) {
+        return mapper;
+    }
+    if (crc == 0xfdec419f || crc == 0x78292584) {
+        return 83;
+    }
+    if (crc == 0x9b518d54 || crc == 0x91396b3f || crc == 0xaa621fa0 || crc == 0x48d1f54a) {
+        return 224;
+    }
+    if (crc == 0x3963f12a) {
+        return 198;
+    }
+    return mapper;
 }
 
 static const uint16_t kNesPaletteRgb565[64] = {
@@ -697,29 +724,64 @@ bool FcEmulatorService::ValidateSelectedRom() {
     rewind(file);
     uint8_t header[16] = {};
     const size_t read = fread(header, 1, sizeof(header), file);
-    fclose(file);
     if (read != sizeof(header) || memcmp(header, "NES\x1a", 4) != 0) {
+        fclose(file);
         PublishState("Bad ROM", "Missing iNES header");
         ESP_LOGW(TAG, "rom header invalid: %s", roms_[idx].c_str());
         return false;
     }
+    uint32_t crc = 0xffffffffu;
+    uint8_t buffer[512];
+    const bool has_trainer = (header[6] & 0x04) != 0;
+    if (has_trainer) {
+        if (fread(buffer, 1, 512, file) != 512) {
+            fclose(file);
+            PublishState("Bad ROM", "Short trainer");
+            ESP_LOGW(TAG, "rom trainer short: %s", roms_[idx].c_str());
+            return false;
+        }
+    }
+    const size_t payload_size = static_cast<size_t>(header[4]) * 16 * 1024 +
+                                static_cast<size_t>(header[5]) * 8 * 1024;
+    size_t remaining = payload_size;
+    while (remaining > 0) {
+        const size_t chunk = std::min(remaining, sizeof(buffer));
+        const size_t got = fread(buffer, 1, chunk, file);
+        if (got != chunk) {
+            fclose(file);
+            PublishState("Bad ROM", "Short payload");
+            ESP_LOGW(TAG, "rom payload short: %s got=%u need=%u",
+                     roms_[idx].c_str(), static_cast<unsigned>(got), static_cast<unsigned>(chunk));
+            return false;
+        }
+        crc = crc32_update(crc, buffer, got);
+        remaining -= got;
+    }
+    crc = ~crc;
+    fclose(file);
     const uint8_t mapper = ines_mapper(header);
+    const uint8_t corrected_mapper = corrected_mapper_for_crc(mapper, crc);
+    ESP_LOGI(TAG, "rom diag path=%s prg=%u chr=%u header_mapper=%u corrected_mapper=%u crc=%08lx size=%ld",
+             roms_[idx].c_str(), header[4], header[5], static_cast<unsigned>(mapper),
+             static_cast<unsigned>(corrected_mapper), static_cast<unsigned long>(crc), size);
     if (is_nes2_header(header)) {
         PublishState("Unsupported ROM", "NES 2.0 header");
         ESP_LOGW(TAG, "rom uses NES 2.0 header: %s mapper=%u", roms_[idx].c_str(),
                  static_cast<unsigned>(mapper));
         return false;
     }
-    if (!is_supported_nofrendo_mapper(mapper)) {
+    if (!is_supported_nofrendo_mapper(corrected_mapper)) {
         char detail[48];
-        snprintf(detail, sizeof(detail), "Mapper %u not supported", static_cast<unsigned>(mapper));
+        snprintf(detail, sizeof(detail), "Mapper %u not supported", static_cast<unsigned>(corrected_mapper));
         PublishState("Unsupported ROM", detail);
-        ESP_LOGW(TAG, "rom mapper unsupported: %s mapper=%u prg=%u chr=%u",
-                 roms_[idx].c_str(), static_cast<unsigned>(mapper), header[4], header[5]);
+        ESP_LOGW(TAG, "rom mapper unsupported: %s header_mapper=%u corrected_mapper=%u prg=%u chr=%u crc=%08lx",
+                 roms_[idx].c_str(), static_cast<unsigned>(mapper), static_cast<unsigned>(corrected_mapper),
+                 header[4], header[5], static_cast<unsigned long>(crc));
         return false;
     }
-    ESP_LOGI(TAG, "rom header ok prg=%u chr=%u mapper=%u size=%ld",
-             header[4], header[5], static_cast<unsigned>(mapper), size);
+    ESP_LOGI(TAG, "rom header ok prg=%u chr=%u mapper=%u corrected=%u size=%ld crc=%08lx",
+             header[4], header[5], static_cast<unsigned>(mapper),
+             static_cast<unsigned>(corrected_mapper), size, static_cast<unsigned long>(crc));
     return true;
 }
 
@@ -824,8 +886,26 @@ bool FcEmulatorService::PublishDirectFrame(const uint16_t* pixels, uint16_t widt
     if (last_log_us == 0) {
         last_log_us = now;
     } else if (now - last_log_us >= 1000000) {
-        ESP_LOGI(TAG, "nofrendo fps=%lu free_internal=%u largest_internal=%u",
+        uint16_t min_pixel = 0xffff;
+        uint16_t max_pixel = 0x0000;
+        uint32_t non_black = 0;
+        const size_t sample_count = static_cast<size_t>(width) * height;
+        const size_t sample_step = std::max<size_t>(1, sample_count / 512);
+        for (size_t i = 0; i < sample_count; i += sample_step) {
+            const uint16_t pixel = pixels[i];
+            min_pixel = std::min(min_pixel, pixel);
+            max_pixel = std::max(max_pixel, pixel);
+            if (pixel != 0x0000) {
+                ++non_black;
+            }
+        }
+        ESP_LOGI(TAG, "nofrendo fps=%lu frame=%ux%u min=%04x max=%04x nonblack_sample=%lu free_internal=%u largest_internal=%u",
                  static_cast<unsigned long>(frames),
+                 static_cast<unsigned>(width),
+                 static_cast<unsigned>(height),
+                 static_cast<unsigned>(min_pixel),
+                 static_cast<unsigned>(max_pixel),
+                 static_cast<unsigned long>(non_black),
                  static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
                  static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
         frames = 0;
@@ -844,6 +924,11 @@ void FcEmulatorService::WriteNofrendoAudio(const int16_t* samples, int sample_co
     AudioCodec* codec = Board::GetInstance().GetAudioCodec();
     if (!codec) {
         return;
+    }
+
+    auto& app = Application::GetInstance();
+    if (!app.IsExternalAudioActive()) {
+        app.SetExternalAudioActive(true);
     }
 
     const int out_rate = codec->output_sample_rate();

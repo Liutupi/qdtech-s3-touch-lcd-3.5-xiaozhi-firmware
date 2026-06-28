@@ -76,6 +76,18 @@ typedef struct inesheader_s
 #define  TRAINER_LENGTH    0x200
 #define  VRAM_LENGTH       0x2000
 
+static uint32 rom_crc32(const uint8 *data, uint32 length)
+{
+   uint32 crc = 0xFFFFFFFF;
+   for (uint32 i = 0; i < length; ++i)
+   {
+      crc ^= data[i];
+      for (int bit = 0; bit < 8; ++bit)
+         crc = (crc >> 1) ^ (0xEDB88320 & (0 - (crc & 1)));
+   }
+   return ~crc;
+}
+
 #define  ROM_BANK_LENGTH   0x4000
 #define  VROM_BANK_LENGTH  0x2000
 
@@ -399,6 +411,36 @@ static int rom_getheader(unsigned char **rom, rominfo_t *rominfo)
    /* Check for VS unisystem mapper */
    if (99 == rominfo->mapper_number)
       rominfo->flags |= ROM_FLAG_VERSUS;
+
+   const uint8 *payload = *rom;
+   if (head.rom_type & ROM_TRAINER)
+      payload += TRAINER_LENGTH;
+   const uint32 payload_size = ((uint32)rominfo->rom_banks * ROM_BANK_LENGTH)
+                             + ((uint32)rominfo->vrom_banks * VROM_BANK_LENGTH);
+   const uint32 crc = rom_crc32(payload, payload_size);
+
+   if (4 == rominfo->mapper_number &&
+       (0xFDEC419F == crc || 0x78292584 == crc || NULL != strstr(rominfo->filename, "Cony")))
+   {
+      log_printf("ROM CRC %08X treated as mapper 83\n", crc);
+      rominfo->mapper_number = 83;
+   }
+   else if (4 == rominfo->mapper_number &&
+            (0x9B518D54 == crc || 0x91396B3F == crc || 0xAA621FA0 == crc || 0x48D1F54A == crc))
+   {
+      log_printf("ROM CRC %08X treated as mapper 224\n", crc);
+      rominfo->mapper_number = 224;
+      rominfo->mirror = MIRROR_HORIZ;
+      rominfo->flags |= ROM_FLAG_BATTERY;
+   }
+   else if (4 == rominfo->mapper_number &&
+            (0x3963F12A == crc || NULL != strstr(rominfo->filename, "吞食天地")))
+   {
+      log_printf("ROM CRC %08X treated as mapper 198\n", crc);
+      rominfo->mapper_number = 198;
+      rominfo->sram_banks = 16;
+      rominfo->flags |= ROM_FLAG_BATTERY;
+   }
 
    return 0;
 }

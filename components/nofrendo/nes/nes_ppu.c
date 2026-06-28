@@ -482,6 +482,16 @@ void ppu_write(uint32 address, uint8 value)
    case PPU_VDATA:
       if (ppu.vaddr < 0x3F00)
       {
+         if (nes_getcontextptr()->rominfo &&
+             198 == nes_getcontextptr()->rominfo->mapper_number)
+         {
+            uint32 addr = ppu.vaddr;
+            if (false == ppu.vram_present && addr >= 0x3000)
+               addr -= 0x1000;
+            PPU_MEM(addr) = value;
+            break;
+         }
+
          /* VRAM only accessible during scanlines 241-260 */
          if ((ppu.bg_on || ppu.obj_on) && !ppu.vram_accessible)
          {

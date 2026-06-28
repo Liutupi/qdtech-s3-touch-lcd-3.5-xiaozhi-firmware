@@ -2,6 +2,51 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-28 Handoff: v1.7.56 FC/NES Mapper Compatibility Pass
+
+Current repo state:
+
+- Branch: `main`.
+- Remote used for this handoff: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Firmware version target: `v1.7.56`.
+- Build directory: `build-qdtech`.
+- Hardware flash port used: `COM13`.
+- Latest app-only flash path: `0x100000 build-qdtech\xiaozhi.bin`.
+
+What changed:
+
+- Added CRC-based mapper correction for known problematic FC/NES ROM dumps.
+- Added mapper 83 (`Cony/Yoko`) scaffold for Cony/Final Fight style ROMs.
+- Added mapper 198 (`TW MMC3+VRAM`) scaffold for the tested `Tun Shi Tian Di 2` dump.
+- Added mapper 224 (`KT-008`) scaffold for tested `Xuan Yuan Jian` dumps.
+- Added forced FC ROM diagnostic logs before nofrendo starts:
+  `rom diag path=... prg=... chr=... header_mapper=... corrected_mapper=... crc=...`.
+- Added mapper 198 CHR-RAM PPU write relaxation and 16KB SRAM setup.
+
+Hardware evidence:
+
+- `轩辕剑` dumps now run after CRC correction to mapper 224.
+- `快打旋风 [Cony Soft].nes` is confirmed by serial log as `crc=fdec419f`, `header_mapper=4`, `corrected_mapper=83`; it still displays garbled graphics while CPU/audio continue running.
+- `吞食天地2 [先锋卡通汉化 (laopix简体中文名字版)].nes` is confirmed by serial log as `crc=3963f12a`, `header_mapper=4`, `corrected_mapper=198`; it still shows black/solid-color output while CPU/audio continue running and frame samples stay effectively constant (`min=max=1084` after startup).
+
+Important limitation:
+
+- Do not report `快打旋风` or `吞食天地2` as fixed. They are identified and routed to candidate mappers, but the nofrendo mapper implementations are still incomplete.
+- The next practical fix is to port more of FCEUmm's mapper83 and MMC3/mapper198 behavior, or replace the FC core with a better-supported NES core if flash/PSRAM budget allows.
+
+Build/flash status:
+
+- `idf.py -B build-qdtech build merge-bin` succeeded for v1.7.56 source.
+- App partition is nearly full; latest observed free space is about `0x8400` bytes.
+- Final v1.7.56 image was app-only flashed to `COM13` at `0x100000`; esptool hash verification passed.
+- Post-flash boot log confirmed `App version: 1.7.56`, WiFi IP `192.168.4.177`, MQTT connected, `Application: STATE: idle`, and live Zhongshan weather sync.
+
+Release assets:
+
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-app.bin`: `F9217510EB5701206158D5AC254D6F90D8B0EFEA6E2C0ADAE3F0756C559793A0`
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-firmware.zip`: `4BD15AAC17BCA83821125490B3C232E9B136DFE5C7D8C99E8BAA9BEEE70158DB`
+- `releases/v1.7.56/qdtech-s3-touch-lcd-3.5-v1.7.56-full.bin`: `5E31B83C3F2AF1AFC4C45EC7D23CB344B44927D3E0C59C2757DE8A04D32E7FDC`
+
 ## What This Project Is
 
 This repository is a long-term firmware fork based on official `xiaozhi-esp32`, adapted for the QDTech ESP32-S3 3.5 inch touch LCD board.
