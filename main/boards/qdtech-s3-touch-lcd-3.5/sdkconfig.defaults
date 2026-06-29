@@ -1,4 +1,6 @@
 CONFIG_BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v1/16m_qdtech_7m_ota.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions/v1/16m_qdtech_7m_ota.csv"
 CONFIG_USE_WECHAT_MESSAGE_STYLE=y
 # FC emulator needs the scarce internal SRAM on this ESP32-S3 board.
 # Keep audio capture/playback, but disable local AFE wake word and noise reduction.

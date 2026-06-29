@@ -1,3 +1,24 @@
+# 2026-06-29 Project Status: v1.7.61
+
+Firmware:
+
+- Version bumped to `1.7.61`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Local macOS build used ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`.
+- Build/flash directory: `build-qdtech-s3-final`.
+- QDTech now uses `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots; NVS remains at `0x9000`.
+- Latest app image: `build-qdtech-s3-final/xiaozhi.bin`.
+- Latest app size: `0x62bd30`, leaving `0xd42d0` bytes (12%) in the `0x700000` app partition.
+- Flashed to `/dev/cu.usbmodem212401` at 921600 baud; boot log confirmed `App version: 1.7.61`, `SKU=qdtech-s3-touch-lcd-3.5`, desktop UI, touch input, FC emulator service, WiFi station scanning, and fallback provisioning hotspot startup.
+- Release assets are in `releases/v1.7.61/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+WiFi provisioning status:
+
+- Saved WiFi credentials are now trimmed to 5 newest/default-first entries.
+- Startup still scans for saved WiFi networks, but the fallback to provisioning mode is now about 30 seconds when no saved network connects in a new environment.
+- Provisioning manual scan keeps the v1.7.60 pure-SoftAP/manual-`/scan` behavior and guards against a null scan timer.
+- Fixed a fallback reboot caused by a duplicate ESP-IDF STA netif when switching from station scan mode into provisioning. Hardware verification showed `STATE: configuring`, SoftAP `Xiaozhi-AAA9`, DHCP/web server at `192.168.4.1`, and no reset after fallback.
+
 # 2026-06-28 Project Status: v1.7.60
 
 Firmware:

@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-29: v1.7.61 New-Environment WiFi Fallback
+
+Scope:
+
+- Bumped firmware version to `1.7.61`.
+- Added a QDTech-specific 16 MB flash partition table with two 7 MB OTA app slots so the current FC emulator firmware image fits without moving NVS.
+- Limited saved WiFi credentials to 5 entries across startup cleanup, normal WiFi switching, provisioning-page saves, and component-level auth saves.
+- Shortened startup WiFi fallback from 60 seconds to 30 seconds so a board moved into a new environment enters provisioning sooner when none of the saved networks can connect.
+- Guarded the provisioning scan event against a null scan timer in the current manual-scan SoftAP flow.
+- Fixed the reboot that happened during new-environment fallback by destroying the station netif before entering provisioning and creating AP+STA station netif only when manual scan or setup-time join needs it.
+
+Verification:
+
+- Configured locally with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; CMake reported `App "xiaozhi" version: 1.7.61`.
+- Build compiled the updated WiFi component, QDTech board sources, and FC emulator service and generated `build-qdtech-s3-final/xiaozhi.bin`.
+- Size check passed with 7 MB OTA partitions: app size `0x62bd30`, partition `0x700000`, free `0xd42d0` (12%).
+- Flashed to `/dev/cu.usbmodem212401` at 921600 baud; bootloader, partition table, OTA data, SR models, and app image hash verification passed.
+- Boot log confirmed `App version: 1.7.61`, `SKU=qdtech-s3-touch-lcd-3.5`, desktop UI creation, touch max points 5, FC emulator service registration, and WiFi station scan retry logs.
+- Post-fix serial verification confirmed automatic fallback after about 30 seconds: `STATE: configuring`, SoftAP `Xiaozhi-AAA9`, DHCP/web server at `192.168.4.1`, no duplicate-netif assert, and no reboot.
+
+Release assets:
+
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-app.bin`: `363A0B7FF8F790345636414E5019D563AB0AE8B04CDF244E04D15DA850127591`
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-firmware.zip`: `B6B3A98894B1CEC69F9A36BCE0CC80D0D76F0E39F036D7A40996CB0A954E4716`
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-full.bin`: `809E7081CDC42684C0222BD62CFBAA7EE69BE1887B764418D553A44F2472C98C`
+
 ## 2026-06-28: v1.7.60 New-Board WiFi Provisioning Fix
 
 Scope:

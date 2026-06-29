@@ -21,6 +21,7 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+static constexpr size_t kMaxSavedWifiCount = 5;
 
 extern const char index_html_start[] asm("_binary_wifi_configuration_html_start");
 extern const char done_html_start[] asm("_binary_wifi_configuration_done_html_start");
@@ -109,7 +110,6 @@ void WifiConfigurationAp::StartAccessPoint()
 
     // Create the default event loop
     ap_netif_ = esp_netif_create_default_wifi_ap();
-    sta_netif_ = esp_netif_create_default_wifi_sta();
 
     // Set the router IP address to 192.168.4.1
     esp_netif_ip_info_t ip_info;
@@ -285,6 +285,12 @@ void WifiConfigurationAp::StartWebServer()
                 wifi_scan_config_t scan_config = {};
                 scan_config.show_hidden = true;
                 ESP_LOGI(TAG, "manual scan requested");
+                if (this_->sta_netif_ == nullptr) {
+                    this_->sta_netif_ = esp_netif_create_default_wifi_sta();
+                    if (this_->sta_netif_ == nullptr) {
+                        ESP_LOGW(TAG, "create STA netif for scan failed");
+                    }
+                }
                 esp_err_t mode_err = esp_wifi_set_mode(WIFI_MODE_APSTA);
                 if (mode_err != ESP_OK) {
                     ESP_LOGW(TAG, "switch APSTA for scan failed: %s", esp_err_to_name(mode_err));
@@ -646,6 +652,14 @@ bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::stri
     is_connecting_ = true;
     esp_wifi_scan_stop();
     xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    if (sta_netif_ == nullptr) {
+        sta_netif_ = esp_netif_create_default_wifi_sta();
+        if (sta_netif_ == nullptr) {
+            ESP_LOGE(TAG, "Failed to create STA netif");
+            is_connecting_ = false;
+            return false;
+        }
+    }
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
     wifi_config_t wifi_config;
@@ -681,7 +695,16 @@ bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::stri
 void WifiConfigurationAp::Save(const std::string &ssid, const std::string &password)
 {
     ESP_LOGI(TAG, "Save SSID %s %d", ssid.c_str(), ssid.length());
-    SsidManager::GetInstance().AddSsid(ssid, password);
+    auto& ssid_manager = SsidManager::GetInstance();
+    ssid_manager.AddSsid(ssid, password);
+    auto ssid_list = ssid_manager.GetSsidList();
+    while (ssid_list.size() > kMaxSavedWifiCount) {
+        ESP_LOGW(TAG, "Saved WiFi list exceeds %u, removing oldest entry %s",
+                 static_cast<unsigned>(kMaxSavedWifiCount),
+                 ssid_list.back().ssid.c_str());
+        ssid_manager.RemoveSsid(static_cast<int>(ssid_list.size() - 1));
+        ssid_list = ssid_manager.GetSsidList();
+    }
 }
 
 void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -711,7 +734,9 @@ void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_bas
                  ap_num,
                  static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
                  static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
-        esp_timer_start_once(self->scan_timer_, 30 * 1000000);
+        if (self->scan_timer_) {
+            esp_timer_start_once(self->scan_timer_, 30 * 1000000);
+        }
     }
 }
 
@@ -822,6 +847,10 @@ void WifiConfigurationAp::Stop() {
     if (ap_netif_) {
         esp_netif_destroy(ap_netif_);
         ap_netif_ = nullptr;
+    }
+    if (sta_netif_) {
+        esp_netif_destroy(sta_netif_);
+        sta_netif_ = nullptr;
     }
 
     ESP_LOGI(TAG, "Wifi configuration AP stopped");

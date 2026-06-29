@@ -15,6 +15,7 @@
 #define TAG "wifi"
 #define WIFI_EVENT_CONNECTED BIT0
 #define MAX_RECONNECT_COUNT 5
+static constexpr size_t kMaxSavedWifiCount = 5;
 
 WifiStation& WifiStation::GetInstance() {
     static WifiStation instance;
@@ -49,6 +50,14 @@ WifiStation::~WifiStation() {
 void WifiStation::AddAuth(const std::string &&ssid, const std::string &&password) {
     auto& ssid_manager = SsidManager::GetInstance();
     ssid_manager.AddSsid(ssid, password);
+    auto ssid_list = ssid_manager.GetSsidList();
+    while (ssid_list.size() > kMaxSavedWifiCount) {
+        ESP_LOGW(TAG, "Saved WiFi list exceeds %u, removing oldest entry %s",
+                 static_cast<unsigned>(kMaxSavedWifiCount),
+                 ssid_list.back().ssid.c_str());
+        ssid_manager.RemoveSsid(static_cast<int>(ssid_list.size() - 1));
+        ssid_list = ssid_manager.GetSsidList();
+    }
 }
 
 void WifiStation::Stop() {
@@ -71,6 +80,11 @@ void WifiStation::Stop() {
     // Reset the WiFi stack
     ESP_ERROR_CHECK(esp_wifi_stop());
     ESP_ERROR_CHECK(esp_wifi_deinit());
+
+    if (sta_netif_ != nullptr) {
+        esp_netif_destroy(sta_netif_);
+        sta_netif_ = nullptr;
+    }
 }
 
 void WifiStation::OnScanBegin(std::function<void()> on_scan_begin) {
@@ -101,7 +115,10 @@ void WifiStation::Start() {
                                                         &instance_got_ip_));
 
     // Create the default event loop
-    esp_netif_create_default_wifi_sta();
+    if (sta_netif_ == nullptr) {
+        sta_netif_ = esp_netif_create_default_wifi_sta();
+        ESP_ERROR_CHECK(sta_netif_ ? ESP_OK : ESP_FAIL);
+    }
 
     // Initialize the WiFi stack in station mode
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();

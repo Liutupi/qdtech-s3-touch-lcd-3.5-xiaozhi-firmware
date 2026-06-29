@@ -2,6 +2,50 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-29 Handoff: v1.7.61 New-Environment WiFi Fallback
+
+Current repo state:
+
+- Branch: `main`.
+- Firmware version target: `v1.7.61`.
+- Local macOS build used ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`.
+- Build/flash directory: `build-qdtech-s3-final`.
+- The QDTech board now uses a 7 MB OTA app partition table (`partitions/v1/16m_qdtech_7m_ota.csv`) so the FC emulator build fits while preserving the NVS offset.
+- `build-qdtech-s3-final/xiaozhi.bin` size is `0x62bd30`; the smallest app partition is `0x700000`, leaving `0xd42d0` bytes (12%) free.
+- Flashed successfully to `/dev/cu.usbmodem212401` at 921600 baud with bootloader, partition table, OTA data, SR models, and app image; all esptool hash checks passed.
+- The local build needed an ignored temporary fix in downloaded `managed_components/78__esp-opus-encoder/CMakeLists.txt` to expose `78__esp-opus` as a public requirement; that dependency fix is not part of the tracked v1.7.61 source changes.
+
+What changed:
+
+- Startup WiFi now trims the saved WiFi list to the newest/default-first 5 entries before attempting to connect.
+- All known new-credential paths now trim the saved list to 5 entries after saving:
+  - normal `WifiBoard::SwitchToWifi(...)`;
+  - provisioning web page `WifiConfigurationAp::Save(...)`;
+  - component-level `WifiStation::AddAuth(...)`.
+- Startup WiFi connection fallback is shortened from 60 seconds to 30 seconds. If none of the saved networks connect in the new environment, the board stops STA mode and enters the existing `Xiaozhi-xxxx` provisioning hotspot sooner.
+- The provisioning scan event no longer attempts to restart a null `scan_timer_`, which keeps manual `/scan` safe in the current pure-SoftAP/manual-scan provisioning flow.
+- Fixed the new-environment fallback reboot: `WifiStation::Stop()` now destroys the default STA netif before provisioning starts, and the provisioning AP only creates a STA netif when manual scanning or setup-time joining needs AP+STA mode. This avoids the ESP-IDF duplicate-netif assertion that previously reset the board before the hotspot became visible.
+
+Expected behavior:
+
+- In a known environment, the station scan still matches any visible saved SSID and connects by strongest scan result.
+- In a new environment with none of the 5 saved WiFi networks visible/usable, the board should automatically fall back to WiFi provisioning after about 30 seconds.
+- Adding a sixth WiFi keeps the newest one and drops the oldest saved entry.
+
+Verification:
+
+- `idf.py -B build-qdtech-s3-final ... set-target esp32s3 build` configured successfully and reported `App "xiaozhi" version: 1.7.61`.
+- `idf.py -B build-qdtech-s3-final build` compiled the updated WiFi component files, QDTech board sources, and FC emulator service.
+- Size check passed with 7 MB OTA partitions: `xiaozhi.bin` `0x62bd30`, app partition `0x700000`, free `0xd42d0`.
+- Boot log after flash confirmed `App version: 1.7.61`, `SKU=qdtech-s3-touch-lcd-3.5`, desktop UI creation, touch max points 5, FC emulator service registration, and WiFi station scan retry logs.
+- Hardware verification after the fallback hotfix: after about 30 seconds without a saved WiFi match, the board entered `STATE: configuring`, started SoftAP as `Xiaozhi-AAA9`, started DHCP/web server at `192.168.4.1`, and did not reboot. A client was assigned `192.168.4.2`.
+
+Release assets:
+
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-app.bin`: `363A0B7FF8F790345636414E5019D563AB0AE8B04CDF244E04D15DA850127591`
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-firmware.zip`: `B6B3A98894B1CEC69F9A36BCE0CC80D0D76F0E39F036D7A40996CB0A954E4716`
+- `releases/v1.7.61/qdtech-s3-touch-lcd-3.5-v1.7.61-full.bin`: `809E7081CDC42684C0222BD62CFBAA7EE69BE1887B764418D553A44F2472C98C`
+
 ## 2026-06-28 Handoff: v1.7.60 New-Board WiFi Provisioning Fix
 
 Current repo state:

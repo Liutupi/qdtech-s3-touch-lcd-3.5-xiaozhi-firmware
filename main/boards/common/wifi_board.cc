@@ -22,6 +22,20 @@
 #include <ssid_manager.h>
 
 static const char *TAG = "WifiBoard";
+static constexpr size_t kMaxSavedWifiCount = 5;
+static constexpr int kStartupWifiConnectTimeoutMs = 30 * 1000;
+
+static void TrimSavedWifiList() {
+    auto& ssid_manager = SsidManager::GetInstance();
+    auto ssid_list = ssid_manager.GetSsidList();
+    while (ssid_list.size() > kMaxSavedWifiCount) {
+        ESP_LOGW(TAG, "Saved WiFi list exceeds %u, removing oldest entry %s",
+                 static_cast<unsigned>(kMaxSavedWifiCount),
+                 ssid_list.back().ssid.c_str());
+        ssid_manager.RemoveSsid(static_cast<int>(ssid_list.size() - 1));
+        ssid_list = ssid_manager.GetSsidList();
+    }
+}
 
 WifiBoard::WifiBoard() {
     Settings settings("wifi", true);
@@ -73,6 +87,7 @@ void WifiBoard::StartNetwork() {
 
     // If no WiFi SSID is configured, enter WiFi configuration mode
     auto& ssid_manager = SsidManager::GetInstance();
+    TrimSavedWifiList();
     auto ssid_list = ssid_manager.GetSsidList();
     if (ssid_list.empty()) {
         wifi_config_mode_ = true;
@@ -102,7 +117,9 @@ void WifiBoard::StartNetwork() {
     wifi_station.Start();
 
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
-    if (!wifi_station.WaitForConnected(60 * 1000)) {
+    if (!wifi_station.WaitForConnected(kStartupWifiConnectTimeoutMs)) {
+        ESP_LOGW(TAG, "No saved WiFi connected within %d ms, entering provisioning mode",
+                 kStartupWifiConnectTimeoutMs);
         wifi_station.Stop();
         wifi_config_mode_ = true;
         EnterWifiConfigMode();
@@ -192,6 +209,7 @@ bool WifiBoard::SwitchToWifi(const std::string& ssid, const std::string& passwor
     // 添加新的WiFi配置
     auto& ssid_manager = SsidManager::GetInstance();
     ssid_manager.AddSsid(ssid, password);
+    TrimSavedWifiList();
     
     // 重新启动WiFi连接
     wifi_station.OnScanBegin([this]() {
