@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-30: v1.7.63 Interruptible Music URL Playback
+
+Scope:
+
+- Bumped firmware version to `1.7.63`.
+- Made `self.music.play_url` interrupt the active radio/custom URL stream before opening the new MP3 URL.
+- Added `self.music.stop` as an explicit MCP stop tool for music URL playback.
+- Added a RadioService stream-generation guard so stop/next/previous/new URL requests break the HTTP/MP3 decode loop promptly.
+- Restored normal radio station state after stopping or changing away from a transient music URL.
+- Kept the radio task on a PSRAM stack for internal-SRAM headroom, but skipped station-index NVS writes from that PSRAM task to avoid the ESP-IDF cache-disabled stack assert.
+- Copied URL/station data before playback so a second song cannot invalidate the currently-open stream's references.
+
+Verification:
+
+- Built on Windows with `ninja -C build-qdtech-v1.7.62 -j 1 all`; CMake reported `App "xiaozhi" version: 1.7.63`.
+- App binary size was `0x62c1c0`; smallest app partition is `0x700000`; free app space is `0xd3e40` (about 12%).
+- App-only flashed to `COM13` at `0x100000`; esptool hash verification passed.
+- Serial confirmed `self.music.play_url` and `self.music.stop` are registered.
+- Serial confirmed a NetEase direct MP3 URL opened with HTTP `200` and decoded continuous `44100` Hz MP3 frames.
+- Radio play/stop/next was tested after URL playback and did not reproduce the earlier `esp_task_stack_is_sane_cache_disabled()` reboot.
+
+Known limitations:
+
+- `self.music.play_url` still requires a direct playable HTTP/HTTPS MP3 URL from the Mac-side NetEase MCP.
+- Touch I2C timeout/reset logs were observed during heavy audio/network use but recovered without reboot.
+
 ## 2026-06-29: v1.7.62 NetEase MCP URL Playback Bridge
 
 Scope:

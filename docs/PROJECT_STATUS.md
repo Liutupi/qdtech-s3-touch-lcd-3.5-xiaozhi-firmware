@@ -1,3 +1,24 @@
+# 2026-06-30 Project Status: v1.7.63
+
+Firmware:
+
+- Version bumped to `1.7.63`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows build directory reused for this hotfix: `build-qdtech-v1.7.62`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-v1.7.62\xiaozhi.bin`.
+- Latest app size: `0x62c1c0`, leaving `0xd3e40` bytes (about 12%) in the `0x700000` app partition.
+- Flashed app-only to `COM13` at `0x100000` using 460800 baud; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.63`.
+
+Music MCP playback status:
+
+- `self.music.play_url(title, artist, url)` now interrupts the previous custom URL/radio stream before starting the requested MP3 URL.
+- New `self.music.stop` tool stops music URL playback explicitly.
+- Serial verification confirmed a NetEase direct MP3 URL opened with HTTP `200` and decoded continuous `44100` Hz frames.
+- Radio play/stop/next works after the fix without the previous `esp_task_stack_is_sane_cache_disabled()` reboot.
+- The radio task remains on a PSRAM stack for internal-SRAM headroom; station-index NVS saves are skipped from that task to avoid flash/cache-disabled stack asserts.
+
 # 2026-06-29 Project Status: v1.7.62
 
 Firmware:

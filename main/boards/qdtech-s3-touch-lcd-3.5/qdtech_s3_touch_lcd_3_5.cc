@@ -1041,7 +1041,7 @@ private:
         
         // WiFi管理工具
         mcp_server.AddTool("self.music.play_url",
-            "Play a direct HTTP MP3 music URL on this device speaker. Use this after a music search tool returns a playable URL. The url must be a direct audio stream, not a web page.",
+            "Play a direct HTTP MP3 music URL on this device speaker. Calling this again interrupts the current URL or radio stream. The url must be a direct audio stream, not a web page.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1051,6 +1051,12 @@ private:
                 const auto artist = properties["artist"].value<std::string>();
                 const auto url = properties["url"].value<std::string>();
                 return radio_service_.PlayUrlFromTool(title, artist, url);
+            });
+        mcp_server.AddTool("self.music.stop",
+            "Stop the current music URL playback on this device speaker.",
+            PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
+                radio_service_.Stop();
+                return true;
             });
 
         mcp_server.AddTool("self.wifi.list_saved",

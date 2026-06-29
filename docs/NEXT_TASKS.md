@@ -1,18 +1,20 @@
-# 2026-06-29 v1.7.62 NetEase MCP URL Playback Follow-Up
+# 2026-06-30 v1.7.63 NetEase MCP URL Playback Follow-Up
 
 Current state:
 
-- Source has a published `v1.7.62` device-side playback bridge for NetEase/music MCP workflows.
-- Build, merge-bin, size, release packaging, and full hardware flash passed.
-- App partition free space is `0xd4650` bytes in the 7 MB QDTech OTA app slot.
-- Flash and boot verification passed on `COM13`; logs showed `App version: 1.7.62`, `Ota: Current version: 1.7.62`, `self.music.play_url` registration, MQTT connected, and `STATE: idle`.
+- Source has a `v1.7.63` device-side playback hotfix for NetEase/music MCP workflows.
+- `self.music.play_url` can now interrupt current URL/radio playback, and `self.music.stop` is registered for explicit music stop requests.
+- App partition free space is `0xd3e40` bytes in the 7 MB QDTech OTA app slot.
+- App-only flash and boot verification passed on `COM13`; logs showed `App version: 1.7.63`, `self.music.play_url` and `self.music.stop` registration, and stable idle operation.
+- Serial verification confirmed a NetEase direct MP3 URL opened with HTTP `200` and decoded continuous `44100` Hz frames.
+- Radio play/stop/next worked after the fix without the previous PSRAM-stack NVS cache assertion reboot.
 
 Next steps:
 
 - On the Mac-side NetEase MCP flow, confirm the music tool returns a direct playable HTTP/HTTPS MP3 stream URL, not only a song id or web page URL.
-- Confirm XiaoZhi server logs show a second device-tool call to `self.music.play_url` with `title`, `artist`, and `url` after the NetEase MCP search/link step.
-- If `self.music.play_url` is called but playback fails, capture serial logs around `music url play requested`, HTTP open/read, MP3 decode, and audio focus state.
-- Re-test repeated `self.audio_speaker.set_volume` calls during music requests; they should no longer cause a pthread abort or PSRAM-stack NVS cache assertion.
+- If the server says it found a song but there is no sound, first check whether serial shows `% self.music.play_url...`; if not, the remaining bug is server tool routing.
+- If `self.music.play_url` is called but playback fails, capture serial logs around `music url play requested`, HTTP open/read, MP3 decode, audio focus state, and internal heap.
+- Re-test two consecutive song requests from the Mac-side MCP flow; the second call should interrupt the first stream rather than waiting for reboot.
 
 # 2026-06-28 FC/NES Mapper Follow-Up
 

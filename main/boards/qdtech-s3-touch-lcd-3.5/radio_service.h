@@ -45,8 +45,8 @@ private:
     void PostCommand(Command command);
     void Task();
     void HandleCommand(Command command);
-    void PlayCurrentStation();
-    bool PlayUrl(const char* url, int url_index);
+    void PlayCurrentStation(uint32_t stream_generation);
+    bool PlayUrl(const std::string& url, int url_index, uint32_t stream_generation);
     bool IsXiaozhiAudioState() const;
     bool ShouldYieldAudio() const;
     void OnDeviceStateChanged(int previous_state, int current_state);
@@ -63,6 +63,7 @@ private:
     DesktopUI* desktop_ui_ = nullptr;
     void* queue_ = nullptr;
     TaskHandle_t task_handle_ = nullptr;
+    bool task_stack_internal_ = false;
     bool started_ = false;
     std::atomic<bool> play_requested_{false};
     std::atomic<bool> stop_requested_{false};
@@ -72,6 +73,9 @@ private:
     std::vector<int> last_success_url_;
     int station_index_ = 0;
     int custom_station_index_ = -1;
+    int last_radio_station_index_ = 0;
+    bool playing_custom_url_ = false;
+    std::atomic<uint32_t> stream_generation_{0};
     std::vector<int16_t> pcm_mono_buf_;
     std::vector<int16_t> pcm_output_buf_;
     int32_t audio_gain_q12_ = 4096;

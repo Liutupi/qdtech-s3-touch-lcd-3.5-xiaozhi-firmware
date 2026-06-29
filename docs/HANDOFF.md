@@ -2,6 +2,47 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-30 Handoff: v1.7.63 Interruptible NetEase Music URL Playback
+
+Current repo state:
+
+- Branch: `main`.
+- Firmware version target: `v1.7.63`.
+- Remote: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Build directory used on Windows: `build-qdtech-v1.7.62` reused as the incremental v1.7.63 build directory.
+- Hardware flash/serial verification: app-only flashed and verified on `COM13`.
+- The build continues to use the QDTech 7 MB OTA partition table: `partitions/v1/16m_qdtech_7m_ota.csv`.
+
+What changed:
+
+- Bumped firmware version to `1.7.63`.
+- `self.music.play_url` now interrupts any current URL/radio stream before starting the new MP3 URL.
+- Added `self.music.stop`, mapped to the same RadioService stop path, so the XiaoZhi server can stop music URL playback explicitly.
+- RadioService now uses a stream generation counter so stop/next/previous/new URL can break the HTTP/MP3 playback loop instead of waiting for the old stream.
+- Custom music URL playback remembers the prior radio station and restores normal radio controls after stop/next/previous.
+- The radio task stays on a PSRAM stack to preserve scarce internal SRAM for MCP calls, but station-index NVS saves are skipped from that PSRAM task to avoid `esp_task_stack_is_sane_cache_disabled()` asserts.
+- Playback code copies URL/station data before opening a stream, avoiding dangling references when a second song replaces the transient music station.
+
+Build evidence:
+
+- Single-thread incremental Ninja build completed with `ninja -C build-qdtech-v1.7.62 -j 1 all`.
+- CMake reported `App "xiaozhi" version: 1.7.63`.
+- Final app binary: `build-qdtech-v1.7.62\xiaozhi.bin`.
+- Final app binary size: `0x62c1c0`; smallest app partition: `0x700000`; free space: `0xd3e40` (about 12%).
+
+Hardware evidence:
+
+- App-only flashed `build-qdtech-v1.7.62\xiaozhi.bin` to `COM13` at `0x100000` with esptool `460800`; hash verified.
+- Boot log confirmed `App version: 1.7.63`.
+- Boot log confirmed `MCP: Add tool: self.music.play_url` and `MCP: Add tool: self.music.stop`.
+- Serial test confirmed `self.music.play_url` accepted with internal SRAM available, opened a NetEase direct MP3 URL with HTTP `200`, and decoded continuous MP3 frames at `44100` Hz.
+- Radio page test confirmed play, stop, and next station worked without the earlier `spi_flash_disable_interrupts_caches_and_other_cpu ... esp_task_stack_is_sane_cache_disabled()` reboot.
+
+Known follow-up:
+
+- The final post-flash capture confirmed boot stability; one earlier v1.7.63 capture confirmed NetEase MP3 frame output. If the server still answers without audio, capture serial for whether it calls `self.music.play_url` or only the Mac-side NetEase MCP.
+- Some touch I2C timeout/reset logs can still appear under heavy audio/network activity; they did not cause this music playback failure.
+
 ## 2026-06-29 Handoff: v1.7.62 NetEase MCP URL Playback Bridge
 
 Current repo state:
