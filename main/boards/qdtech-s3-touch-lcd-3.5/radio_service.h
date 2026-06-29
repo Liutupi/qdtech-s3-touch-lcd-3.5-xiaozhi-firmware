@@ -5,6 +5,9 @@
 #include <atomic>
 #include <vector>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
 class DesktopUI;
 
 class RadioService {
@@ -15,6 +18,7 @@ public:
     void Stop();
     void Next();
     void Prev();
+    std::string PlayUrlFromTool(const std::string& title, const std::string& artist, const std::string& url);
     std::string GetStatusJson() const;
     std::string SelectStation(const std::string& station);
     
@@ -35,6 +39,7 @@ private:
         NEXT,
         PREV,
         FOCUS_CHANGED,
+        PLAY_CUSTOM_URL,
     };
 
     void PostCommand(Command command);
@@ -57,6 +62,7 @@ private:
 
     DesktopUI* desktop_ui_ = nullptr;
     void* queue_ = nullptr;
+    TaskHandle_t task_handle_ = nullptr;
     bool started_ = false;
     std::atomic<bool> play_requested_{false};
     std::atomic<bool> stop_requested_{false};
@@ -65,6 +71,7 @@ private:
     int reconnect_attempt_ = 0;
     std::vector<int> last_success_url_;
     int station_index_ = 0;
+    int custom_station_index_ = -1;
     std::vector<int16_t> pcm_mono_buf_;
     std::vector<int16_t> pcm_output_buf_;
     int32_t audio_gain_q12_ = 4096;

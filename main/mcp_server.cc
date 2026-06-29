@@ -6,6 +6,7 @@
 #include "mcp_server.h"
 #include <esp_log.h>
 #include <esp_app_desc.h>
+#include <esp_heap_caps.h>
 #include <algorithm>
 #include <cstring>
 #include <esp_pthread.h>
@@ -17,6 +18,8 @@
 #define TAG "MCP"
 
 #define DEFAULT_TOOLCALL_STACK_SIZE 6144
+static constexpr size_t kMinToolCallInternalFree = 4096;
+static constexpr size_t kMinToolCallLargestInternalBlock = 3072;
 
 McpServer::McpServer() {
 }
@@ -344,21 +347,44 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
         return;
     }
 
+    const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "tools/call %s stack=%d free_internal=%u largest_internal=%u",
+             tool_name.c_str(), stack_size,
+             static_cast<unsigned>(free_internal),
+             static_cast<unsigned>(largest_internal));
+    if (free_internal < kMinToolCallInternalFree || largest_internal < kMinToolCallLargestInternalBlock) {
+        ESP_LOGW(TAG, "tools/call %s rejected, low internal memory", tool_name.c_str());
+        ReplyError(id, "Device is busy and low on internal memory; please try again after this response finishes.");
+        return;
+    }
+
     // Start a task to receive data with stack size
     esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
     cfg.thread_name = "tool_call";
     cfg.stack_size = stack_size;
     cfg.prio = 1;
-    esp_pthread_set_cfg(&cfg);
+    cfg.stack_alloc_caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+    auto err = esp_pthread_set_cfg(&cfg);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "tools/call %s pthread config failed: %s", tool_name.c_str(), esp_err_to_name(err));
+        ReplyError(id, "Device could not prepare the tool call thread.");
+        return;
+    }
 
     // Use a thread to call the tool to avoid blocking the main thread
-    tool_call_thread_ = std::thread([this, id, tool_iter, arguments = std::move(arguments)]() {
-        try {
-            ReplyResult(id, (*tool_iter)->Call(arguments));
-        } catch (const std::exception& e) {
-            ESP_LOGE(TAG, "tools/call: %s", e.what());
-            ReplyError(id, e.what());
-        }
-    });
-    tool_call_thread_.detach();
+    try {
+        tool_call_thread_ = std::thread([this, id, tool_iter, arguments = std::move(arguments)]() {
+            try {
+                ReplyResult(id, (*tool_iter)->Call(arguments));
+            } catch (const std::exception& e) {
+                ESP_LOGE(TAG, "tools/call: %s", e.what());
+                ReplyError(id, e.what());
+            }
+        });
+        tool_call_thread_.detach();
+    } catch (const std::exception& e) {
+        ESP_LOGE(TAG, "tools/call %s thread create failed: %s", tool_name.c_str(), e.what());
+        ReplyError(id, "Device could not start the tool call thread.");
+    }
 }

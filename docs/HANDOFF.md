@@ -2,6 +2,56 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-29 Handoff: v1.7.62 NetEase MCP URL Playback Bridge
+
+Current repo state:
+
+- Branch: `main`.
+- Firmware version target: `v1.7.62`.
+- Remote: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Build directory: `build-qdtech-v1.7.62`.
+- Hardware flash/serial verification: flashed and boot-verified on `COM13`.
+- The build uses the v1.7.61 QDTech 7 MB OTA partition table: `partitions/v1/16m_qdtech_7m_ota.csv`.
+
+What changed:
+
+- Added device MCP tool `self.music.play_url`.
+- Tool arguments are `title`, `artist`, and `url`.
+- The callback calls `RadioService::PlayUrlFromTool(title, artist, url)`.
+- `RadioService::PlayUrlFromTool(...)` validates that the URL starts with `http://` or `https://`, creates/updates a transient MP3 station named `title - artist`, switches XiaoZhi back to idle when needed, and posts a custom play command to the existing radio/MP3 playback task.
+- Local MCP tool calls now log internal heap, refuse calls when internal heap is too low, and create tool-call threads with internal-memory stacks so NVS/flash operations such as volume persistence do not run on PSRAM stacks.
+- Output volume writes are de-duplicated and NVS persistence is throttled to reduce repeated `self.audio_speaker.set_volume` churn.
+- Radio and Podcast task startup retain the low-memory guards from the local hardening pass.
+
+Build evidence:
+
+- `idf.py -B build-qdtech-v1.7.62 -D SDKCONFIG="build-qdtech-v1.7.62/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build merge-bin` completed.
+- `build-qdtech-v1.7.62\project_description.json` reports `project_version: 1.7.62`.
+- `idf.py -B build-qdtech-v1.7.62 size` passed.
+- App binary size: `0x62b9b0`; smallest app partition: `0x700000`; free space: `0xd4650` (about 12%).
+- Merged binary size: `7518640` bytes.
+
+Hardware evidence:
+
+- Flashed `COM13` at 921600 baud with bootloader, `xiaozhi.bin`, partition table, OTA data, and SR models; every esptool segment hash verified.
+- Boot log confirmed `App version: 1.7.62`.
+- Boot log confirmed `Ota: Current version: 1.7.62`.
+- Boot log confirmed `MCP: Add tool: self.music.play_url`.
+- Boot log confirmed WiFi connected to `liutupi`, MQTT connected, and `Application: STATE: idle`.
+- Radio startup log showed `radio task create free_internal=63659 largest_internal=63488` and `radio task started stack=6144`.
+- No panic, abort, Guru Meditation, or backtrace appeared in the 55 second boot capture.
+
+Release assets:
+
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-app.bin`: `7B01CDCDE60BDBD9CAACC56526DA9371B8C649074E73C5F4757030A0B18A3EB3`
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-firmware.zip`: `A54638B2B7B8D1275E4B11271CF0E3E3BC94B767115BD08086F953E0694548E7`
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-full.bin`: `75EEB5E43E736D0530D2263D0EE592ACCF51C1690C121BA34BB70ADAAB48D9AC`
+
+Important follow-up:
+
+- On the Mac-side NetEase MCP path, confirm the tool result contains a direct playable `http://` or `https://` MP3 stream URL.
+- Confirm the XiaoZhi server/LLM calls device tool `self.music.play_url` after the NetEase search/link tool returns. If logs show only the NetEase MCP call and no `self.music.play_url`, the remaining fix is server prompt/tool-routing, not firmware.
+
 ## 2026-06-29 Handoff: v1.7.61 New-Environment WiFi Fallback
 
 Current repo state:

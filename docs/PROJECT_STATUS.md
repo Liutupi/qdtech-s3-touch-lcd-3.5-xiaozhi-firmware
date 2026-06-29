@@ -1,3 +1,23 @@
+# 2026-06-29 Project Status: v1.7.62
+
+Firmware:
+
+- Version bumped to `1.7.62`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows build directory: `build-qdtech-v1.7.62`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-v1.7.62\xiaozhi.bin`.
+- Latest app size: `0x62b9b0`, leaving `0xd4650` bytes (about 12%) in the `0x700000` app partition.
+- Latest merged image: `build-qdtech-v1.7.62\merged-binary.bin`, `7518640` bytes.
+- Flashed to `COM13` at 921600 baud; boot log confirmed `App version: 1.7.62`, `Ota: Current version: 1.7.62`, `MCP: Add tool: self.music.play_url`, MQTT connected, and `Application: STATE: idle`.
+- Release assets are in `releases/v1.7.62/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+Music MCP playback status:
+
+- Device now exposes `self.music.play_url(title, artist, url)` to the XiaoZhi server MCP tool list.
+- The tool routes direct HTTP/HTTPS MP3 stream URLs through the existing RadioService MP3 player.
+- Remaining Mac-side requirement: NetEase MCP or the LLM tool chain must produce a direct playable URL and then call `self.music.play_url`; a search result or web page URL alone is not enough for device playback.
+
 # 2026-06-29 Project Status: v1.7.61
 
 Firmware:

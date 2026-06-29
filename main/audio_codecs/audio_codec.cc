@@ -5,6 +5,7 @@
 #include <esp_log.h>
 #include <cstring>
 #include <driver/i2s_common.h>
+#include <esp_timer.h>
 
 #define TAG "AudioCodec"
 
@@ -43,11 +44,19 @@ void AudioCodec::Start() {
 }
 
 void AudioCodec::SetOutputVolume(int volume) {
+    if (volume == output_volume_) {
+        return;
+    }
     output_volume_ = volume;
     ESP_LOGI(TAG, "Set output volume to %d", output_volume_);
-    
-    Settings settings("audio", true);
-    settings.SetInt("output_volume", output_volume_);
+
+    static int64_t last_saved_us = 0;
+    const int64_t now_us = esp_timer_get_time();
+    if (now_us - last_saved_us > 5000000) {
+        Settings settings("audio", true);
+        settings.SetInt("output_volume", output_volume_);
+        last_saved_us = now_us;
+    }
 }
 
 void AudioCodec::EnableInput(bool enable) {

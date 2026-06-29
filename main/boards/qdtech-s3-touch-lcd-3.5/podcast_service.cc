@@ -212,7 +212,19 @@ void PodcastService::EnsureTaskStarted() {
     if (task_handle_) {
         return;
     }
-    queue_ = xQueueCreate(8, sizeof(Command));
+    if (!queue_) {
+        queue_ = xQueueCreate(8, sizeof(Command));
+    }
+    if (!queue_) {
+        ESP_LOGE(TAG, "podcast queue create failed free_internal=%u largest_internal=%u",
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        UpdateUi("Podcast unavailable", "Not enough memory");
+        return;
+    }
+    ESP_LOGI(TAG, "podcast task create free_internal=%u largest_internal=%u",
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
     BaseType_t ret = xTaskCreateWithCaps([](void* arg) {
         static_cast<PodcastService*>(arg)->Task();
     }, "podcast_service", 7168, this, 3, reinterpret_cast<TaskHandle_t*>(&task_handle_),
@@ -223,7 +235,21 @@ void PodcastService::EnsureTaskStarted() {
             static_cast<PodcastService*>(arg)->Task();
         }, "podcast_service", 7168, this, 3, reinterpret_cast<TaskHandle_t*>(&task_handle_));
     }
-    ESP_LOGI(TAG, "podcast task start ret=%ld", static_cast<long>(ret));
+    if (ret != pdPASS) {
+        auto queue = static_cast<QueueHandle_t>(queue_);
+        if (queue) {
+            vQueueDelete(queue);
+        }
+        queue_ = nullptr;
+        task_handle_ = nullptr;
+        ESP_LOGE(TAG, "podcast task create failed ret=%ld free_internal=%u largest_internal=%u",
+                 static_cast<long>(ret),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        UpdateUi("Podcast unavailable", "Not enough memory");
+        return;
+    }
+    ESP_LOGI(TAG, "podcast task started ret=%ld", static_cast<long>(ret));
 }
 
 void PodcastService::PostCommand(Command command) {

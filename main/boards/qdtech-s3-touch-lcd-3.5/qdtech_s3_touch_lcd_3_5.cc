@@ -1040,6 +1040,19 @@ private:
             });
         
         // WiFi管理工具
+        mcp_server.AddTool("self.music.play_url",
+            "Play a direct HTTP MP3 music URL on this device speaker. Use this after a music search tool returns a playable URL. The url must be a direct audio stream, not a web page.",
+            PropertyList({
+                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("artist", kPropertyTypeString, std::string("")),
+                Property("url", kPropertyTypeString),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto title = properties["title"].value<std::string>();
+                const auto artist = properties["artist"].value<std::string>();
+                const auto url = properties["url"].value<std::string>();
+                return radio_service_.PlayUrlFromTool(title, artist, url);
+            });
+
         mcp_server.AddTool("self.wifi.list_saved",
             "List saved WiFi networks.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
@@ -1239,6 +1252,14 @@ private:
 
     void StartDeferredNetworkServices() {
         if (network_services_started_) {
+            return;
+        }
+        auto& app = Application::GetInstance();
+        const DeviceState state = app.GetDeviceState();
+        if (state == kDeviceStateConnecting || state == kDeviceStateListening ||
+            state == kDeviceStateSpeaking || state == kDeviceStateAudioTesting) {
+            ESP_ERROR_CHECK(esp_timer_start_once(network_services_timer_, 60000000));
+            ESP_LOGW(TAG, "Deferred phone config services postponed, XiaoZhi state=%d", state);
             return;
         }
         InitializeWifiConfigServer();

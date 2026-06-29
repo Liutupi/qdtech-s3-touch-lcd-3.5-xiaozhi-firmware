@@ -23,6 +23,7 @@
 #include "esp_lvgl_port.h"
 #include "esp_vfs_fat.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "mp3dec.h"
@@ -361,19 +362,52 @@ void RadioService::Start(DesktopUI* desktop_ui) {
     last_success_url_.resize(count, -1);
     audio_focus_blocked_.store(IsXiaozhiAudioState(), std::memory_order_relaxed);
     queue_ = xQueueCreate(8, sizeof(Command));
+    if (!queue_) {
+        ESP_LOGE(TAG, "radio queue create failed free_internal=%u largest_internal=%u",
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        started_ = false;
+        SetUi("Unavailable", "No memory");
+        return;
+    }
     Application::GetInstance().RegisterDeviceStateCallback([this](DeviceState previous, DeviceState current) {
         OnDeviceStateChanged(static_cast<int>(previous), static_cast<int>(current));
     });
     LoadFavorites();
     LoadStationIndex();
     
-    constexpr size_t kTaskStackWords = 6144 / sizeof(StackType_t);
-    BaseType_t ret = xTaskCreate([](void* arg) {
+    constexpr uint32_t kTaskStackBytes = 6144;
+    ESP_LOGI(TAG, "radio task create free_internal=%u largest_internal=%u",
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+    BaseType_t ret = xTaskCreateWithCaps([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
-    }, "radio_service", 6144, this, 4, nullptr);
+    }, "radio_service", kTaskStackBytes, this, 4, &task_handle_,
+       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (ret != pdPASS) {
-        ESP_LOGE(TAG, "radio task create failed");
+        ESP_LOGW(TAG, "radio PSRAM task create failed ret=%ld, trying internal memory",
+                 static_cast<long>(ret));
+        task_handle_ = nullptr;
+        ret = xTaskCreate([](void* arg) {
+            static_cast<RadioService*>(arg)->Task();
+        }, "radio_service", kTaskStackBytes, this, 4, &task_handle_);
     }
+    if (ret != pdPASS) {
+        auto queue = static_cast<QueueHandle_t>(queue_);
+        if (queue) {
+            vQueueDelete(queue);
+        }
+        queue_ = nullptr;
+        task_handle_ = nullptr;
+        started_ = false;
+        ESP_LOGE(TAG, "radio task create failed ret=%ld free_internal=%u largest_internal=%u",
+                 static_cast<long>(ret),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+        SetUi("Unavailable", "No memory");
+        return;
+    }
+    ESP_LOGI(TAG, "radio task started stack=%u", static_cast<unsigned>(kTaskStackBytes));
     
     SetUi("Ready", "Tap Play");
 }
@@ -507,6 +541,57 @@ std::string RadioService::SelectStation(const std::string& station) {
     return "Radio station not found.";
 }
 
+std::string RadioService::PlayUrlFromTool(const std::string& title, const std::string& artist, const std::string& url) {
+    if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+        return "Music URL must start with http:// or https://.";
+    }
+
+    EnsureStationsLoaded();
+    std::string display_name = title.empty() ? "Music URL" : title;
+    if (!artist.empty()) {
+        display_name += " - ";
+        display_name += artist;
+    }
+
+    RadioStation station;
+    station.name = display_name;
+    station.urls[0] = url;
+    station.urls[1].clear();
+    station.urls[2].clear();
+    station.codec = "MP3";
+    station.bitrate_kbps = 0;
+    station.category = RadioCategory::MUSIC;
+    station.favorite = false;
+
+    if (custom_station_index_ >= 0 && custom_station_index_ < static_cast<int>(kStations.size())) {
+        kStations[custom_station_index_] = station;
+    } else {
+        kStations.push_back(station);
+        custom_station_index_ = static_cast<int>(kStations.size()) - 1;
+        last_success_url_.resize(kStations.size(), -1);
+    }
+
+    station_index_ = custom_station_index_;
+    play_requested_ = true;
+    stop_requested_ = false;
+    reconnect_attempt_ = 0;
+    SetUi("Connecting", "Music URL");
+
+    Application::GetInstance().Schedule([]() {
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() == kDeviceStateSpeaking) {
+            app.AbortSpeaking(kAbortReasonNone);
+        }
+        if (app.GetDeviceState() == kDeviceStateListening ||
+            app.GetDeviceState() == kDeviceStateSpeaking ||
+            app.GetDeviceState() == kDeviceStateConnecting) {
+            app.SetDeviceState(kDeviceStateIdle);
+        }
+    });
+    PostCommand(Command::PLAY_CUSTOM_URL);
+    return std::string("Playing music URL on device: ") + station.name;
+}
+
 void RadioService::PostCommand(Command command) {
     auto queue = static_cast<QueueHandle_t>(queue_);
     if (queue) {
@@ -615,6 +700,13 @@ void RadioService::HandleCommand(Command command) {
                 SetUi("Connecting", "Audio focus restored");
                 ESP_LOGI(TAG, "radio audio focus restored, resume station=%s", kStations[station_index_].name.c_str());
             }
+            break;
+        case Command::PLAY_CUSTOM_URL:
+            play_requested_ = true;
+            stop_requested_ = false;
+            reconnect_attempt_ = 0;
+            SetUi("Connecting", "Opening music URL");
+            ESP_LOGI(TAG, "music url play requested title=%s", kStations[station_index_].name.c_str());
             break;
     }
 }

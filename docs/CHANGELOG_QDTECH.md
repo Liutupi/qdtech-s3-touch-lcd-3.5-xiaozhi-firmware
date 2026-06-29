@@ -2,6 +2,38 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-29: v1.7.62 NetEase MCP URL Playback Bridge
+
+Scope:
+
+- Bumped firmware version to `1.7.62`.
+- Added device MCP tool `self.music.play_url` with `title`, `artist`, and `url` parameters.
+- Routed `self.music.play_url` into the existing QDTech radio/MP3 playback service through `RadioService::PlayUrlFromTool(...)`.
+- Reused the network radio MP3 path by creating a transient music station from the supplied URL and displaying it as `title - artist`.
+- Hardened local MCP tool execution under low internal SRAM by checking internal heap before thread creation, using internal task stacks for flash/NVS-safe tool calls, and reporting a recoverable error instead of aborting when memory is too low.
+- Reduced repeated volume-tool NVS writes by ignoring unchanged output volume and throttling volume persistence.
+- Kept the v1.7.61 7 MB QDTech OTA partition layout.
+
+Verification:
+
+- Built on Windows with `idf.py -B build-qdtech-v1.7.62 -D SDKCONFIG="build-qdtech-v1.7.62/sdkconfig" -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" build merge-bin`.
+- `build-qdtech-v1.7.62\project_description.json` reports `project_version: 1.7.62`.
+- `idf.py -B build-qdtech-v1.7.62 size` passed.
+- Final app binary size was `0x62b9b0`; smallest app partition is `0x700000`; free app space is `0xd4650` (about 12%).
+- Full merged image size was `7518640` bytes.
+- Flashed `v1.7.62` to `COM13` with bootloader, app, partition table, OTA data, and SR models; all esptool hash checks passed.
+- Serial capture confirmed `App version: 1.7.62`, `Ota: Current version: 1.7.62`, `MCP: Add tool: self.music.play_url`, MQTT connected, `Application: STATE: idle`, and no panic/backtrace during boot.
+
+Release assets:
+
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-app.bin`: `7B01CDCDE60BDBD9CAACC56526DA9371B8C649074E73C5F4757030A0B18A3EB3`
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-firmware.zip`: `A54638B2B7B8D1275E4B11271CF0E3E3BC94B767115BD08086F953E0694548E7`
+- `releases/v1.7.62/qdtech-s3-touch-lcd-3.5-v1.7.62-full.bin`: `75EEB5E43E736D0530D2263D0EE592ACCF51C1690C121BA34BB70ADAAB48D9AC`
+
+Known limitations:
+
+- The Mac-side NetEase MCP must return a direct HTTP/HTTPS MP3 stream URL and the server/LLM must call `self.music.play_url` after search. The firmware now provides the device playback target, but it cannot synthesize a missing playable URL.
+
 ## 2026-06-29: v1.7.61 New-Environment WiFi Fallback
 
 Scope:

@@ -1,3 +1,19 @@
+# 2026-06-29 v1.7.62 NetEase MCP URL Playback Follow-Up
+
+Current state:
+
+- Source has a published `v1.7.62` device-side playback bridge for NetEase/music MCP workflows.
+- Build, merge-bin, size, release packaging, and full hardware flash passed.
+- App partition free space is `0xd4650` bytes in the 7 MB QDTech OTA app slot.
+- Flash and boot verification passed on `COM13`; logs showed `App version: 1.7.62`, `Ota: Current version: 1.7.62`, `self.music.play_url` registration, MQTT connected, and `STATE: idle`.
+
+Next steps:
+
+- On the Mac-side NetEase MCP flow, confirm the music tool returns a direct playable HTTP/HTTPS MP3 stream URL, not only a song id or web page URL.
+- Confirm XiaoZhi server logs show a second device-tool call to `self.music.play_url` with `title`, `artist`, and `url` after the NetEase MCP search/link step.
+- If `self.music.play_url` is called but playback fails, capture serial logs around `music url play requested`, HTTP open/read, MP3 decode, and audio focus state.
+- Re-test repeated `self.audio_speaker.set_volume` calls during music requests; they should no longer cause a pthread abort or PSRAM-stack NVS cache assertion.
+
 # 2026-06-28 FC/NES Mapper Follow-Up
 
 Current v1.7.56 state:
