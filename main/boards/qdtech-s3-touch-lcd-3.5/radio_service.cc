@@ -1009,9 +1009,25 @@ bool RadioService::IsCustomUrlSpeakingGraceActive() const {
     return static_cast<int32_t>(custom_url_speaking_grace_until_ - xTaskGetTickCount()) > 0;
 }
 
+bool RadioService::IsAutonomousCustomUrlSpeaking(int previous_state, int current_state) const {
+    if (!playing_custom_url_ || !play_requested_.load(std::memory_order_relaxed) ||
+        current_state != kDeviceStateSpeaking) {
+        return false;
+    }
+    return previous_state != kDeviceStateListening &&
+           previous_state != kDeviceStateConnecting &&
+           previous_state != kDeviceStateAudioTesting;
+}
+
 bool RadioService::ShouldYieldAudio() const {
     auto app_state = Application::GetInstance().GetDeviceState();
     if (app_state == kDeviceStateSpeaking && IsCustomUrlSpeakingGraceActive()) {
+        return false;
+    }
+    if (app_state == kDeviceStateSpeaking &&
+        playing_custom_url_ &&
+        play_requested_.load(std::memory_order_relaxed) &&
+        !audio_focus_blocked_.load(std::memory_order_relaxed)) {
         return false;
     }
     return audio_focus_blocked_.load(std::memory_order_relaxed) ||
@@ -1027,9 +1043,17 @@ void RadioService::OnDeviceStateChanged(int previous_state, int current_state) {
                    current_state == kDeviceStateListening ||
                    current_state == kDeviceStateSpeaking ||
                    current_state == kDeviceStateAudioTesting;
-    if (current_state == kDeviceStateSpeaking && blocked && IsCustomUrlSpeakingGraceActive()) {
-        ESP_LOGI(TAG, "audio focus speaking ignored during music url start grace");
+    if (current_state == kDeviceStateSpeaking && blocked &&
+        (IsCustomUrlSpeakingGraceActive() || IsAutonomousCustomUrlSpeaking(previous_state, current_state))) {
+        ESP_LOGI(TAG, "audio focus speaking ignored during music url playback previous=%d", previous_state);
         blocked = false;
+        Application::GetInstance().Schedule([]() {
+            auto& app = Application::GetInstance();
+            if (app.GetDeviceState() == kDeviceStateSpeaking) {
+                app.AbortSpeaking(kAbortReasonNone);
+                app.SetDeviceState(kDeviceStateIdle);
+            }
+        });
     }
     const bool was_blocked = audio_focus_blocked_.exchange(blocked, std::memory_order_relaxed);
     if (blocked != was_blocked) {

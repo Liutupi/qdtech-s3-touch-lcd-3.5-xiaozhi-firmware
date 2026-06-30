@@ -2,6 +2,40 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-01 Handoff: v1.7.67 Autonomous Goodbye Speech Guard
+
+Current target:
+
+- Firmware version target: `v1.7.67`.
+- `v1.7.66` was burned and boot-verified, but hardware logs showed it was incomplete: after about a minute, XiaoZhi said "拜拜啦，下次再聊！", audio focus paused the NetEase MP3, and the same URL reopened from the beginning.
+
+What changed:
+
+- Keep the 4 second startup grace from `v1.7.66`.
+- Add an autonomous-speaking guard: when custom URL music is playing, `kDeviceStateSpeaking` only steals focus if it follows real user interaction states such as listening/connecting/audio-testing.
+- If `speaking` appears autonomously while custom music is playing, schedule `AbortSpeaking` and restore idle without stopping the MP3 stream.
+
+Verification:
+
+- Build passed on macOS with ESP-IDF v5.5; CMake reported `App "xiaozhi" version: 1.7.67`.
+- `xiaozhi.bin` size is `0x62ee20`; the 7 MB OTA app slot has `0xd11e0` bytes (12%) free.
+- Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.67`, Wi-Fi connected, MQTT connected, idle state, and registered tools including `self.music.play_url`.
+- Hardware test with `宇宇` verified first song `道别是一件难事 - 上海彩虹室内合唱团` and second song `暮色森林 - 欧阳娜娜`.
+- Mac-side NetEase log showed `music.netease_play` followed by `>> tools/call self.music.play_url` with a fresh NetEase MP3 URL.
+- Board serial showed `% self.music.play_url...`, `stream open ... status=200`, and continuous MP3 frames for both songs.
+- Autonomous goodbye lines were caught and suppressed:
+  - `audio focus speaking ignored during music url playback previous=3`
+  - `Abort speaking`
+  - MP3 frames continued after `那先不打扰啦，拜拜！`, with no restart.
+- Real user taps/listening still pause and resume music; this is expected and was observed during testing.
+
+Release assets:
+
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-app.bin`: `9791772b54190ec0c0a6de14dace9e87f103e7ce3defbddc1f3024d8579d710f`
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-firmware.zip`: `70adb5a3a0bee4b4d980581beef5652c643fa805de61697a4bf95984291ad303`
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-full.bin`: `3a243f1b0b8c5473fe883e7f336c0a03e841fdc8802b332173406160b5fda529`
+
 ## 2026-07-01 Handoff: v1.7.66 Music Startup Speech-Focus Guard
 
 Current target:

@@ -2,6 +2,34 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-01: v1.7.67 Autonomous Goodbye Speech Guard
+
+Scope:
+
+- Bumped firmware version to `1.7.67`.
+- Kept the `v1.7.66` startup speaking grace.
+- Fixed the follow-up hardware finding that a later autonomous server line such as "拜拜啦，下次再聊！" could still enter `speaking`, pause NetEase custom URL playback, and reopen the MP3 from the beginning.
+- While a custom direct MP3 URL is playing, autonomous `speaking` transitions that do not follow user `listening`/`connecting`/audio-testing are ignored for audio focus and scheduled for abort.
+- Real user interruption still yields audio focus.
+
+Verification:
+
+- Built on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; CMake reported `App "xiaozhi" version: 1.7.67`.
+- App binary size was `0x62ee20`; smallest app partition is `0x700000`; free app space is `0xd11e0` (12%).
+- Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.67`, Wi-Fi connected, MQTT connected, and `self.music.play_url` registered.
+- Hardware serial and Mac NetEase logs verified two consecutive song requests:
+  - `道别是一件难事 - 上海彩虹室内合唱团`
+  - `暮色森林 - 欧阳娜娜`
+- For both songs, the chain included `music.netease_play` followed by board-side `% self.music.play_url...`, fresh direct MP3 URLs, HTTP `200`, and continuous playback frames.
+- During both songs, autonomous goodbye/closing speech was ignored for audio focus and aborted, while MP3 frames continued increasing and the song did not restart.
+
+Release assets:
+
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-app.bin`: `9791772b54190ec0c0a6de14dace9e87f103e7ce3defbddc1f3024d8579d710f`
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-firmware.zip`: `70adb5a3a0bee4b4d980581beef5652c643fa805de61697a4bf95984291ad303`
+- `releases/v1.7.67/qdtech-s3-touch-lcd-3.5-v1.7.67-full.bin`: `3a243f1b0b8c5473fe883e7f336c0a03e841fdc8802b332173406160b5fda529`
+
 ## 2026-07-01: v1.7.66 Music Startup Speech-Focus Guard
 
 Scope:

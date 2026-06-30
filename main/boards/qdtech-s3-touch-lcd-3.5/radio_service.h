@@ -49,6 +49,7 @@ private:
     bool PlayUrl(const std::string& url, int url_index, uint32_t stream_generation);
     bool IsXiaozhiAudioState() const;
     bool IsCustomUrlSpeakingGraceActive() const;
+    bool IsAutonomousCustomUrlSpeaking(int previous_state, int current_state) const;
     bool ShouldYieldAudio() const;
     void OnDeviceStateChanged(int previous_state, int current_state);
     void NextStation(int delta);

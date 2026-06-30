@@ -1,3 +1,24 @@
+# 2026-07-01 Project Status: v1.7.67
+
+Firmware:
+
+- Version bumped to `1.7.67`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Build/flash directory: `build-qdtech-s3-final`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+
+Music MCP playback status:
+
+- `v1.7.66` fixed the immediate startup grace case, but hardware logs showed a later autonomous server goodbye line, `拜拜啦，下次再聊！`, could still enter `speaking`, pause the custom MP3 URL, and reopen it from the beginning.
+- `v1.7.67` keeps the startup grace and also ignores/aborts autonomous `speaking` while a custom NetEase MP3 URL is playing, unless the speaking follows a real `listening`/`connecting`/audio-testing user interaction.
+- Real user interruption still pauses music; stray post-tool goodbye/closing speech no longer restarts the song.
+- Build verification passed on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; app size is `0x62ee20`, leaving `0xd11e0` bytes (12%).
+- Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.67`, Wi-Fi connected, MQTT connected, and `self.music.play_url` registered.
+- Hardware test verified two consecutive NetEase requests: `道别是一件难事 - 上海彩虹室内合唱团` then `暮色森林 - 欧阳娜娜`; both reached board-side `% self.music.play_url...` and opened fresh direct MP3 URLs with HTTP `200`.
+- Autonomous goodbye lines such as `那先不打扰啦，拜拜！` were ignored for music audio focus (`audio focus speaking ignored during music url playback`) while MP3 frames continued increasing, with no forced song restart.
+- Mac NetEase bridge timeout for the device call was widened from 8s to 30s in `/Users/tupi/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`; playback success should be judged from board `self.music.play_url` and `stream open` logs if the cloud does not return the tool result.
+
 # 2026-07-01 Project Status: v1.7.66
 
 Firmware:
