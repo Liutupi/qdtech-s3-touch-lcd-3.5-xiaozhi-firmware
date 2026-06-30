@@ -1,3 +1,23 @@
+# 2026-07-01 Project Status: v1.7.66
+
+Firmware:
+
+- Version bumped to `1.7.66`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Local macOS build uses ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`.
+- Build/flash directory: `build-qdtech-s3-final`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-s3-final/xiaozhi.bin`.
+- Latest app size: `0x62ec90`, leaving `0xd1370` bytes (12%) in the `0x700000` app partition.
+- Release assets are in `releases/v1.7.66/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+Music MCP playback status:
+
+- Optimized direct NetEase MP3 URL playback so XiaoZhi's immediate post-tool speaking state, such as a short "我先退下了" closing line, does not steal audio focus during the first 4 seconds after `self.music.play_url`.
+- Real user interruption/listening states still yield audio focus; only the short automatic speaking tail is ignored during this startup grace window.
+- `self.music.play_url` / `self.music.play` tool descriptions now explicitly tell the server not to speak extra confirmation after playback starts.
+- Build verification passed on macOS with ESP-IDF v5.5; hardware OTA verification is still pending.
+
 # 2026-06-30 Project Status: v1.7.65
 
 Firmware:

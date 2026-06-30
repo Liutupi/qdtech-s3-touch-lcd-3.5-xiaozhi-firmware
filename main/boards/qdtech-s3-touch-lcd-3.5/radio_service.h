@@ -48,6 +48,7 @@ private:
     void PlayCurrentStation(uint32_t stream_generation);
     bool PlayUrl(const std::string& url, int url_index, uint32_t stream_generation);
     bool IsXiaozhiAudioState() const;
+    bool IsCustomUrlSpeakingGraceActive() const;
     bool ShouldYieldAudio() const;
     void OnDeviceStateChanged(int previous_state, int current_state);
     void NextStation(int delta);
@@ -75,6 +76,7 @@ private:
     int custom_station_index_ = -1;
     int last_radio_station_index_ = 0;
     bool playing_custom_url_ = false;
+    TickType_t custom_url_speaking_grace_until_ = 0;
     std::atomic<uint32_t> stream_generation_{0};
     std::vector<int16_t> pcm_mono_buf_;
     std::vector<int16_t> pcm_output_buf_;

@@ -2,6 +2,33 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-01 Handoff: v1.7.66 Music Startup Speech-Focus Guard
+
+Current target:
+
+- Firmware version target: `v1.7.66`.
+- Goal: prevent NetEase direct MP3 playback from restarting when XiaoZhi says a short post-tool line such as "我先退下了" right after music begins.
+
+What changed:
+
+- `RadioService::PlayUrlFromTool(...)` now opens a 4 second custom-URL speaking grace window.
+- During that window, `kDeviceStateSpeaking` does not block music audio focus, so the MP3 stream keeps playing instead of stopping and reopening from the beginning.
+- `kDeviceStateListening`, `kDeviceStateConnecting`, and `kDeviceStateAudioTesting` still yield focus, so real user interaction can still interrupt music.
+- `self.music.play_url` and `self.music.play` tool descriptions now ask the server not to speak extra confirmation after the tool succeeds.
+
+Verification:
+
+- Build passed on macOS with ESP-IDF v5.5; CMake reported `App "xiaozhi" version: 1.7.66`.
+- `xiaozhi.bin` size is `0x62ec90`; the 7 MB OTA app slot has `0xd1370` bytes (12%) free.
+- Release assets are in `releases/v1.7.66/`.
+- 待确认: flash/OTA and hardware test with the user phrase "让多多播放网易云音乐".
+
+Release assets:
+
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-app.bin`: `dba77d32bca511b539c078f8dee5f76078967a6f4a5b5e34be0c7a2449dd02ef`
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-firmware.zip`: `fb9899d36bfd388c5a0318c01de206d3eafe6d9eed195853ac46e4440f3f5514`
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-full.bin`: `d6799fdfa31922e8a0f35e7c27b82d76d68b7f5e58dffb8101e50eb92a75f306`
+
 ## 2026-06-30 Handoff: Mac-Side XiaoZhi MCP Services
 
 New detailed operations handoff:

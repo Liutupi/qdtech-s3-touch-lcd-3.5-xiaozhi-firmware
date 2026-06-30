@@ -2,6 +2,29 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-01: v1.7.66 Music Startup Speech-Focus Guard
+
+Scope:
+
+- Bumped firmware version to `1.7.66`.
+- Added a short 4 second speaking-focus grace window after `self.music.play_url` starts a custom direct MP3 URL.
+- During that window, a XiaoZhi `speaking` state caused by a post-tool closing line such as "我先退下了" no longer pauses the just-started music stream and causes it to reopen from the beginning.
+- Real user interruption states such as listening/connecting/audio-testing still yield audio focus.
+- Updated `self.music.play_url` and `self.music.play` tool descriptions to tell the server not to speak extra confirmation after the tool succeeds.
+
+Verification:
+
+- Built on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; CMake reported `App "xiaozhi" version: 1.7.66`.
+- App binary size was `0x62ec90`; smallest app partition is `0x700000`; free app space is `0xd1370` (12%).
+- `idf.py -B build-qdtech-s3-final ... build merge-bin` completed successfully.
+- 待确认: hardware OTA/flash verification for `v1.7.66`.
+
+Release assets:
+
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-app.bin`: `dba77d32bca511b539c078f8dee5f76078967a6f4a5b5e34be0c7a2449dd02ef`
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-firmware.zip`: `fb9899d36bfd388c5a0318c01de206d3eafe6d9eed195853ac46e4440f3f5514`
+- `releases/v1.7.66/qdtech-s3-touch-lcd-3.5-v1.7.66-full.bin`: `d6799fdfa31922e8a0f35e7c27b82d76d68b7f5e58dffb8101e50eb92a75f306`
+
 ## 2026-06-30: v1.7.65 Final NetEase MCP Music Chain Hardening
 
 Scope:

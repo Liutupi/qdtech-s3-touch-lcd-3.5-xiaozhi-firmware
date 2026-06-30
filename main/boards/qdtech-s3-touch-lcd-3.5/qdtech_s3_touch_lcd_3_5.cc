@@ -1041,7 +1041,7 @@ private:
         
         // WiFi管理工具
         mcp_server.AddTool("self.music.play_url",
-            "Play a direct HTTP MP3 music URL on this device speaker. Calling this again interrupts the current URL or radio stream. The url must be a direct audio stream, not a web page.",
+            "Play a direct HTTP MP3 music URL on this device speaker. Calling this again interrupts the current URL or radio stream. The url must be a direct audio stream, not a web page. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1053,7 +1053,7 @@ private:
                 return radio_service_.PlayUrlFromTool(title, artist, url);
             });
         mcp_server.AddTool("self.music.play",
-            "Alias for self.music.play_url. Play a direct HTTP MP3 music URL on this device speaker, interrupting the current URL or radio stream.",
+            "Alias for self.music.play_url. Play a direct HTTP MP3 music URL on this device speaker, interrupting the current URL or radio stream. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),

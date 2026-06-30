@@ -37,6 +37,7 @@ static constexpr int kReadBufferSize = 16 * 1024;
 static constexpr int kReadTargetBytes = 8 * 1024;
 static constexpr int kReadChunkBytes = 1024;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
+static constexpr TickType_t kCustomUrlSpeakingGraceTicks = pdMS_TO_TICKS(4000);
 
 enum class RadioCategory {
     NATIONAL,    // 全国
@@ -594,6 +595,8 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
     playing_custom_url_ = true;
     play_requested_ = true;
     stop_requested_ = false;
+    audio_focus_blocked_.store(false, std::memory_order_relaxed);
+    custom_url_speaking_grace_until_ = xTaskGetTickCount() + kCustomUrlSpeakingGraceTicks;
     reconnect_attempt_ = 0;
     SetUi("Connecting", "Music URL");
 
@@ -609,7 +612,7 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
         }
     });
     PostCommand(Command::PLAY_CUSTOM_URL);
-    return std::string("Playing music URL on device: ") + station.name;
+    return std::string("Music URL started on device; no spoken follow-up is needed: ") + station.name;
 }
 
 void RadioService::PostCommand(Command command) {
@@ -999,16 +1002,35 @@ bool RadioService::IsXiaozhiAudioState() const {
            app_state == kDeviceStateAudioTesting;
 }
 
+bool RadioService::IsCustomUrlSpeakingGraceActive() const {
+    if (!playing_custom_url_ || !play_requested_.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    return static_cast<int32_t>(custom_url_speaking_grace_until_ - xTaskGetTickCount()) > 0;
+}
+
 bool RadioService::ShouldYieldAudio() const {
-    return audio_focus_blocked_.load(std::memory_order_relaxed) || IsXiaozhiAudioState();
+    auto app_state = Application::GetInstance().GetDeviceState();
+    if (app_state == kDeviceStateSpeaking && IsCustomUrlSpeakingGraceActive()) {
+        return false;
+    }
+    return audio_focus_blocked_.load(std::memory_order_relaxed) ||
+           app_state == kDeviceStateConnecting ||
+           app_state == kDeviceStateListening ||
+           app_state == kDeviceStateSpeaking ||
+           app_state == kDeviceStateAudioTesting;
 }
 
 void RadioService::OnDeviceStateChanged(int previous_state, int current_state) {
     (void)previous_state;
-    const bool blocked = current_state == kDeviceStateConnecting ||
-                         current_state == kDeviceStateListening ||
-                         current_state == kDeviceStateSpeaking ||
-                         current_state == kDeviceStateAudioTesting;
+    bool blocked = current_state == kDeviceStateConnecting ||
+                   current_state == kDeviceStateListening ||
+                   current_state == kDeviceStateSpeaking ||
+                   current_state == kDeviceStateAudioTesting;
+    if (current_state == kDeviceStateSpeaking && blocked && IsCustomUrlSpeakingGraceActive()) {
+        ESP_LOGI(TAG, "audio focus speaking ignored during music url start grace");
+        blocked = false;
+    }
     const bool was_blocked = audio_focus_blocked_.exchange(blocked, std::memory_order_relaxed);
     if (blocked != was_blocked) {
         ESP_LOGI(TAG, "audio focus %s by XiaoZhi state=%d play_requested=%d",
