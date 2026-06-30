@@ -1,3 +1,25 @@
+# 2026-06-30 Project Status: v1.7.65
+
+Firmware:
+
+- Version bumped to `1.7.65`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Local macOS build uses ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`.
+- Build/flash directory: `build-qdtech-s3-final`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-s3-final/xiaozhi.bin`.
+- Latest app size: `0x62ea70`, leaving `0xd1590` bytes (12%) in the `0x700000` app partition.
+- Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
+- Release assets are in `releases/v1.7.65/` as standalone `app.bin`, full merged `full.bin`, and `firmware.zip`.
+
+Music MCP playback status:
+
+- `self.music.play_url(title, artist, url)` and `self.music.play(...)` route direct MP3 URLs through `RadioService::PlayUrlFromTool(...)`.
+- External MP3 playback now keeps MQTT/MCP online so a second song request can arrive while the first stream is active.
+- `self.music.*` MCP calls can run inline under low internal-memory conditions if the `tool_call` thread cannot be created.
+- Mac-side NetEase MCP must call `self.music.play_url` after `music.netease_play`; local service logs verified this path with fresh direct URLs.
+- Local serial verification showed the board receiving `self.music.play_url`, decoding MP3 frames, and writing nonzero PCM peaks with output enabled.
+
 # 2026-06-30 Project Status: v1.7.63
 
 Firmware:

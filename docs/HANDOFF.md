@@ -2,6 +2,56 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-30 Handoff: v1.7.65 Final NetEase MCP Music Chain Hardening
+
+Current repo state:
+
+- Branch base: `origin/main` at `v1.7.64`.
+- Firmware version target: `v1.7.65`.
+- Remote: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Local macOS build uses ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`.
+- Build/flash directory: `build-qdtech-s3-final`.
+- Hardware flash/serial port used locally: `/dev/cu.usbmodem212401`.
+- External NetEase MCP server directory: `/Users/tupi/Documents/论文中期考核/xiaozhi-netease-mcp`.
+
+What changed:
+
+- Kept the remote `v1.7.64` device tool model:
+  - `self.music.play_url(title, artist, url)`
+  - `self.music.play(title, artist, url)` as a non-conflicting alias
+  - `self.music.stop`
+  - playback routed through `RadioService::PlayUrlFromTool(...)`
+- Hardened the firmware for the field failure observed on macOS hardware:
+  - external music no longer stops/restarts the XiaoZhi protocol;
+  - `Application::SetExternalAudioActive(true)` now keeps MQTT/MCP online so second-song requests can arrive while the first MP3 stream is active;
+  - low-memory `self.music.*` MCP tools can fall back to inline execution instead of being dropped when `tool_call` thread creation fails.
+- Non-music tools keep the existing low-internal-memory rejection behavior so heavy tools do not run inline in the MQTT callback path.
+- The Mac-side NetEase bridge must continue to call `self.music.play_url` after `music.netease_play` returns a fresh direct MP3 URL. In local testing, `/Users/tupi/Documents/论文中期考核/xiaozhi-netease-mcp/xiaozhi-ws-mcp.js` was updated to log and send `>> tools/call self.music.play_url`.
+
+Verification evidence from the local hardware session:
+
+- Built and flashed from `build-qdtech-s3-final`; CMake reported `App "xiaozhi" version: 1.7.65`.
+- App binary size: `0x62ea70`; smallest app partition: `0x700000`; free app space: `0xd1590` (12%).
+- Flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- The Mac-side service log showed `music.netease_play` followed by `>> tools/call self.music.play_url` with distinct NetEase MP3 URLs for consecutive songs.
+- Serial logs showed the device receiving `% self.music.play_url...`.
+- MP3 playback logs showed continuous decode frames and nonzero PCM peaks, for example `pcm write ... peak=7505`, `peak=10082`, and `peak=14840`, with `output_enabled=1`.
+- The user confirmed music playback worked after the final music-chain pass.
+
+Release assets:
+
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-app.bin`: `db0b2cf10d1d9f344a8df7b372e50e66a6076ed687f3e4f3bd5265ac8d35f639`
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-firmware.zip`: `e0cda4359209694c4124ad7e96bffce557d0cdb11c1642ba5e267da089355405`
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-full.bin`: `00d4b13de11b473a041002b0d37e631f8e9289bd6947ead14af8469206077f53`
+
+Important follow-up:
+
+- If a future report says "server found the song but no board audio", check three logs in order:
+  1. Mac service: `>> tools/call self.music.play_url` with a new direct `http://` or `https://` MP3 URL.
+  2. Board serial: `% self.music.play_url...` and `music url play requested`.
+  3. Board serial: MP3 HTTP/decode logs and nonzero PCM peaks.
+- `pthread: Failed to create task` can still appear under low internal SRAM. For `self.music.*` tools in `v1.7.65`, this should fall back inline and is not fatal by itself.
+
 ## 2026-06-30 Handoff: v1.7.63 Interruptible NetEase Music URL Playback
 
 Current repo state:

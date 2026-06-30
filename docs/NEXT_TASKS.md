@@ -1,3 +1,18 @@
+# 2026-06-30 v1.7.65 NetEase MCP URL Playback Follow-Up
+
+Current state:
+
+- Source is being finalized as `v1.7.65` on top of remote `v1.7.64`.
+- Device-side direct URL playback uses `self.music.play_url` / `self.music.play` routed through `RadioService`.
+- External audio keeps MQTT/MCP online so consecutive song requests can reach the board.
+- `self.music.*` MCP calls fall back inline under low internal-memory/thread-create pressure.
+- Local macOS NetEase bridge must continue to send `tools/call self.music.play_url` after every successful `music.netease_play`.
+
+Next checks:
+
+- Rebuild/flash `v1.7.65` and verify boot version after this handoff update.
+- Keep checking Mac-side logs for `>> tools/call self.music.play_url` if a future server-side regression appears.
+
 # 2026-06-30 v1.7.63 NetEase MCP URL Playback Follow-Up
 
 Current state:

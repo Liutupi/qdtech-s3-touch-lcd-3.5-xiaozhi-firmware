@@ -9,6 +9,7 @@
 #include <esp_heap_caps.h>
 #include <algorithm>
 #include <cstring>
+#include <system_error>
 #include <esp_pthread.h>
 
 #include "application.h"
@@ -353,7 +354,22 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
              tool_name.c_str(), stack_size,
              static_cast<unsigned>(free_internal),
              static_cast<unsigned>(largest_internal));
+
+    auto call_tool = [this, id, tool_iter](const PropertyList& call_arguments) {
+        try {
+            ReplyResult(id, (*tool_iter)->Call(call_arguments));
+        } catch (const std::exception& e) {
+            ESP_LOGE(TAG, "tools/call: %s", e.what());
+            ReplyError(id, e.what());
+        }
+    };
+
     if (free_internal < kMinToolCallInternalFree || largest_internal < kMinToolCallLargestInternalBlock) {
+        if (tool_name.rfind("self.music.", 0) == 0) {
+            ESP_LOGW(TAG, "tools/call %s low memory, running inline", tool_name.c_str());
+            call_tool(arguments);
+            return;
+        }
         ESP_LOGW(TAG, "tools/call %s rejected, low internal memory", tool_name.c_str());
         ReplyError(id, "Device is busy and low on internal memory; please try again after this response finishes.");
         return;
@@ -372,17 +388,23 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
         return;
     }
 
-    // Use a thread to call the tool to avoid blocking the main thread
+    // Use a thread to call the tool to avoid blocking the main thread.
+    // In low-memory situations, std::thread can still throw after the heap check.
+    // Music tools only queue/stop playback, so they can safely fall back inline.
     try {
-        tool_call_thread_ = std::thread([this, id, tool_iter, arguments = std::move(arguments)]() {
-            try {
-                ReplyResult(id, (*tool_iter)->Call(arguments));
-            } catch (const std::exception& e) {
-                ESP_LOGE(TAG, "tools/call: %s", e.what());
-                ReplyError(id, e.what());
-            }
+        tool_call_thread_ = std::thread([call_tool, arguments]() {
+            call_tool(arguments);
         });
         tool_call_thread_.detach();
+    } catch (const std::system_error& e) {
+        if (tool_name.rfind("self.music.", 0) == 0) {
+            ESP_LOGE(TAG, "tools/call %s thread create failed: %s, running inline",
+                     tool_name.c_str(), e.what());
+            call_tool(arguments);
+            return;
+        }
+        ESP_LOGE(TAG, "tools/call %s thread create failed: %s", tool_name.c_str(), e.what());
+        ReplyError(id, "Device could not start the tool call thread.");
     } catch (const std::exception& e) {
         ESP_LOGE(TAG, "tools/call %s thread create failed: %s", tool_name.c_str(), e.what());
         ReplyError(id, "Device could not start the tool call thread.");

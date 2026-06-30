@@ -2,6 +2,31 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-06-30: v1.7.65 Final NetEase MCP Music Chain Hardening
+
+Scope:
+
+- Bumped firmware version to `1.7.65`.
+- Kept the remote `v1.7.64` `RadioService::PlayUrlFromTool(...)` music URL implementation and `self.music.play` alias.
+- Changed external-audio handling so music playback keeps the XiaoZhi MQTT/MCP protocol online, allowing second-song requests to reach the board while the first direct MP3 URL is active.
+- Let low-memory `self.music.*` MCP calls run inline when thread creation is not possible, while preserving low-memory rejection for heavier non-music tools.
+- Documented the required Mac-side NetEase bridge behavior: every successful `music.netease_play` must be followed by `tools/call self.music.play_url` with a fresh direct MP3 URL.
+
+Verification:
+
+- Built and flashed from `build-qdtech-s3-final`; CMake reported `App "xiaozhi" version: 1.7.65`.
+- App binary size was `0x62ea70`; smallest app partition is `0x700000`; free app space is `0xd1590` (12%).
+- Flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Local hardware session on `/dev/cu.usbmodem212401` showed the Mac-side bridge calling `self.music.play_url` after `music.netease_play`.
+- Board serial showed `% self.music.play_url...`, continuous MP3 decode frames, and nonzero PCM write peaks with output enabled.
+- User confirmed music playback worked after this final pass.
+
+Release assets:
+
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-app.bin`: `db0b2cf10d1d9f344a8df7b372e50e66a6076ed687f3e4f3bd5265ac8d35f639`
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-firmware.zip`: `e0cda4359209694c4124ad7e96bffce557d0cdb11c1642ba5e267da089355405`
+- `releases/v1.7.65/qdtech-s3-touch-lcd-3.5-v1.7.65-full.bin`: `00d4b13de11b473a041002b0d37e631f8e9289bd6947ead14af8469206077f53`
+
 ## 2026-06-30: v1.7.63 Interruptible Music URL Playback
 
 Scope:

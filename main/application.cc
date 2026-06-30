@@ -888,27 +888,16 @@ void Application::SetExternalAudioActive(bool active) {
         std::lock_guard<std::mutex> lock(mutex_);
         last_output_time_ = std::chrono::steady_clock::now();
     }
-    if (active && !was_active && protocol_) {
-        ESP_LOGW(TAG, "Suspend protocol while external audio is active");
-        protocol_->Stop();
-        protocol_suspended_for_external_audio_.store(true, std::memory_order_relaxed);
+    if (active && !was_active) {
+        ESP_LOGW(TAG, "External audio active; keep protocol online for MCP controls");
         {
             std::lock_guard<std::mutex> lock(mutex_);
             audio_decode_queue_.clear();
             audio_send_queue_.clear();
         }
         audio_decode_cv_.notify_all();
-    } else if (!active && was_active &&
-               protocol_suspended_for_external_audio_.exchange(false, std::memory_order_relaxed) &&
-               protocol_ && background_task_) {
-        background_task_->Schedule([this]() {
-            if (external_audio_active_.load(std::memory_order_relaxed)) {
-                protocol_suspended_for_external_audio_.store(true, std::memory_order_relaxed);
-                return;
-            }
-            ESP_LOGW(TAG, "Resume protocol after external audio stopped");
-            protocol_->Start();
-        });
+    } else if (!active && was_active) {
+        protocol_suspended_for_external_audio_.store(false, std::memory_order_relaxed);
     }
 }
 
