@@ -2,6 +2,26 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-06-30 Handoff: Mac-Side XiaoZhi MCP Services
+
+New detailed operations handoff:
+
+- `docs/XIAOZHI_MCP_HANDOFF.md`
+
+What is captured there:
+
+- Two simultaneous NetEase MCP services:
+  - `宇宇`: LaunchAgent `com.tupi.xiaozhi.netease.yuyu`, local API port `3099`
+  - `小苍兰`: LaunchAgent `com.tupi.xiaozhi.netease.xiaocanglan`, local API port `3100`
+- Required music chain: every successful `music.netease_play` URL lookup must continue to device tool `self.music.play_url(title, artist, url)`.
+- The Mac NetEase bridge now logs the device call result or failure after `self.music.play_url`, so future debugging can distinguish Mac-side lookup success from board-side playback failure.
+- OpenClaw/Dodo MCP bridge for `宇宇`, including lightweight `openclaw.ask_dodo`, app opening, service checks, folder creation, and two-step file move/organize confirmation.
+- XiaoZhi backend role-prompt rules and the easy-to-miss requirement to restart/reconnect the physical board after saving console configuration.
+
+Important security note:
+
+- The MCP handoff is secret-free. Do not commit `current-endpoint*.txt`, raw endpoint URLs, API keys, or logs that contain tokens.
+
 ## 2026-06-30 Handoff: v1.7.65 Final NetEase MCP Music Chain Hardening
 
 Current repo state:

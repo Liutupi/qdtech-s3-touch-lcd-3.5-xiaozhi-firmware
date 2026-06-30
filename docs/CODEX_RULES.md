@@ -10,6 +10,7 @@ Before changing code, read these files:
 - `docs/PROJECT_STATUS.md`
 - `docs/NEXT_TASKS.md`
 - `docs/CODEX_RULES.md`
+- `docs/XIAOZHI_MCP_HANDOFF.md`
 - `docs/CHANGELOG_QDTECH.md`
 - `PATCHES.md`
 - `main/boards/qdtech-s3-touch-lcd-3.5/README.md`
