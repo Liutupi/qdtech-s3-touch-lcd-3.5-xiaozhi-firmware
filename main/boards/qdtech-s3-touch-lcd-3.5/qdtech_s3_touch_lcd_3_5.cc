@@ -1052,6 +1052,18 @@ private:
                 const auto url = properties["url"].value<std::string>();
                 return radio_service_.PlayUrlFromTool(title, artist, url);
             });
+        mcp_server.AddTool("self.music.play",
+            "Alias for self.music.play_url. Play a direct HTTP MP3 music URL on this device speaker, interrupting the current URL or radio stream.",
+            PropertyList({
+                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("artist", kPropertyTypeString, std::string("")),
+                Property("url", kPropertyTypeString, std::string("")),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto title = properties["title"].value<std::string>();
+                const auto artist = properties["artist"].value<std::string>();
+                const auto url = properties["url"].value<std::string>();
+                return radio_service_.PlayUrlFromTool(title, artist, url);
+            });
         mcp_server.AddTool("self.music.stop",
             "Stop the current music URL playback on this device speaker.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
