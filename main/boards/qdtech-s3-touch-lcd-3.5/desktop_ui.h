@@ -57,6 +57,7 @@ public:
     void SetPodcastProgress(int percent);
     void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
+    void SetMusicLyric(const char* title, const char* artist, const char* line);
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
@@ -304,6 +305,7 @@ private:
     float pupil_target_y_ = 0;
     uint8_t blush_alpha_ = 0;
     bool blush_increasing_ = true;
+    int64_t music_lyric_hold_until_ms_ = 0;
     // Internal methods
     void CreateMainPage(lv_obj_t* root);
     void CreateAppsPage(lv_obj_t* root);
@@ -336,6 +338,7 @@ private:
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);
     void SetFacePart(lv_obj_t* obj, int x, int y, int w, int h, int radius);
+    bool IsMusicLyricActive(int64_t now_ms) const;
 
     static void ObjOpaCb(void* obj, int32_t value);
     static void ObjXCb(void* obj, int32_t value);

@@ -17,7 +17,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -39,6 +41,7 @@
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 #include <esp_timer.h>
+#include <freertos/idf_additions.h>
 #include <freertos/task.h>
 #include <lwip/inet.h>
 #include <lwip/sockets.h>
@@ -719,6 +722,146 @@ private:
         std::vector<ScheduledLyricLine> lines;
     };
 
+    static cJSON* GetFirstObjectItem(cJSON* object, const char* const* keys, size_t key_count) {
+        if (!cJSON_IsObject(object)) {
+            return nullptr;
+        }
+        for (size_t i = 0; i < key_count; ++i) {
+            cJSON* item = cJSON_GetObjectItemCaseSensitive(object, keys[i]);
+            if (item) {
+                return item;
+            }
+        }
+        return nullptr;
+    }
+
+    static int ParseLyricTimeStringMs(const char* text) {
+        if (!text || !text[0]) {
+            return 0;
+        }
+        int minutes = 0;
+        int seconds = 0;
+        int fraction = 0;
+        int fraction_digits = 0;
+        const char* p = text;
+
+        while (*p && std::isdigit(static_cast<unsigned char>(*p))) {
+            minutes = minutes * 10 + (*p - '0');
+            ++p;
+        }
+        if (*p != ':') {
+            return std::max(0, atoi(text));
+        }
+        ++p;
+        while (*p && std::isdigit(static_cast<unsigned char>(*p))) {
+            seconds = seconds * 10 + (*p - '0');
+            ++p;
+        }
+        if (*p == '.' || *p == ',') {
+            ++p;
+            while (*p && std::isdigit(static_cast<unsigned char>(*p)) && fraction_digits < 3) {
+                fraction = fraction * 10 + (*p - '0');
+                ++fraction_digits;
+                ++p;
+            }
+        }
+        while (fraction_digits > 0 && fraction_digits < 3) {
+            fraction *= 10;
+            ++fraction_digits;
+        }
+        return std::max(0, (minutes * 60 + seconds) * 1000 + fraction);
+    }
+
+    static int LyricNumberToMs(double value, bool explicit_ms) {
+        if (value < 0) {
+            return 0;
+        }
+        if (!explicit_ms && value > 0 && value < 1000.0) {
+            value *= 1000.0;
+        }
+        return static_cast<int>(value + 0.5);
+    }
+
+    static void AppendLyricLineFromJson(cJSON* item, std::vector<ScheduledLyricLine>& lines) {
+        if (!item || lines.size() >= 90) {
+            return;
+        }
+
+        cJSON* time_item = nullptr;
+        cJSON* text_item = nullptr;
+        bool explicit_ms = false;
+
+        if (cJSON_IsArray(item)) {
+            time_item = cJSON_GetArrayItem(item, 0);
+            text_item = cJSON_GetArrayItem(item, 1);
+        } else if (cJSON_IsObject(item)) {
+            static const char* const time_ms_keys[] = {"time_ms", "timeMs", "timeMillis", "start_ms", "startMs"};
+            static const char* const time_keys[] = {"time", "start", "offset", "timestamp"};
+            static const char* const text_keys[] = {"text", "line", "lyric", "content", "words", "word"};
+            time_item = GetFirstObjectItem(item, time_ms_keys, sizeof(time_ms_keys) / sizeof(time_ms_keys[0]));
+            explicit_ms = time_item != nullptr;
+            if (!time_item) {
+                time_item = GetFirstObjectItem(item, time_keys, sizeof(time_keys) / sizeof(time_keys[0]));
+            }
+            text_item = GetFirstObjectItem(item, text_keys, sizeof(text_keys) / sizeof(text_keys[0]));
+        }
+
+        if (!cJSON_IsString(text_item) || text_item->valuestring[0] == '\0') {
+            return;
+        }
+
+        ScheduledLyricLine line;
+        if (cJSON_IsNumber(time_item)) {
+            line.time_ms = LyricNumberToMs(time_item->valuedouble, explicit_ms);
+        } else if (cJSON_IsString(time_item)) {
+            line.time_ms = ParseLyricTimeStringMs(time_item->valuestring);
+        }
+        line.text = text_item->valuestring;
+        lines.push_back(line);
+    }
+
+    static void AppendLrcText(const char* lrc, std::vector<ScheduledLyricLine>& lines) {
+        if (!lrc) {
+            return;
+        }
+        const char* p = lrc;
+        while (*p && lines.size() < 90) {
+            const char* line_end = strpbrk(p, "\r\n");
+            const char* next = line_end ? line_end : p + strlen(p);
+            const char* text_start = p;
+            int last_time_ms = -1;
+
+            while (text_start < next && *text_start == '[') {
+                const char* close = static_cast<const char*>(memchr(text_start, ']', next - text_start));
+                if (!close) {
+                    break;
+                }
+                std::string tag(text_start + 1, close);
+                if (tag.find(':') != std::string::npos && std::isdigit(static_cast<unsigned char>(tag[0]))) {
+                    last_time_ms = ParseLyricTimeStringMs(tag.c_str());
+                }
+                text_start = close + 1;
+            }
+
+            while (text_start < next && (*text_start == ' ' || *text_start == '\t')) {
+                ++text_start;
+            }
+            if (last_time_ms >= 0 && text_start < next) {
+                ScheduledLyricLine line;
+                line.time_ms = last_time_ms;
+                line.text.assign(text_start, next);
+                if (!line.text.empty()) {
+                    lines.push_back(std::move(line));
+                }
+            }
+
+            p = next;
+            while (*p == '\r' || *p == '\n') {
+                ++p;
+            }
+        }
+    }
+
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
@@ -830,19 +973,21 @@ private:
     }
 
     void ShowMusicLyric(const std::string& title, const std::string& artist, const std::string& line) {
-        Application::GetInstance().Schedule([this, title, artist, line]() {
-            auto* desktop_ui = GetDesktopUI();
-            if (!desktop_ui) {
-                return;
-            }
-            std::string state = title.empty() ? "Music" : title;
-            if (!artist.empty()) {
-                state += " - ";
-                state += artist;
-            }
-            desktop_ui->ShowPage(DesktopPage::XIAOZHI);
-            desktop_ui->SetXiaozhiState(state.c_str(), line.c_str(), "happy");
-        });
+        ESP_LOGI(TAG, "ShowMusicLyric request title=%s artist=%s line=%s",
+                 title.c_str(), artist.c_str(), line.c_str());
+        if (!display_) {
+            ESP_LOGW(TAG, "ShowMusicLyric skipped: display null");
+            return;
+        }
+        DisplayLockGuard lock(display_);
+        auto* desktop_ui = GetDesktopUI();
+        if (!desktop_ui) {
+            ESP_LOGW(TAG, "ShowMusicLyric skipped: desktop_ui null");
+            return;
+        }
+        desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+        desktop_ui->SetMusicLyric(title.c_str(), artist.c_str(), line.c_str());
+        ESP_LOGI(TAG, "ShowMusicLyric applied line=%s", line.c_str());
     }
 
     std::vector<ScheduledLyricLine> ParseLyricsJson(const std::string& lyrics_json) {
@@ -852,39 +997,81 @@ private:
         }
 
         cJSON* root = cJSON_Parse(lyrics_json.c_str());
-        if (!cJSON_IsArray(root)) {
+        if (!root) {
+            AppendLrcText(lyrics_json.c_str(), lines);
+            ESP_LOGI(TAG, "ParseLyricsJson raw_lrc bytes=%u lines=%u",
+                     static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+            return lines;
+        }
+
+        cJSON* lyric_source = root;
+        if (cJSON_IsString(root)) {
+            std::string nested = root->valuestring ? root->valuestring : "";
+            cJSON_Delete(root);
+            cJSON* nested_root = cJSON_Parse(nested.c_str());
+            if (nested_root) {
+                root = nested_root;
+                lyric_source = root;
+            } else {
+                AppendLrcText(nested.c_str(), lines);
+                ESP_LOGI(TAG, "ParseLyricsJson nested_lrc bytes=%u lines=%u",
+                         static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+                return lines;
+            }
+        }
+
+        if (cJSON_IsObject(lyric_source)) {
+            static const char* const array_keys[] = {"lyrics", "lines", "data", "items"};
+            cJSON* wrapped_array = GetFirstObjectItem(lyric_source, array_keys, sizeof(array_keys) / sizeof(array_keys[0]));
+            if (cJSON_IsArray(wrapped_array)) {
+                lyric_source = wrapped_array;
+            } else {
+                static const char* const lrc_keys[] = {"lrc", "lyric", "lyrics", "content"};
+                cJSON* wrapped_lrc = GetFirstObjectItem(lyric_source, lrc_keys, sizeof(lrc_keys) / sizeof(lrc_keys[0]));
+                if (cJSON_IsObject(wrapped_lrc)) {
+                    cJSON* nested_lrc = cJSON_GetObjectItem(wrapped_lrc, "lyric");
+                    if (!nested_lrc) {
+                        nested_lrc = cJSON_GetObjectItem(wrapped_lrc, "content");
+                    }
+                    wrapped_lrc = nested_lrc;
+                }
+                if (cJSON_IsString(wrapped_lrc)) {
+                    AppendLrcText(wrapped_lrc->valuestring, lines);
+                    cJSON_Delete(root);
+                    ESP_LOGI(TAG, "ParseLyricsJson wrapped_lrc bytes=%u lines=%u",
+                             static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+                    return lines;
+                }
+            }
+        }
+
+        if (!cJSON_IsArray(lyric_source)) {
+            ESP_LOGW(TAG, "ParseLyricsJson unsupported root bytes=%u type=%d",
+                     static_cast<unsigned>(lyrics_json.size()), root ? root->type : -1);
             cJSON_Delete(root);
             return lines;
         }
 
-        const int count = cJSON_GetArraySize(root);
+        const int count = cJSON_GetArraySize(lyric_source);
         lines.reserve(std::min(count, 90));
         for (int i = 0; i < count && lines.size() < 90; ++i) {
-            cJSON* item = cJSON_GetArrayItem(root, i);
-            if (!cJSON_IsObject(item)) {
-                continue;
-            }
-            cJSON* time = cJSON_GetObjectItem(item, "time_ms");
-            cJSON* text = cJSON_GetObjectItem(item, "text");
-            if (!cJSON_IsString(text) || text->valuestring[0] == '\0') {
-                continue;
-            }
-            ScheduledLyricLine line;
-            line.time_ms = std::max(0, cJSON_IsNumber(time) ? time->valueint : 0);
-            line.text = text->valuestring;
-            lines.push_back(line);
+            AppendLyricLineFromJson(cJSON_GetArrayItem(lyric_source, i), lines);
         }
         cJSON_Delete(root);
 
         std::sort(lines.begin(), lines.end(), [](const ScheduledLyricLine& a, const ScheduledLyricLine& b) {
             return a.time_ms < b.time_ms;
         });
+        ESP_LOGI(TAG, "ParseLyricsJson bytes=%u lines=%u",
+                 static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
         return lines;
     }
 
     void StartLyricsFromPlayUrl(const std::string& title, const std::string& artist, const std::string& lyrics_json) {
         const int generation = lyric_generation_.fetch_add(1) + 1;
         auto lines = ParseLyricsJson(lyrics_json);
+        ESP_LOGI(TAG, "StartLyricsFromPlayUrl title=%s lyrics_json length=%u lines=%u",
+                 title.c_str(), static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
         if (lines.empty()) {
             ESP_LOGI(TAG, "play_url lyrics skipped title=%s", title.c_str());
             return;
@@ -898,18 +1085,22 @@ private:
             .lines = std::move(lines),
         };
         const int line_count = static_cast<int>(args->lines.size());
-        const BaseType_t ret = xTaskCreate([](void* arg) {
+        const BaseType_t ret = xTaskCreateWithCaps([](void* arg) {
             auto* task_args = static_cast<LyricTaskArgs*>(arg);
             task_args->board->RunLyricSchedule(task_args);
             delete task_args;
-            vTaskDelete(nullptr);
-        }, "play_lyrics", 6144, args, 2, nullptr);
+            vTaskDeleteWithCaps(nullptr);
+        }, "play_lyrics", 6144, args, 2, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (ret != pdPASS) {
+            ESP_LOGW(TAG, "play_url lyric task create failed ret=%ld free_internal=%u largest_internal=%u",
+                     static_cast<long>(ret),
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+            ShowMusicLyric(title, artist, lines.front().text);
             delete args;
-            ESP_LOGW(TAG, "play_url lyric task create failed");
             return;
         }
-        ESP_LOGI(TAG, "play_url lyrics started title=%s lines=%d", title.c_str(), line_count);
+        ESP_LOGI(TAG, "play_url lyrics started title=%s lines=%d stack=psram", title.c_str(), line_count);
     }
 
     void RunLyricSchedule(const LyricTaskArgs* args) {
@@ -1354,6 +1545,9 @@ private:
                 const auto artist = properties["artist"].value<std::string>();
                 const auto url = properties["url"].value<std::string>();
                 const auto lyrics_json = properties["lyrics_json"].value<std::string>();
+                ESP_LOGI(TAG, "self.music.play_url title=%s artist=%s url_len=%u lyrics_json length=%u",
+                         title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
+                         static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
                 return result;
@@ -1370,6 +1564,9 @@ private:
                 const auto artist = properties["artist"].value<std::string>();
                 const auto url = properties["url"].value<std::string>();
                 const auto lyrics_json = properties["lyrics_json"].value<std::string>();
+                ESP_LOGI(TAG, "self.music.play title=%s artist=%s url_len=%u lyrics_json length=%u",
+                         title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
+                         static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
                 return result;
@@ -1390,19 +1587,9 @@ private:
                 const auto line = properties["line"].value<std::string>();
                 const auto title = properties["title"].value<std::string>();
                 const auto artist = properties["artist"].value<std::string>();
-                Application::GetInstance().Schedule([this, line, title, artist]() {
-                    auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
-                    if (!desktop_ui) {
-                        return;
-                    }
-                    std::string state = title.empty() ? "Music" : title;
-                    if (!artist.empty()) {
-                        state += " - ";
-                        state += artist;
-                    }
-                    desktop_ui->ShowPage(DesktopPage::XIAOZHI);
-                    desktop_ui->SetXiaozhiState(state.c_str(), line.c_str(), "happy");
-                });
+                ESP_LOGI(TAG, "self.music.show_lyric title=%s artist=%s line=%s",
+                         title.c_str(), artist.c_str(), line.c_str());
+                ShowMusicLyric(title, artist, line);
                 return true;
             });
 

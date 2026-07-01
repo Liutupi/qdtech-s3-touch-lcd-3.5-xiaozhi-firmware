@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-01: v1.7.74 NetEase Lyric Display Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.74`.
+- Fixed firmware-side lyric display for NetEase MCP playback after Mac-side logs confirmed `lyrics_json` and `self.music.show_lyric` were already being sent.
+- Added `DesktopUI::SetMusicLyric(...)` to update the XiaoZhi bottom message label directly.
+- Added a short lyric hold window so ordinary chat/status updates do not immediately clear displayed lyrics.
+- Moved scheduled lyric playback to a PSRAM-stack task using `xTaskCreateWithCaps`.
+- Made lyric parsing tolerant of wrapped JSON arrays, `[time,text]` arrays, alternate field names, raw LRC text, and nested JSON strings.
+- Kept `self.music.play_url` playback behavior unchanged and did not expose any `play_music` tool name.
+
+Verification:
+
+- Built on Windows with ESP-IDF from `C:\Users\Administrator\esp-idf`; `ninja -C build-qdtech-v1.7.62 -j 1 all` passed.
+- App binary size was `0x6307f0`; smallest app partition is `0x700000`; free app space is `0xcf810` (12%).
+- `idf.py -B build-qdtech-v1.7.62 merge-bin` produced a full image of `0x7307f0`.
+- App-only flashed to `COM14`; esptool hash verification passed.
+- Boot and live MCP tests confirmed `Ota: Current version: 1.7.74`, `self.music.play_url ... lyrics_json length=1800`, `ParseLyricsJson bytes=1800 lines=25`, `play_url lyrics started ... stack=psram`, repeated `DesktopUI: SetMusicLyric`, HTTP `200` MP3 streaming, and continuous playback frames.
+
+Release assets:
+
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-app.bin`: `4e279b5356aa8bc0b80b8af270cb29d7fd032cb8da7abd9b15fec3d79b428115`
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-firmware.zip`: `ae64b993b7e926ffed89f7f10f3025ff3f98cfa74b21d552cba230d40cb6a11b`
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-full.bin`: `ba2288a300fae5463126363549711a79a0b7615ab45547885d85d8b4c66ce963`
+
 ## 2026-07-01: v1.7.73 NetEase Second-Song Chain Fix
 
 Scope:

@@ -18,12 +18,15 @@
 #include <esp_app_desc.h>
 #include <esp_log.h>
 #include <esp_system.h>
+#include <esp_timer.h>
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
 #include <libs/gif/lv_gif.h>
 
 #define TAG "DesktopUI"
+
+static constexpr int64_t kMusicLyricHoldMs = 12000;
 
 LV_FONT_DECLARE(lv_font_montserrat_12);
 LV_FONT_DECLARE(lv_font_montserrat_14);
@@ -4897,6 +4900,7 @@ void DesktopUI::HandlePodcastSeekEvent(lv_event_t* event) {
 }
 
 void DesktopUI::SetXiaozhiState(const char* state, const char* message, const char* emotion) {
+    const int64_t now_ms = esp_timer_get_time() / 1000;
     if (xiaozhi_state_label_) {
         if (is_themed_face_gif_theme()) {
             lv_label_set_text(xiaozhi_state_label_,
@@ -4907,10 +4911,15 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
     }
     if (xiaozhi_message_label_) {
         std::string clean_message = clean_subtitle_text(message);
-        if (is_themed_face_gif_theme() && clean_message.empty()) {
-            clean_message = clean_subtitle_text(state);
+        if (IsMusicLyricActive(now_ms)) {
+            ESP_LOGI(TAG, "SetXiaozhiState skipped during music lyric hold state=%s message_len=%u",
+                     state ? state : "", static_cast<unsigned>(clean_message.size()));
+        } else {
+            if (is_themed_face_gif_theme() && clean_message.empty()) {
+                clean_message = clean_subtitle_text(state);
+            }
+            lv_label_set_text(xiaozhi_message_label_, clean_message.c_str());
         }
-        lv_label_set_text(xiaozhi_message_label_, clean_message.c_str());
     }
     if (xiaozhi_hint_label_) {
         lv_label_set_text(xiaozhi_hint_label_, state ? state : "");
@@ -4919,6 +4928,44 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
         emotion_ = emotion;
     }
 
+}
+
+void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char* line) {
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    music_lyric_hold_until_ms_ = now_ms + kMusicLyricHoldMs;
+
+    std::string state = clean_subtitle_text(title && title[0] ? title : "Music", 20);
+    std::string clean_artist = clean_subtitle_text(artist, 16);
+    if (!clean_artist.empty()) {
+        state += " - ";
+        state += clean_artist;
+    }
+    std::string clean_line = clean_subtitle_text(line, 48);
+    if (clean_line.empty()) {
+        clean_line = state;
+    }
+
+    ESP_LOGI(TAG, "SetMusicLyric line=%s title=%s artist=%s",
+             clean_line.c_str(), title ? title : "", artist ? artist : "");
+
+    if (xiaozhi_state_label_ && !is_themed_face_gif_theme()) {
+        lv_label_set_text(xiaozhi_state_label_, state.c_str());
+    }
+    if (xiaozhi_message_label_) {
+        lv_label_set_text(xiaozhi_message_label_, clean_line.c_str());
+    }
+    if (xiaozhi_hint_label_) {
+        lv_label_set_text(xiaozhi_hint_label_, state.c_str());
+    }
+    emotion_ = "happy";
+    if (lv_screen_active()) {
+        lv_obj_invalidate(lv_screen_active());
+    }
+
+}
+
+bool DesktopUI::IsMusicLyricActive(int64_t now_ms) const {
+    return music_lyric_hold_until_ms_ > now_ms;
 }
 
 void DesktopUI::SetXiaozhiEmotion(const char* emotion) {

@@ -1,3 +1,26 @@
+# 2026-07-01 Project Status: v1.7.74
+
+Firmware:
+
+- Version bumped to `1.7.74`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows build directory: `build-qdtech-v1.7.62`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-v1.7.62\xiaozhi.bin`.
+- Latest app size: `0x6307f0`, leaving `0xcf810` bytes (12%) in the `0x700000` app partition.
+- Latest merged image: `build-qdtech-v1.7.62\merged-binary.bin`, `0x7307f0` bytes.
+- App-only flashed to `COM14` at `0x100000`; esptool hash verification passed.
+- Boot log confirmed `Ota: Current version: 1.7.74`, MQTT connected, UDP lyric listener, and music MCP tools including `self.music.show_lyric`.
+- Release assets are in `releases/v1.7.74/`.
+
+Music lyric display status:
+
+- Mac NetEase MCP already sends non-empty lyrics, so the remaining failure was firmware-side.
+- `self.music.play_url` now logs `lyrics_json length`, parses broader lyric payload shapes, and starts the lyric scheduler on a PSRAM stack to avoid low internal-SRAM task creation failures during MP3 playback.
+- XiaoZhi music lyrics now use `DesktopUI::SetMusicLyric(...)`, which writes the bottom XiaoZhi message label directly under the display lock.
+- Ordinary chat/status updates are suppressed briefly during music lyrics so they do not clear the lyric line.
+- Final serial verification showed `lyrics_json length=1800`, `ParseLyricsJson bytes=1800 lines=25`, `play_url lyrics started ... stack=psram`, repeated `DesktopUI: SetMusicLyric`, HTTP `200` MP3 stream open, and continuous playback frames.
+
 # 2026-07-01 Project Status: v1.7.67
 
 Firmware:

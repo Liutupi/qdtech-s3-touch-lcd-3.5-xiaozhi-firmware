@@ -1,3 +1,19 @@
+# 2026-07-01 v1.7.74 NetEase Lyric Display Follow-Up
+
+Current state:
+
+- Source is shipped as `v1.7.74`.
+- `self.music.play_url` accepts `lyrics_json`, parses tolerant JSON/LRC lyric formats, and starts a PSRAM-stack lyric scheduler.
+- `self.music.show_lyric` and scheduled play-url lyrics both route to `DesktopUI::SetMusicLyric(...)`.
+- Lyrics now update the XiaoZhi bottom label directly under the display lock and are protected from ordinary dialogue/status refreshes for a short hold window.
+- App-only flash and live MCP verification passed on `COM14`.
+
+Next checks:
+
+- If lyrics disappear again, inspect serial in this order: `lyrics_json length`, `ParseLyricsJson ... lines`, `play_url lyrics started ... stack=psram`, `DesktopUI: SetMusicLyric`.
+- If `lines=0`, capture the exact Mac-side `lyrics_json` shape and add it to the tolerant parser.
+- Keep the Mac-side `play_music` compatibility name disabled; use `music.netease_play` followed by device `self.music.play_url`.
+
 # 2026-06-30 v1.7.65 NetEase MCP URL Playback Follow-Up
 
 Current state:

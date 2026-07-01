@@ -2,6 +2,78 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-01 Handoff: v1.7.74 NetEase Lyric Display Fix
+
+Current target:
+
+- Firmware version target: `v1.7.74`.
+- Branch: `main`.
+- Remote: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Windows build directory: `build-qdtech-v1.7.62`.
+- Hardware burned and verified on `COM14`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+
+Root cause:
+
+- The Mac NetEase MCP was already sending `self.music.play_url(title, artist, url, lyrics_json)` with non-empty lyrics and also calling `self.music.show_lyric`.
+- Firmware `v1.7.73` received `lyrics_json`, but the lyric scheduler used a normal FreeRTOS task with a 6144 byte internal-RAM stack. During real music playback internal SRAM was around 3-4 KB, so `play_lyrics` task creation failed.
+- A second issue appeared after moving past task creation: the `Application::Schedule` UI callback could lag behind music/protocol work, so later lyric lines were logged by the lyric scheduler but did not reliably reach the XiaoZhi bottom label.
+- The original parser only accepted one narrow JSON shape, so some valid Mac-side lyric payload variants could parse as zero lines.
+
+What changed:
+
+- Bumped firmware version to `1.7.74`.
+- Added a dedicated `DesktopUI::SetMusicLyric(title, artist, line)` path for XiaoZhi music lyrics.
+- Music lyric updates now write the XiaoZhi bottom message label directly under the display lock instead of relying on the main application schedule queue.
+- Added a short music-lyric hold window so ordinary `SetXiaozhiState` / `SetChatMessage` updates do not immediately clear the lyric line.
+- Moved the scheduled lyric task stack to PSRAM using `xTaskCreateWithCaps(..., MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)` and `vTaskDeleteWithCaps`.
+- Kept `self.music.play_url` playback unchanged and kept the no-`play_music` rule.
+- Made lyric parsing tolerant of:
+  - arrays of objects with `time_ms` / `timeMs` / `start_ms` and `text` / `line` / `lyric` / `content`;
+  - arrays of `[time, text]`;
+  - wrapped objects such as `{lyrics:[...]}`, `{lines:[...]}`, or `{lrc:{lyric:"..."}}`;
+  - raw LRC strings and nested JSON strings.
+- Added logs for:
+  - `self.music.play_url ... lyrics_json length=...`;
+  - `ParseLyricsJson ... lines=...`;
+  - `StartLyricsFromPlayUrl ... lines=...`;
+  - `play_url lyrics started ... stack=psram`;
+  - `self.music.show_lyric ...`;
+  - `ShowMusicLyric request/applied`;
+  - `DesktopUI: SetMusicLyric ...`;
+  - `SetXiaozhiState skipped during music lyric hold ...`.
+
+Verification:
+
+- Built on Windows with ESP-IDF from `C:\Users\Administrator\esp-idf`.
+- `ninja -C build-qdtech-v1.7.62 -j 1 all` passed.
+- `idf.py -B build-qdtech-v1.7.62 merge-bin` regenerated `merged-binary.bin`.
+- `xiaozhi.bin` size is `0x6307f0`; smallest app partition is `0x700000`; free app space is `0xcf810` (12%).
+- Full merged image size is `0x7307f0`.
+- App-only flashed `build-qdtech-v1.7.62\xiaozhi.bin` to `COM14` at `0x100000`; esptool hash verification passed.
+- Boot verification confirmed `Ota: Current version: 1.7.74`, MQTT connected, and `self.music.play_url`, `self.music.play`, `self.music.stop`, `self.music.show_lyric` registered.
+- UDP lyric smoke test confirmed `lyric udp line`, `ShowMusicLyric request`, `DesktopUI: SetMusicLyric`, and `ShowMusicLyric applied`.
+- Real Mac MCP point-song test confirmed:
+  - board received `% self.music.play_url...`;
+  - board logged `self.music.play_url ... lyrics_json length=1800`;
+  - `ParseLyricsJson bytes=1800 lines=25`;
+  - `play_url lyrics started ... lines=25 stack=psram`;
+  - stream opened with HTTP `200` and continuous MP3 frames;
+  - repeated `DesktopUI: SetMusicLyric line=...`;
+  - `SetXiaozhiState skipped during music lyric hold ...`, proving ordinary dialogue refresh did not clear the lyrics.
+- No panic/assert/Guru Meditation was observed during the final lyric playback capture.
+
+Release assets:
+
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-app.bin`: `4e279b5356aa8bc0b80b8af270cb29d7fd032cb8da7abd9b15fec3d79b428115`
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-firmware.zip`: `ae64b993b7e926ffed89f7f10f3025ff3f98cfa74b21d552cba230d40cb6a11b`
+- `releases/v1.7.74/qdtech-s3-touch-lcd-3.5-v1.7.74-full.bin`: `ba2288a300fae5463126363549711a79a0b7615ab45547885d85d8b4c66ce963`
+
+Important future warning:
+
+- Do not expose a Mac-side tool named `play_music`; it conflicts with XiaoZhi's internal tool name.
+- If lyrics disappear again, first check board serial for `lyrics_json length > 0`, then `ParseLyricsJson ... lines > 0`, then `play_url lyrics started ... stack=psram`, then `DesktopUI: SetMusicLyric`.
+
 ## 2026-07-01 Handoff: v1.7.73 NetEase Second-Song Chain Fix
 
 Current target:
