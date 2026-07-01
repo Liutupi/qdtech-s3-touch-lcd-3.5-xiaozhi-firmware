@@ -1,3 +1,23 @@
+# 2026-07-01 v1.7.75 NetEase Music Lyric Follow-Up
+
+Current state:
+
+- Source is shipped as `v1.7.75`.
+- The XiaoZhi page has a dedicated bottom lyric overlay, separate from normal chat/status refreshes.
+- `self.music.play_url` accepts `lyrics_json`, starts scheduled lyrics when lines parse, and clears old lyrics when the next song has no lyrics.
+- `self.music.show_lyric` and UDP lyric updates are ignored when stale or when scheduled lyrics for the current song are already active.
+- `self.music.stop` stops music and hides the lyric overlay.
+- NetEase MP3 streams use browser-like headers; rejected direct URLs stop retrying instead of keeping the radio service stuck.
+- A suspected crash path in `ParseLyricsJson` was fixed by avoiding use of a `cJSON` node after its root has been deleted.
+- App-only flash and live MCP verification passed on `COM13`.
+
+Next checks:
+
+- Run a longer stress pass: request 5-10 different songs, including songs with non-empty lyrics and songs where Mac MCP returns `lyrics_json length=0`.
+- If the reported second-song crash returns, capture the full panic/backtrace before changing code again.
+- If a song has no lyrics, confirm whether the Mac MCP returned `lyrics_json length=0`; firmware can only show the title placeholder in that case.
+- Keep the Mac-side `play_music` compatibility name disabled; use `music.netease_play` followed by device `self.music.play_url`.
+
 # 2026-07-01 v1.7.74 NetEase Lyric Display Follow-Up
 
 Current state:

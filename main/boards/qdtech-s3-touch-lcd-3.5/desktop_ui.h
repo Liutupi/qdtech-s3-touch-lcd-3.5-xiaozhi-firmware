@@ -58,6 +58,7 @@ public:
     void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetMusicLyric(const char* title, const char* artist, const char* line);
+    void ClearMusicLyric();
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
@@ -295,6 +296,8 @@ private:
     lv_obj_t* xiaozhi_state_label_ = nullptr;
     lv_obj_t* xiaozhi_message_label_ = nullptr;
     lv_obj_t* xiaozhi_hint_label_ = nullptr;
+    lv_obj_t* music_lyric_panel_ = nullptr;
+    lv_obj_t* music_lyric_label_ = nullptr;
 
     // Animation state
     std::string emotion_ = "neutral";

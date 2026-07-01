@@ -722,6 +722,44 @@ private:
         std::vector<ScheduledLyricLine> lines;
     };
 
+    void SetCurrentLyricSong(const std::string& title, const std::string& artist, int scheduled_generation) {
+        portENTER_CRITICAL(&lyric_lock_);
+        strlcpy(current_lyric_title_, title.c_str(), sizeof(current_lyric_title_));
+        strlcpy(current_lyric_artist_, artist.c_str(), sizeof(current_lyric_artist_));
+        scheduled_lyric_generation_ = scheduled_generation;
+        portEXIT_CRITICAL(&lyric_lock_);
+    }
+
+    bool IsCurrentLyricSong(const std::string& title, const std::string& artist) {
+        portENTER_CRITICAL(&lyric_lock_);
+        const bool title_matches = title.empty() || current_lyric_title_[0] == '\0' ||
+            strncmp(title.c_str(), current_lyric_title_, sizeof(current_lyric_title_)) == 0;
+        const bool artist_matches = artist.empty() || current_lyric_artist_[0] == '\0' ||
+            strncmp(artist.c_str(), current_lyric_artist_, sizeof(current_lyric_artist_)) == 0;
+        portEXIT_CRITICAL(&lyric_lock_);
+        return title_matches && artist_matches;
+    }
+
+    bool ShouldIgnoreExternalLyric(const std::string& title, const std::string& artist) {
+        portENTER_CRITICAL(&lyric_lock_);
+        const bool stale_title = !title.empty() && current_lyric_title_[0] != '\0' &&
+            strncmp(title.c_str(), current_lyric_title_, sizeof(current_lyric_title_)) != 0;
+        const bool stale_artist = !artist.empty() && current_lyric_artist_[0] != '\0' &&
+            strncmp(artist.c_str(), current_lyric_artist_, sizeof(current_lyric_artist_)) != 0;
+        const bool duplicate_scheduled =
+            scheduled_lyric_generation_ != 0 && scheduled_lyric_generation_ == lyric_generation_.load();
+        portEXIT_CRITICAL(&lyric_lock_);
+        return stale_title || stale_artist || duplicate_scheduled;
+    }
+
+    void ClearScheduledLyricsIfCurrent(int generation) {
+        portENTER_CRITICAL(&lyric_lock_);
+        if (scheduled_lyric_generation_ == generation) {
+            scheduled_lyric_generation_ = 0;
+        }
+        portEXIT_CRITICAL(&lyric_lock_);
+    }
+
     static cJSON* GetFirstObjectItem(cJSON* object, const char* const* keys, size_t key_count) {
         if (!cJSON_IsObject(object)) {
             return nullptr;
@@ -794,10 +832,16 @@ private:
         if (cJSON_IsArray(item)) {
             time_item = cJSON_GetArrayItem(item, 0);
             text_item = cJSON_GetArrayItem(item, 1);
+            if (!cJSON_IsString(text_item) && cJSON_GetArraySize(item) > 2) {
+                text_item = cJSON_GetArrayItem(item, 2);
+            }
         } else if (cJSON_IsObject(item)) {
             static const char* const time_ms_keys[] = {"time_ms", "timeMs", "timeMillis", "start_ms", "startMs"};
-            static const char* const time_keys[] = {"time", "start", "offset", "timestamp"};
-            static const char* const text_keys[] = {"text", "line", "lyric", "content", "words", "word"};
+            static const char* const time_keys[] = {"time", "start", "offset", "timestamp", "startTime", "start_time"};
+            static const char* const text_keys[] = {
+                "text", "line", "lyric", "content", "words", "word", "originalLyric",
+                "original", "sentence", "value"
+            };
             time_item = GetFirstObjectItem(item, time_ms_keys, sizeof(time_ms_keys) / sizeof(time_ms_keys[0]));
             explicit_ms = time_item != nullptr;
             if (!time_item) {
@@ -818,6 +862,49 @@ private:
         }
         line.text = text_item->valuestring;
         lines.push_back(line);
+    }
+
+    static void AppendLyricsRecursive(cJSON* node, std::vector<ScheduledLyricLine>& lines, int depth) {
+        if (!node || lines.size() >= 90 || depth > 5) {
+            return;
+        }
+
+        if (cJSON_IsString(node)) {
+            AppendLrcText(node->valuestring, lines);
+            return;
+        }
+
+        const size_t before = lines.size();
+        AppendLyricLineFromJson(node, lines);
+        if (lines.size() > before) {
+            return;
+        }
+
+        if (cJSON_IsArray(node)) {
+            const int count = cJSON_GetArraySize(node);
+            for (int i = 0; i < count && lines.size() < 90; ++i) {
+                AppendLyricsRecursive(cJSON_GetArrayItem(node, i), lines, depth + 1);
+            }
+            return;
+        }
+
+        if (cJSON_IsObject(node)) {
+            for (cJSON* child = node->child; child && lines.size() < 90; child = child->next) {
+                AppendLyricsRecursive(child, lines, depth + 1);
+            }
+        }
+    }
+
+    static void SortAndDedupLyrics(std::vector<ScheduledLyricLine>& lines) {
+        std::sort(lines.begin(), lines.end(), [](const ScheduledLyricLine& a, const ScheduledLyricLine& b) {
+            if (a.time_ms != b.time_ms) {
+                return a.time_ms < b.time_ms;
+            }
+            return a.text < b.text;
+        });
+        lines.erase(std::unique(lines.begin(), lines.end(), [](const ScheduledLyricLine& a, const ScheduledLyricLine& b) {
+            return a.time_ms == b.time_ms && a.text == b.text;
+        }), lines.end());
     }
 
     static void AppendLrcText(const char* lrc, std::vector<ScheduledLyricLine>& lines) {
@@ -972,21 +1059,33 @@ private:
         return static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
     }
 
-    void ShowMusicLyric(const std::string& title, const std::string& artist, const std::string& line) {
+    void ShowMusicLyric(const std::string& title, const std::string& artist, const std::string& line, bool ensure_page = false) {
         ESP_LOGI(TAG, "ShowMusicLyric request title=%s artist=%s line=%s",
                  title.c_str(), artist.c_str(), line.c_str());
         if (!display_) {
             ESP_LOGW(TAG, "ShowMusicLyric skipped: display null");
             return;
         }
-        DisplayLockGuard lock(display_);
+        if (!IsCurrentLyricSong(title, artist)) {
+            ESP_LOGI(TAG, "ShowMusicLyric skipped stale title=%s artist=%s",
+                     title.c_str(), artist.c_str());
+            return;
+        }
+        if (!lvgl_port_lock(250)) {
+            ESP_LOGW(TAG, "ShowMusicLyric skipped: lvgl busy title=%s", title.c_str());
+            return;
+        }
         auto* desktop_ui = GetDesktopUI();
         if (!desktop_ui) {
+            lvgl_port_unlock();
             ESP_LOGW(TAG, "ShowMusicLyric skipped: desktop_ui null");
             return;
         }
-        desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+        if (ensure_page) {
+            desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+        }
         desktop_ui->SetMusicLyric(title.c_str(), artist.c_str(), line.c_str());
+        lvgl_port_unlock();
         ESP_LOGI(TAG, "ShowMusicLyric applied line=%s", line.c_str());
     }
 
@@ -1037,17 +1136,28 @@ private:
                 }
                 if (cJSON_IsString(wrapped_lrc)) {
                     AppendLrcText(wrapped_lrc->valuestring, lines);
-                    cJSON_Delete(root);
-                    ESP_LOGI(TAG, "ParseLyricsJson wrapped_lrc bytes=%u lines=%u",
-                             static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
-                    return lines;
+                    if (!lines.empty()) {
+                        SortAndDedupLyrics(lines);
+                        cJSON_Delete(root);
+                        ESP_LOGI(TAG, "ParseLyricsJson wrapped_lrc bytes=%u lines=%u",
+                                 static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+                        return lines;
+                    }
                 }
             }
         }
 
         if (!cJSON_IsArray(lyric_source)) {
-            ESP_LOGW(TAG, "ParseLyricsJson unsupported root bytes=%u type=%d",
-                     static_cast<unsigned>(lyrics_json.size()), root ? root->type : -1);
+            AppendLyricsRecursive(lyric_source, lines, 0);
+            if (!lines.empty()) {
+                SortAndDedupLyrics(lines);
+                cJSON_Delete(root);
+                ESP_LOGI(TAG, "ParseLyricsJson recursive bytes=%u lines=%u",
+                         static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+                return lines;
+            }
+            ESP_LOGW(TAG, "ParseLyricsJson unsupported root bytes=%u type=%d sample=%.96s",
+                     static_cast<unsigned>(lyrics_json.size()), root ? root->type : -1, lyrics_json.c_str());
             cJSON_Delete(root);
             return lines;
         }
@@ -1057,11 +1167,11 @@ private:
         for (int i = 0; i < count && lines.size() < 90; ++i) {
             AppendLyricLineFromJson(cJSON_GetArrayItem(lyric_source, i), lines);
         }
+        if (lines.empty()) {
+            AppendLyricsRecursive(lyric_source, lines, 0);
+        }
         cJSON_Delete(root);
-
-        std::sort(lines.begin(), lines.end(), [](const ScheduledLyricLine& a, const ScheduledLyricLine& b) {
-            return a.time_ms < b.time_ms;
-        });
+        SortAndDedupLyrics(lines);
         ESP_LOGI(TAG, "ParseLyricsJson bytes=%u lines=%u",
                  static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
         return lines;
@@ -1072,8 +1182,10 @@ private:
         auto lines = ParseLyricsJson(lyrics_json);
         ESP_LOGI(TAG, "StartLyricsFromPlayUrl title=%s lyrics_json length=%u lines=%u",
                  title.c_str(), static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
+        SetCurrentLyricSong(title, artist, lines.empty() ? 0 : generation);
         if (lines.empty()) {
             ESP_LOGI(TAG, "play_url lyrics skipped title=%s", title.c_str());
+            ShowMusicLyric(title, artist, "Playing: " + title, true);
             return;
         }
 
@@ -1090,13 +1202,14 @@ private:
             task_args->board->RunLyricSchedule(task_args);
             delete task_args;
             vTaskDeleteWithCaps(nullptr);
-        }, "play_lyrics", 6144, args, 2, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        }, "play_lyrics", 8192, args, 2, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (ret != pdPASS) {
             ESP_LOGW(TAG, "play_url lyric task create failed ret=%ld free_internal=%u largest_internal=%u",
                      static_cast<long>(ret),
                      static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
                      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
-            ShowMusicLyric(title, artist, lines.front().text);
+            SetCurrentLyricSong(title, artist, 0);
+            ShowMusicLyric(title, artist, lines.front().text, true);
             delete args;
             return;
         }
@@ -1104,11 +1217,13 @@ private:
     }
 
     void RunLyricSchedule(const LyricTaskArgs* args) {
-        ShowMusicLyric(args->title, args->artist, "♪ " + args->title);
+        ShowMusicLyric(args->title, args->artist, "Playing: " + args->title, true);
         const int64_t start_ms = esp_timer_get_time() / 1000;
         std::string last_text;
         for (const auto& line : args->lines) {
             if (args->generation != lyric_generation_.load()) {
+                ESP_LOGI(TAG, "play_url lyric task exit generation=%d current=%d",
+                         args->generation, lyric_generation_.load());
                 return;
             }
             if (line.text.empty() || line.text == last_text) {
@@ -1121,11 +1236,14 @@ private:
                 vTaskDelay(pdMS_TO_TICKS(target_ms - now_ms));
             }
             if (args->generation != lyric_generation_.load()) {
+                ESP_LOGI(TAG, "play_url lyric task exit after wait generation=%d current=%d",
+                         args->generation, lyric_generation_.load());
                 return;
             }
             ESP_LOGI(TAG, "play_url lyric line title=%s line=%s", args->title.c_str(), line.text.c_str());
             ShowMusicLyric(args->title, args->artist, line.text);
         }
+        ClearScheduledLyricsIfCurrent(args->generation);
     }
 
     void StartMusicCommandServer() {
@@ -1210,7 +1328,9 @@ private:
         ESP_LOGI(TAG, "music command play title=%s artist=%s url=%s",
                  title_text.c_str(), artist_text.c_str(), url_text.c_str());
         board->radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
-        board->ShowMusicLyric(title_text, artist_text, "♪ " + title_text);
+        board->lyric_generation_.fetch_add(1);
+        board->SetCurrentLyricSong(title_text, artist_text, 0);
+        board->ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
 
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_sendstr(req, "{\"ok\":true}");
@@ -1221,9 +1341,9 @@ private:
             return;
         }
         lyric_udp_started_ = true;
-        const BaseType_t ret = xTaskCreate([](void* arg) {
+        const BaseType_t ret = xTaskCreateWithCaps([](void* arg) {
             static_cast<QdtechS3TouchLcd35Board*>(arg)->LyricUdpTask();
-        }, "lyric_udp", 4096, this, 2, nullptr);
+        }, "lyric_udp", 8192, this, 2, nullptr, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         if (ret != pdPASS) {
             lyric_udp_started_ = false;
             ESP_LOGW(TAG, "lyric udp task create failed");
@@ -1235,7 +1355,7 @@ private:
         if (sock < 0) {
             ESP_LOGW(TAG, "lyric udp socket failed");
             lyric_udp_started_ = false;
-            vTaskDelete(nullptr);
+            vTaskDeleteWithCaps(nullptr);
             return;
         }
 
@@ -1247,7 +1367,7 @@ private:
             ESP_LOGW(TAG, "lyric udp bind failed port=%d", kLyricUdpPort);
             close(sock);
             lyric_udp_started_ = false;
-            vTaskDelete(nullptr);
+            vTaskDeleteWithCaps(nullptr);
             return;
         }
 
@@ -1277,7 +1397,9 @@ private:
                 ESP_LOGI(TAG, "music udp play title=%s artist=%s url=%s",
                          title_text.c_str(), artist_text.c_str(), url_text.c_str());
                 radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
-                ShowMusicLyric(title_text, artist_text, "♪ " + title_text);
+                lyric_generation_.fetch_add(1);
+                SetCurrentLyricSong(title_text, artist_text, 0);
+                ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
                 continue;
             }
             cJSON* line = cJSON_GetObjectItem(root, "line");
@@ -1292,7 +1414,11 @@ private:
             const std::string line_text = line->valuestring;
             cJSON_Delete(root);
             ESP_LOGI(TAG, "lyric udp line title=%s line=%s", title_text.c_str(), line_text.c_str());
-            ShowMusicLyric(title_text, artist_text, line_text);
+            if (ShouldIgnoreExternalLyric(title_text, artist_text)) {
+                ESP_LOGI(TAG, "lyric udp line ignored title=%s line=%s", title_text.c_str(), line_text.c_str());
+                continue;
+            }
+            ShowMusicLyric(title_text, artist_text, line_text, true);
         }
     }
 
@@ -1575,6 +1701,14 @@ private:
             "Stop the current music URL playback on this device speaker.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 radio_service_.Stop();
+                lyric_generation_.fetch_add(1);
+                SetCurrentLyricSong("", "", 0);
+                if (display_ && lvgl_port_lock(250)) {
+                    if (auto* desktop_ui = GetDesktopUI()) {
+                        desktop_ui->ClearMusicLyric();
+                    }
+                    lvgl_port_unlock();
+                }
                 return true;
             });
         mcp_server.AddTool("self.music.show_lyric",
@@ -1589,7 +1723,12 @@ private:
                 const auto artist = properties["artist"].value<std::string>();
                 ESP_LOGI(TAG, "self.music.show_lyric title=%s artist=%s line=%s",
                          title.c_str(), artist.c_str(), line.c_str());
-                ShowMusicLyric(title, artist, line);
+                if (ShouldIgnoreExternalLyric(title, artist)) {
+                    ESP_LOGI(TAG, "self.music.show_lyric ignored title=%s artist=%s line=%s",
+                             title.c_str(), artist.c_str(), line.c_str());
+                    return true;
+                }
+                ShowMusicLyric(title, artist, line, true);
                 return true;
             });
 
@@ -1893,6 +2032,10 @@ private:
     bool ble_config_started_ = false;
     bool lyric_udp_started_ = false;
     std::atomic<int> lyric_generation_{0};
+    portMUX_TYPE lyric_lock_ = portMUX_INITIALIZER_UNLOCKED;
+    char current_lyric_title_[96] = {};
+    char current_lyric_artist_[96] = {};
+    int scheduled_lyric_generation_ = 0;
     esp_timer_handle_t network_services_timer_ = nullptr;
 };
 

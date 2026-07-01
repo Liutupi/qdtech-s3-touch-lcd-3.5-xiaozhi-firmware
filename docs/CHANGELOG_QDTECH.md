@@ -2,6 +2,37 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-01: v1.7.75 NetEase Lyric Overlay and Cutover Stability
+
+Scope:
+
+- Bumped firmware version to `1.7.75`.
+- Added a dedicated XiaoZhi music lyric overlay and `DesktopUI::ClearMusicLyric()`.
+- Kept the existing `self.music.play_url` playback chain intact while hardening lyric state changes around song cutover and stop.
+- Added lyric generation guards so an old scheduled lyric task exits when a new song starts.
+- Filtered stale external `self.music.show_lyric` / UDP lyric updates when they no longer match the current song.
+- Cleared stale lyrics when a new song has empty `lyrics_json`, showing `Playing: <title>` instead.
+- Expanded lyric parsing to recursive/nested payloads and additional NetEase-style field names.
+- Fixed a suspected second-song crash source by avoiding a recursive parse after `cJSON_Delete(root)`.
+- Added browser-like headers for NetEase direct MP3 URLs and stopped retry loops on custom URL `401/403/404/410`.
+- Increased lyric scheduler and UDP listener stacks to 8192 bytes in PSRAM.
+
+Verification:
+
+- Built on Windows with ESP-IDF from `C:\Users\Administrator\esp-idf`; `ninja -C build-qdtech-v1.7.62 -j 1 all` passed.
+- App binary size was `0x630fb0`; smallest app partition is `0x700000`; free app space is `0xcf050` (12%).
+- `idf.py -B build-qdtech-v1.7.62 merge-bin` produced a full image of `0x730fb0`.
+- App-only flashed to `COM13`; esptool hash verification passed.
+- Boot/live tests confirmed `App version: 1.7.75`, `self.music.play_url ... lyrics_json length=1945`, `ParseLyricsJson ... lines=41`, HTTP `200`, playback frames, and `SetMusicLyric overlay line=...`.
+- Cutover tests confirmed an empty-lyrics second song did not keep the first song lyrics, and a later `lyrics_json length=4203` song parsed to `87` lines and updated the overlay.
+- `self.music.stop` cleared and hid the lyric overlay.
+
+Release assets:
+
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-app.bin`: `bac3a9ef7a7c879a327f9370725879b0385cecc4667cf635c43af0ae81e8a77e`
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-full.bin`: `4a9a0b3ee5cf5aaa50323cecb8881f7a639308a6ff9787e2eee71ef68d2393bd`
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-firmware.zip`: `f7853d03ddc2080338bb76c2e71888389b7e099dc521fa2a2439c0df63134ca2`
+
 ## 2026-07-01: v1.7.74 NetEase Lyric Display Fix
 
 Scope:

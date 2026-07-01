@@ -1,3 +1,28 @@
+# 2026-07-01 Project Status: v1.7.75
+
+Firmware:
+
+- Version bumped to `1.7.75`.
+- Build target remains QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows build directory: `build-qdtech-v1.7.62`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+- Latest app image: `build-qdtech-v1.7.62\xiaozhi.bin`.
+- Latest app size: `0x630fb0`, leaving `0xcf050` bytes (12%) in the `0x700000` app partition.
+- Latest merged image: `build-qdtech-v1.7.62\merged-binary.bin`, `0x730fb0` bytes.
+- App-only flashed to `COM13` at `0x100000`; esptool hash verification passed.
+- Release assets are in `releases/v1.7.75/`.
+
+Music lyric/playback status:
+
+- NetEase point-singing now keeps audio playback on the existing radio/custom-URL path, but lyric rendering uses a dedicated XiaoZhi bottom overlay.
+- Scheduled lyrics are guarded by generation so old lyric tasks exit on song cutover.
+- Stale `self.music.show_lyric`/UDP lines are filtered when they do not match the current song.
+- `self.music.stop` clears the overlay.
+- Empty `lyrics_json` no longer leaves the previous song lyric stuck; the overlay shows `Playing: <title>`.
+- The parser handles recursive/nested lyric payloads and no longer performs recursive parsing after freeing the cJSON root.
+- Final serial evidence included `lyrics_json length=1945 -> lines=41`, an empty-lyrics cutover that cleared the old lyric task, `lyrics_json length=4203 -> lines=87`, HTTP `200` MP3 streams, playback frames, `SetMusicLyric overlay line=...`, and `DesktopUI: ClearMusicLyric`.
+- One user-reported second-song crash was not captured; later monitored cutovers after the parser lifetime fix did not reproduce it.
+
 # 2026-07-01 Project Status: v1.7.74
 
 Firmware:

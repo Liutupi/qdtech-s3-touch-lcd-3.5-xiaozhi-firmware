@@ -2,6 +2,61 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-01 Handoff: v1.7.75 NetEase Lyric Overlay and Cutover Stability
+
+Current target:
+
+- Firmware version target: `v1.7.75`.
+- Branch: `main`.
+- Remote: `origin` -> `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git`.
+- Windows build directory: `build-qdtech-v1.7.62`.
+- Hardware flashed and verified on `COM13` with app-only flash at `0x100000`.
+- QDTech continues to use `partitions/v1/16m_qdtech_7m_ota.csv` with two 7 MB OTA app slots.
+
+What changed:
+
+- Added a dedicated XiaoZhi music lyric overlay at the bottom of the XiaoZhi page, separate from the ordinary chat/status text path.
+- `DesktopUI::SetMusicLyric(...)` now updates the existing XiaoZhi message label and the dedicated overlay, invalidates the objects, and logs `SetMusicLyric overlay line=...`.
+- `DesktopUI::ClearMusicLyric()` hides the overlay and is called by `self.music.stop`.
+- `self.music.play_url` still preserves the existing playback path, but now clears/replaces old lyric state on every song cutover.
+- Scheduled lyrics use a generation guard so the previous song's lyric task exits cleanly when a new song starts.
+- External `self.music.show_lyric` / UDP lyric updates are filtered if they belong to a stale song, or if the same song already has scheduled `lyrics_json`.
+- If the Mac MCP sends no lyrics for a song, the firmware clears old lyrics and shows `Playing: <title>` instead of leaving the previous song line stuck.
+- The lyric parser now handles nested lyric JSON recursively, object arrays, `[time,text]`, `[time,duration,text]`, wrapped LRC, and common alternate field names.
+- Fixed a release-blocking crash risk in `ParseLyricsJson`: the recursive fallback no longer reads `lyric_source` after `cJSON_Delete(root)`.
+- NetEase direct MP3 URLs now use browser-like headers, and custom URL HTTP `401/403/404/410` stops retries with a UI error instead of looping forever.
+- Increased `play_lyrics` and `lyric_udp` task stacks to 8192 bytes in PSRAM.
+- Kept the no-`play_music` rule; do not expose that Mac-side tool name.
+
+Verification:
+
+- Built on Windows with ESP-IDF from `C:\Users\Administrator\esp-idf`.
+- `ninja -C build-qdtech-v1.7.62 -j 1 all` passed.
+- `idf.py -B build-qdtech-v1.7.62 merge-bin` regenerated `merged-binary.bin`.
+- `xiaozhi.bin` size is `0x630fb0`; smallest app partition is `0x700000`; free app space is `0xcf050` (12%).
+- Full merged image size is `0x730fb0`.
+- App-only flashed `build-qdtech-v1.7.62\xiaozhi.bin` to `COM13` at `0x100000`; esptool hash verification passed.
+- Boot verification confirmed `App version: 1.7.75`, MQTT connected, and music MCP tools registered.
+- Real Mac MCP tests observed:
+  - `self.music.play_url title=... lyrics_json length=1945`, `ParseLyricsJson bytes=1945 lines=41`, HTTP `200`, playback frames, and overlay lyric updates.
+  - A second song with `lyrics_json length=0` cleared the old lyric task and showed `Playing: <title>` instead of stale lyrics.
+  - `self.music.play_url title=... lyrics_json length=4203`, `ParseLyricsJson bytes=4203 lines=87`, HTTP `200`, playback frames, and overlay lyric updates.
+  - `self.music.stop` logged `DesktopUI: ClearMusicLyric` and hid the overlay.
+- One user-reported second-song crash was not captured because the monitor was interrupted; later monitored song cutovers after the parser lifetime fix did not reproduce it.
+
+Release assets:
+
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-app.bin`: `bac3a9ef7a7c879a327f9370725879b0385cecc4667cf635c43af0ae81e8a77e`
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-full.bin`: `4a9a0b3ee5cf5aaa50323cecb8881f7a639308a6ff9787e2eee71ef68d2393bd`
+- `releases/v1.7.75/qdtech-s3-touch-lcd-3.5-v1.7.75-firmware.zip`: `f7853d03ddc2080338bb76c2e71888389b7e099dc521fa2a2439c0df63134ca2`
+- `releases/v1.7.75/SHA256SUMS.txt` records the same hashes.
+
+Important future warning:
+
+- If lyrics do not show, check serial in this order: `lyrics_json length`, `ParseLyricsJson ... lines`, `play_url lyrics started`, `SetMusicLyric overlay line`.
+- If audio says "playing" but there is no sound, check `stream open ... status=...`; a `403` means the direct NetEase URL/header or server URL freshness has regressed.
+- If another second-song crash appears, capture the full panic/backtrace first; this release specifically removed one suspected use-after-free path in lyric parsing.
+
 ## 2026-07-01 Handoff: v1.7.74 NetEase Lyric Display Fix
 
 Current target:

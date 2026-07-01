@@ -73,6 +73,11 @@ static std::string Lower(std::string text) {
     return text;
 }
 
+static bool IsNetEaseMusicUrl(const std::string& url) {
+    return url.find(".music.126.net/") != std::string::npos ||
+           url.find("music.163.com/") != std::string::npos;
+}
+
 static RadioCategory ParseCategory(const char* cat) {
     if (!cat) return RadioCategory::OTHER;
     std::string c = Lower(cat);
@@ -661,7 +666,7 @@ void RadioService::Task() {
             reconnect_attempt_++;
             int delay_ms = std::min(5000, 500 + reconnect_attempt_ * 500);
             ESP_LOGW(TAG, "radio reconnect scheduled station=%s attempt=%d delay=%dms",
-                     kStations[station_index_].name, reconnect_attempt_, delay_ms);
+                     kStations[station_index_].name.c_str(), reconnect_attempt_, delay_ms);
             if (reconnect_attempt_ >= 5) {
                 SetUi("Error", "Multiple failures");
             } else {
@@ -832,6 +837,16 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     esp_http_client_set_header(client, "User-Agent", "Mozilla/5.0 ESP32 Radio");
     esp_http_client_set_header(client, "Accept", "audio/mpeg,*/*");
     esp_http_client_set_header(client, "Icy-MetaData", "0");
+    if (IsNetEaseMusicUrl(url)) {
+        esp_http_client_set_header(client, "User-Agent",
+                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+        esp_http_client_set_header(client, "Accept", "audio/mpeg,audio/*;q=0.9,*/*;q=0.8");
+        esp_http_client_set_header(client, "Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
+        esp_http_client_set_header(client, "Referer", "https://music.163.com/");
+        esp_http_client_set_header(client, "Origin", "https://music.163.com");
+        esp_http_client_set_header(client, "Connection", "close");
+    }
 
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
@@ -845,6 +860,14 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     if (status < 200 || status >= 400) {
         ESP_LOGW(TAG, "bad stream status station=%s url_index=%d status=%d len=%d url=%s",
                  station_name.c_str(), url_index, status, content_length, url.c_str());
+        if (playing_custom_url_ && (status == 401 || status == 403 || status == 404 || status == 410)) {
+            ESP_LOGW(TAG, "custom music url rejected status=%d, stopping retries station=%s",
+                     status, station_name.c_str());
+            play_requested_ = false;
+            stop_requested_ = true;
+            Application::GetInstance().SetExternalAudioActive(false);
+            SetUi("Error", status == 403 ? "Music URL rejected" : "Music URL unavailable");
+        }
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return false;

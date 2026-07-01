@@ -47,6 +47,14 @@ self.music.play_url({
 
 Do not only return text such as "playing". Do not only call an internal `play_music`. Do not depend on first-song cache behavior. The second and third songs must also produce a new `self.music.play_url` call.
 
+Current lyric contract for QDTech firmware `v1.7.75`:
+
+- `self.music.play_url` may include `lyrics_json`; if non-empty and parseable, the firmware schedules lyric lines locally.
+- `self.music.show_lyric(line,title,artist)` may still be sent, but the firmware filters stale lines and may ignore external lines while scheduled lyrics for the same current song are active.
+- If the Mac MCP returns `lyrics_json length=0`, the firmware cannot invent lyrics; it clears old lyrics and shows `Playing: <title>`.
+- For debugging, the board serial should show `self.music.play_url ... lyrics_json length=...`, `ParseLyricsJson ... lines=...`, and `SetMusicLyric overlay line=...`.
+- Keep `title` and `artist` stable between `play_url` and `show_lyric`; mismatched fields are treated as stale after a song cutover.
+
 2026-07-01 critical fix:
 
 - Do not expose a NetEase MCP tool named `play_music`.

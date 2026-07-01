@@ -3007,6 +3007,30 @@ void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
 
     // 全屏黑色背景，只有面部
     CreateFaceUI(xiaozhi_page_);
+
+    music_lyric_panel_ = lv_obj_create(xiaozhi_page_);
+    lv_obj_remove_style_all(music_lyric_panel_);
+    lv_obj_set_size(music_lyric_panel_, 452, 58);
+    lv_obj_align(music_lyric_panel_, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_set_style_radius(music_lyric_panel_, 8, 0);
+    lv_obj_set_style_bg_color(music_lyric_panel_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(music_lyric_panel_, LV_OPA_80, 0);
+    lv_obj_set_style_border_color(music_lyric_panel_, COLOR_GOLD, 0);
+    lv_obj_set_style_border_opa(music_lyric_panel_, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(music_lyric_panel_, 1, 0);
+    lv_obj_clear_flag(music_lyric_panel_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(music_lyric_panel_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(music_lyric_panel_, LV_OBJ_FLAG_HIDDEN);
+
+    music_lyric_label_ = label_en(music_lyric_panel_, "", &style_en);
+    lv_obj_set_width(music_lyric_label_, 420);
+    lv_obj_set_style_text_font(music_lyric_label_, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(music_lyric_label_, lv_color_white(), 0);
+    lv_obj_set_style_text_align(music_lyric_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(music_lyric_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_center(music_lyric_label_);
+    lv_obj_clear_flag(music_lyric_label_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_move_foreground(music_lyric_panel_);
 }
 
 // ===== Network page =====
@@ -4497,6 +4521,8 @@ void DesktopUI::ReloadUserProfile() {
     radio_page_ = nullptr;
     focus_page_ = nullptr;
     xiaozhi_page_ = nullptr;
+    music_lyric_panel_ = nullptr;
+    music_lyric_label_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
 
@@ -4529,6 +4555,8 @@ void DesktopUI::CycleTheme() {
     radio_page_ = nullptr;
     focus_page_ = nullptr;
     xiaozhi_page_ = nullptr;
+    music_lyric_panel_ = nullptr;
+    music_lyric_label_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
     
@@ -4950,18 +4978,37 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
 
     if (xiaozhi_state_label_ && !is_themed_face_gif_theme()) {
         lv_label_set_text(xiaozhi_state_label_, state.c_str());
+        lv_obj_invalidate(xiaozhi_state_label_);
     }
     if (xiaozhi_message_label_) {
         lv_label_set_text(xiaozhi_message_label_, clean_line.c_str());
+        lv_obj_invalidate(xiaozhi_message_label_);
     }
     if (xiaozhi_hint_label_) {
         lv_label_set_text(xiaozhi_hint_label_, state.c_str());
+        lv_obj_invalidate(xiaozhi_hint_label_);
+    }
+    if (music_lyric_panel_ && music_lyric_label_) {
+        lv_obj_clear_flag(music_lyric_panel_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(music_lyric_label_, clean_line.c_str());
+        lv_obj_move_foreground(music_lyric_panel_);
+        lv_obj_invalidate(music_lyric_panel_);
+        ESP_LOGI(TAG, "SetMusicLyric overlay line=%s", clean_line.c_str());
     }
     emotion_ = "happy";
-    if (lv_screen_active()) {
-        lv_obj_invalidate(lv_screen_active());
-    }
 
+}
+
+void DesktopUI::ClearMusicLyric() {
+    music_lyric_hold_until_ms_ = 0;
+    if (music_lyric_label_) {
+        lv_label_set_text(music_lyric_label_, "");
+    }
+    if (music_lyric_panel_) {
+        lv_obj_add_flag(music_lyric_panel_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_invalidate(music_lyric_panel_);
+    }
+    ESP_LOGI(TAG, "ClearMusicLyric");
 }
 
 bool DesktopUI::IsMusicLyricActive(int64_t now_ms) const {
