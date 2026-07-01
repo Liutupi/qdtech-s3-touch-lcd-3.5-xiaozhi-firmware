@@ -2,6 +2,58 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-01 Handoff: v1.7.73 NetEase Second-Song Chain Fix
+
+Current target:
+
+- Firmware version target: `v1.7.73`.
+- Hardware burned and verified on `/dev/cu.usbmodem212401`.
+- Mac MCP services live in `/Users/tupi/xiaozhi-mcp-services/netease-music`; that directory is not a git repo, so the operational details are mirrored here and in `docs/XIAOZHI_MCP_HANDOFF.md`.
+
+Root cause:
+
+- The Mac NetEase bridge had exposed a compatibility tool named `play_music`.
+- XiaoZhi also had an internal `play_music`, so the board logged `Duplicate tool names: play_music`.
+- With the duplicated name, the first model turn could detect the song, but later tool routing could stop before a reliable device call.
+
+What changed:
+
+- Removed the public `play_music` compatibility tool from the Mac NetEase bridge; only `music.netease_play` and `music.netease_search` should be listed.
+- Kept the required playback chain: after `music.netease_play` returns a fresh NetEase direct MP3 URL, the bridge and/or model must continue with `tools/call self.music.play_url(title, artist, url)`.
+- The NetEase result text is now explicit JSON with `next_tool: "self.music.play_url"` and `play_url_arguments`.
+- Firmware version was bumped to `1.7.73`.
+- Firmware now has a lightweight UDP listener on port `45678` that can display lyric lines and can also accept a JSON `{title, artist, url}` playback packet as a local fallback. On the current Mac network, cloud MCP delivery was the reliable path; local UDP was logged as sent by the Mac but did not reach the board through the active route.
+- An experimental HTTP `/music/play_url` helper exists in code but is not started, because starting it consumed scarce internal SRAM and previously caused MQTT/OTA connection failures.
+
+Verification:
+
+- Built on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; CMake reported `App "xiaozhi" version: 1.7.73`.
+- `xiaozhi.bin` size is `0x631ea0`; smallest app partition is `0x700000`; free app space is `0xce160` (12%).
+- Flashed to `/dev/cu.usbmodem212401`; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.73`, Wi-Fi IP `192.168.1.114`, `lyric udp listening port=45678`, MQTT connected, and `self.music.play_url` registered.
+- First song test: `播放道别是一件难事`.
+  - Mac log showed `tool call music.netease_play {"song":"道别是一件难事"}`.
+  - Mac log showed `>> tools/call self.music.play_url` with a direct NetEase MP3 URL.
+  - Board serial showed `% self.music.play_url...`, `stream open ... status=200`, and continuous `playing station=道别是一件难事 - 上海彩虹室内合唱团` frames.
+- Second song test: `播放绿光`.
+  - Mac log showed `tool call music.netease_play {"song":"绿光","artist":"孙燕姿"}`.
+  - Mac log showed a new `>> tools/call self.music.play_url` URL for `绿光`.
+  - Board serial showed `% self.music.play_url...`, `stream open station=绿光 - 孙燕姿 ... status=200`, and continuous playback frames.
+- Both NetEase LaunchAgents were restarted after the bridge fix:
+  - `com.tupi.xiaozhi.netease.yuyu`
+  - `com.tupi.xiaozhi.netease.xiaocanglan`
+
+Release assets:
+
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-app.bin`: `75b1ef1fd58dfc3e000087405d07dc7e62b497c0a9633900158e8da5dfefb2bb`
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-firmware.zip`: `8eb6a84cb2b707cb7a9e262c1df1518fb4524b5d72c22978d1b119bbaf39c8e9`
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-full.bin`: `387e14e258d78b1bce5c895c030169e57cc2b17aecdf8ee07c72df0399805a71`
+
+Important future warning:
+
+- Do not expose a Mac-side tool named `play_music`; it conflicts with XiaoZhi's internal tool name. Use `music.netease_play` for NetEase search/play and `self.music.play_url` for the board playback tool.
+- If playback fails again, first check for `Duplicate tool names: play_music` in board logs, then verify the Mac log has `>> tools/call self.music.play_url`, and finally verify board serial has `% self.music.play_url...` plus `stream open ... status=200`.
+
 ## 2026-07-01 Handoff: v1.7.67 Autonomous Goodbye Speech Guard
 
 Current target:

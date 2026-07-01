@@ -16,10 +16,13 @@
 #include "time_weather_service.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <string>
+#include <vector>
 
+#include <cJSON.h>
 #include <esp_adc/adc_cali.h>
 #include <esp_adc/adc_cali_scheme.h>
 #include <esp_adc/adc_oneshot.h>
@@ -29,16 +32,25 @@
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
 #include <esp_heap_caps.h>
+#include <esp_http_server.h>
 #include <esp_lcd_panel_io.h>
 #include <esp_lcd_panel_ops.h>
 #include <esp_lcd_st77922.h>
 #include <esp_log.h>
 #include <esp_lvgl_port.h>
 #include <esp_timer.h>
+#include <freertos/task.h>
+#include <lwip/inet.h>
+#include <lwip/sockets.h>
 #include <nvs.h>
 #include <wifi_station.h>
 
 #define TAG "QDtech35"
+
+static constexpr int kLyricUdpPort = 45678;
+static constexpr int kMusicCommandHttpPort = 45679;
+static constexpr size_t kLyricUdpPacketMax = 2048;
+static constexpr size_t kMusicCommandBodyMax = 4096;
 
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
@@ -681,6 +693,7 @@ public:
     void StartNetwork() override {
         EnsureStrongestBssidDefault();
         WifiBoard::StartNetwork();
+        StartLyricUdpServer();
         ScheduleDeferredNetworkServices();
         
         // WiFi 连接后启动时间天气服�?
@@ -693,6 +706,19 @@ public:
     }
 
 private:
+    struct ScheduledLyricLine {
+        int time_ms = 0;
+        std::string text;
+    };
+
+    struct LyricTaskArgs {
+        QdtechS3TouchLcd35Board* board = nullptr;
+        int generation = 0;
+        std::string title;
+        std::string artist;
+        std::vector<ScheduledLyricLine> lines;
+    };
+
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
@@ -801,6 +827,282 @@ private:
             return nullptr;
         }
         return static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+    }
+
+    void ShowMusicLyric(const std::string& title, const std::string& artist, const std::string& line) {
+        Application::GetInstance().Schedule([this, title, artist, line]() {
+            auto* desktop_ui = GetDesktopUI();
+            if (!desktop_ui) {
+                return;
+            }
+            std::string state = title.empty() ? "Music" : title;
+            if (!artist.empty()) {
+                state += " - ";
+                state += artist;
+            }
+            desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+            desktop_ui->SetXiaozhiState(state.c_str(), line.c_str(), "happy");
+        });
+    }
+
+    std::vector<ScheduledLyricLine> ParseLyricsJson(const std::string& lyrics_json) {
+        std::vector<ScheduledLyricLine> lines;
+        if (lyrics_json.empty()) {
+            return lines;
+        }
+
+        cJSON* root = cJSON_Parse(lyrics_json.c_str());
+        if (!cJSON_IsArray(root)) {
+            cJSON_Delete(root);
+            return lines;
+        }
+
+        const int count = cJSON_GetArraySize(root);
+        lines.reserve(std::min(count, 90));
+        for (int i = 0; i < count && lines.size() < 90; ++i) {
+            cJSON* item = cJSON_GetArrayItem(root, i);
+            if (!cJSON_IsObject(item)) {
+                continue;
+            }
+            cJSON* time = cJSON_GetObjectItem(item, "time_ms");
+            cJSON* text = cJSON_GetObjectItem(item, "text");
+            if (!cJSON_IsString(text) || text->valuestring[0] == '\0') {
+                continue;
+            }
+            ScheduledLyricLine line;
+            line.time_ms = std::max(0, cJSON_IsNumber(time) ? time->valueint : 0);
+            line.text = text->valuestring;
+            lines.push_back(line);
+        }
+        cJSON_Delete(root);
+
+        std::sort(lines.begin(), lines.end(), [](const ScheduledLyricLine& a, const ScheduledLyricLine& b) {
+            return a.time_ms < b.time_ms;
+        });
+        return lines;
+    }
+
+    void StartLyricsFromPlayUrl(const std::string& title, const std::string& artist, const std::string& lyrics_json) {
+        const int generation = lyric_generation_.fetch_add(1) + 1;
+        auto lines = ParseLyricsJson(lyrics_json);
+        if (lines.empty()) {
+            ESP_LOGI(TAG, "play_url lyrics skipped title=%s", title.c_str());
+            return;
+        }
+
+        auto* args = new LyricTaskArgs{
+            .board = this,
+            .generation = generation,
+            .title = title,
+            .artist = artist,
+            .lines = std::move(lines),
+        };
+        const int line_count = static_cast<int>(args->lines.size());
+        const BaseType_t ret = xTaskCreate([](void* arg) {
+            auto* task_args = static_cast<LyricTaskArgs*>(arg);
+            task_args->board->RunLyricSchedule(task_args);
+            delete task_args;
+            vTaskDelete(nullptr);
+        }, "play_lyrics", 6144, args, 2, nullptr);
+        if (ret != pdPASS) {
+            delete args;
+            ESP_LOGW(TAG, "play_url lyric task create failed");
+            return;
+        }
+        ESP_LOGI(TAG, "play_url lyrics started title=%s lines=%d", title.c_str(), line_count);
+    }
+
+    void RunLyricSchedule(const LyricTaskArgs* args) {
+        ShowMusicLyric(args->title, args->artist, "♪ " + args->title);
+        const int64_t start_ms = esp_timer_get_time() / 1000;
+        std::string last_text;
+        for (const auto& line : args->lines) {
+            if (args->generation != lyric_generation_.load()) {
+                return;
+            }
+            if (line.text.empty() || line.text == last_text) {
+                continue;
+            }
+            last_text = line.text;
+            const int64_t now_ms = esp_timer_get_time() / 1000;
+            const int64_t target_ms = start_ms + 800 + line.time_ms;
+            if (target_ms > now_ms) {
+                vTaskDelay(pdMS_TO_TICKS(target_ms - now_ms));
+            }
+            if (args->generation != lyric_generation_.load()) {
+                return;
+            }
+            ESP_LOGI(TAG, "play_url lyric line title=%s line=%s", args->title.c_str(), line.text.c_str());
+            ShowMusicLyric(args->title, args->artist, line.text);
+        }
+    }
+
+    void StartMusicCommandServer() {
+        if (music_command_server_) {
+            return;
+        }
+
+        httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+        config.server_port = kMusicCommandHttpPort;
+        config.ctrl_port = kMusicCommandHttpPort + 1;
+        config.max_uri_handlers = 2;
+        config.stack_size = 4096;
+        config.lru_purge_enable = true;
+
+        esp_err_t err = httpd_start(&music_command_server_, &config);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "music command http start failed port=%d err=%s",
+                     kMusicCommandHttpPort, esp_err_to_name(err));
+            music_command_server_ = nullptr;
+            return;
+        }
+
+        httpd_uri_t play = {};
+        play.uri = "/music/play_url";
+        play.method = HTTP_POST;
+        play.handler = MusicCommandPlayHandler;
+        play.user_ctx = this;
+        httpd_register_uri_handler(music_command_server_, &play);
+
+        httpd_uri_t health = {};
+        health.uri = "/music/health";
+        health.method = HTTP_GET;
+        health.handler = MusicCommandHealthHandler;
+        health.user_ctx = this;
+        httpd_register_uri_handler(music_command_server_, &health);
+
+        ESP_LOGI(TAG, "music command http listening port=%d", kMusicCommandHttpPort);
+    }
+
+    static esp_err_t MusicCommandHealthHandler(httpd_req_t* req) {
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, "{\"ok\":true}");
+    }
+
+    static esp_err_t MusicCommandPlayHandler(httpd_req_t* req) {
+        auto* board = static_cast<QdtechS3TouchLcd35Board*>(req->user_ctx);
+        if (!board) {
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No board");
+        }
+        if (req->content_len == 0 || req->content_len > kMusicCommandBodyMax) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad size");
+        }
+
+        std::string body;
+        body.resize(req->content_len);
+        size_t received = 0;
+        while (received < req->content_len) {
+            const int ret = httpd_req_recv(req, body.data() + received, req->content_len - received);
+            if (ret <= 0) {
+                return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Read failed");
+            }
+            received += ret;
+        }
+
+        cJSON* root = cJSON_ParseWithLength(body.c_str(), body.size());
+        if (!root) {
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
+        }
+        cJSON* url = cJSON_GetObjectItem(root, "url");
+        cJSON* title = cJSON_GetObjectItem(root, "title");
+        cJSON* artist = cJSON_GetObjectItem(root, "artist");
+        if (!cJSON_IsString(url) || strncmp(url->valuestring, "http", 4) != 0) {
+            cJSON_Delete(root);
+            return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad url");
+        }
+
+        const std::string url_text = url->valuestring;
+        const std::string title_text = cJSON_IsString(title) ? title->valuestring : "Music";
+        const std::string artist_text = cJSON_IsString(artist) ? artist->valuestring : "";
+        cJSON_Delete(root);
+
+        ESP_LOGI(TAG, "music command play title=%s artist=%s url=%s",
+                 title_text.c_str(), artist_text.c_str(), url_text.c_str());
+        board->radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
+        board->ShowMusicLyric(title_text, artist_text, "♪ " + title_text);
+
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_sendstr(req, "{\"ok\":true}");
+    }
+
+    void StartLyricUdpServer() {
+        if (lyric_udp_started_) {
+            return;
+        }
+        lyric_udp_started_ = true;
+        const BaseType_t ret = xTaskCreate([](void* arg) {
+            static_cast<QdtechS3TouchLcd35Board*>(arg)->LyricUdpTask();
+        }, "lyric_udp", 4096, this, 2, nullptr);
+        if (ret != pdPASS) {
+            lyric_udp_started_ = false;
+            ESP_LOGW(TAG, "lyric udp task create failed");
+        }
+    }
+
+    void LyricUdpTask() {
+        int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+        if (sock < 0) {
+            ESP_LOGW(TAG, "lyric udp socket failed");
+            lyric_udp_started_ = false;
+            vTaskDelete(nullptr);
+            return;
+        }
+
+        sockaddr_in addr = {};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        addr.sin_port = htons(kLyricUdpPort);
+        if (bind(sock, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+            ESP_LOGW(TAG, "lyric udp bind failed port=%d", kLyricUdpPort);
+            close(sock);
+            lyric_udp_started_ = false;
+            vTaskDelete(nullptr);
+            return;
+        }
+
+        ESP_LOGI(TAG, "lyric udp listening port=%d", kLyricUdpPort);
+        char buffer[kLyricUdpPacketMax + 1];
+        while (true) {
+            sockaddr_in source = {};
+            socklen_t source_len = sizeof(source);
+            const int len = recvfrom(sock, buffer, kLyricUdpPacketMax, 0,
+                                     reinterpret_cast<sockaddr*>(&source), &source_len);
+            if (len <= 0) {
+                continue;
+            }
+            buffer[len] = '\0';
+            cJSON* root = cJSON_Parse(buffer);
+            if (!root) {
+                continue;
+            }
+            cJSON* url = cJSON_GetObjectItem(root, "url");
+            if (cJSON_IsString(url) && strncmp(url->valuestring, "http", 4) == 0) {
+                cJSON* title = cJSON_GetObjectItem(root, "title");
+                cJSON* artist = cJSON_GetObjectItem(root, "artist");
+                const std::string title_text = cJSON_IsString(title) ? title->valuestring : "Music";
+                const std::string artist_text = cJSON_IsString(artist) ? artist->valuestring : "";
+                const std::string url_text = url->valuestring;
+                cJSON_Delete(root);
+                ESP_LOGI(TAG, "music udp play title=%s artist=%s url=%s",
+                         title_text.c_str(), artist_text.c_str(), url_text.c_str());
+                radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
+                ShowMusicLyric(title_text, artist_text, "♪ " + title_text);
+                continue;
+            }
+            cJSON* line = cJSON_GetObjectItem(root, "line");
+            if (!cJSON_IsString(line) || line->valuestring[0] == '\0') {
+                cJSON_Delete(root);
+                continue;
+            }
+            cJSON* title = cJSON_GetObjectItem(root, "title");
+            cJSON* artist = cJSON_GetObjectItem(root, "artist");
+            const std::string title_text = cJSON_IsString(title) ? title->valuestring : "";
+            const std::string artist_text = cJSON_IsString(artist) ? artist->valuestring : "";
+            const std::string line_text = line->valuestring;
+            cJSON_Delete(root);
+            ESP_LOGI(TAG, "lyric udp line title=%s line=%s", title_text.c_str(), line_text.c_str());
+            ShowMusicLyric(title_text, artist_text, line_text);
+        }
     }
 
     static void TouchReadCb(lv_indev_t* indev, lv_indev_data_t* data) {
@@ -1046,11 +1348,15 @@ private:
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString),
+                Property("lyrics_json", kPropertyTypeString, std::string("")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto title = properties["title"].value<std::string>();
                 const auto artist = properties["artist"].value<std::string>();
                 const auto url = properties["url"].value<std::string>();
-                return radio_service_.PlayUrlFromTool(title, artist, url);
+                const auto lyrics_json = properties["lyrics_json"].value<std::string>();
+                const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
+                StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                return result;
             });
         mcp_server.AddTool("self.music.play",
             "Alias for self.music.play_url. Play a direct HTTP MP3 music URL on this device speaker, interrupting the current URL or radio stream. After this tool succeeds, do not speak any extra confirmation.",
@@ -1058,16 +1364,45 @@ private:
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString, std::string("")),
+                Property("lyrics_json", kPropertyTypeString, std::string("")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto title = properties["title"].value<std::string>();
                 const auto artist = properties["artist"].value<std::string>();
                 const auto url = properties["url"].value<std::string>();
-                return radio_service_.PlayUrlFromTool(title, artist, url);
+                const auto lyrics_json = properties["lyrics_json"].value<std::string>();
+                const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
+                StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                return result;
             });
         mcp_server.AddTool("self.music.stop",
             "Stop the current music URL playback on this device speaker.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {
                 radio_service_.Stop();
+                return true;
+            });
+        mcp_server.AddTool("self.music.show_lyric",
+            "Show the current music lyric line on the XiaoZhi page without speaking it aloud.",
+            PropertyList({
+                Property("line", kPropertyTypeString),
+                Property("title", kPropertyTypeString, std::string("")),
+                Property("artist", kPropertyTypeString, std::string("")),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto line = properties["line"].value<std::string>();
+                const auto title = properties["title"].value<std::string>();
+                const auto artist = properties["artist"].value<std::string>();
+                Application::GetInstance().Schedule([this, line, title, artist]() {
+                    auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+                    if (!desktop_ui) {
+                        return;
+                    }
+                    std::string state = title.empty() ? "Music" : title;
+                    if (!artist.empty()) {
+                        state += " - ";
+                        state += artist;
+                    }
+                    desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+                    desktop_ui->SetXiaozhiState(state.c_str(), line.c_str(), "happy");
+                });
                 return true;
             });
 
@@ -1363,11 +1698,14 @@ private:
     FcEmulatorService fc_emulator_service_;
     QdBleConfigService ble_config_service_;
     QdWifiConfigServer wifi_config_server_;
+    httpd_handle_t music_command_server_ = nullptr;
     uint16_t* fc_scaled_frame_ = nullptr;
     size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;
     bool network_services_started_ = false;
     bool ble_config_started_ = false;
+    bool lyric_udp_started_ = false;
+    std::atomic<int> lyric_generation_{0};
     esp_timer_handle_t network_services_timer_ = nullptr;
 };
 

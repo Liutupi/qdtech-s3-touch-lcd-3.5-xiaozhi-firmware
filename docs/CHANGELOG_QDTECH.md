@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-01: v1.7.73 NetEase Second-Song Chain Fix
+
+Scope:
+
+- Bumped firmware version to `1.7.73`.
+- Added a lightweight UDP listener on port `45678` for lyric display and JSON playback fallback packets containing `title`, `artist`, and direct HTTP/HTTPS `url`.
+- Kept the HTTP music command helper disabled at runtime, because starting it consumed internal SRAM and previously interfered with MQTT/OTA connection setup.
+- Documented the Mac-side root cause and fix: remove the public `play_music` compatibility tool because it conflicts with XiaoZhi's internal `play_music`; keep `music.netease_play` and device `self.music.play_url` as separate names.
+
+Verification:
+
+- Built on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; CMake reported `App "xiaozhi" version: 1.7.73`.
+- App binary size was `0x631ea0`; smallest app partition is `0x700000`; free app space is `0xce160` (12%).
+- Flashed to `/dev/cu.usbmodem212401`; esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.73`, Wi-Fi IP `192.168.1.114`, UDP lyric listener on `45678`, MQTT connected, and `self.music.play_url` registered.
+- Hardware voice test verified two consecutive NetEase songs:
+  - `道别是一件难事 - 上海彩虹室内合唱团`
+  - `绿光 - 孙燕姿`
+- For the second song, logs showed a fresh `music.netease_play`, a new `tools/call self.music.play_url`, board-side `% self.music.play_url...`, `stream open ... status=200`, and continuous playback frames.
+
+Release assets:
+
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-app.bin`: `75b1ef1fd58dfc3e000087405d07dc7e62b497c0a9633900158e8da5dfefb2bb`
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-firmware.zip`: `8eb6a84cb2b707cb7a9e262c1df1518fb4524b5d72c22978d1b119bbaf39c8e9`
+- `releases/v1.7.73/qdtech-s3-touch-lcd-3.5-v1.7.73-full.bin`: `387e14e258d78b1bce5c895c030169e57cc2b17aecdf8ee07c72df0399805a71`
+
 ## 2026-07-01: v1.7.67 Autonomous Goodbye Speech Guard
 
 Scope:

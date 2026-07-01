@@ -47,6 +47,14 @@ self.music.play_url({
 
 Do not only return text such as "playing". Do not only call an internal `play_music`. Do not depend on first-song cache behavior. The second and third songs must also produce a new `self.music.play_url` call.
 
+2026-07-01 critical fix:
+
+- Do not expose a NetEase MCP tool named `play_music`.
+- XiaoZhi already has an internal `play_music`; exposing a Mac-side tool with the same name caused board alerts like `Duplicate tool names: play_music` and broke the music chain.
+- The Mac bridge should expose only `music.netease_play` and `music.netease_search`.
+- The bridge result for `music.netease_play` should include JSON fields such as `next_tool: "self.music.play_url"` and `play_url_arguments`, so the model/device chain has the fresh `title`, `artist`, and `url`.
+- Both `com.tupi.xiaozhi.netease.yuyu` and `com.tupi.xiaozhi.netease.xiaocanglan` must be restarted after this change so their `tools/list` no longer includes `play_music`.
+
 Expected log sequence when point-singing works:
 
 ```text
