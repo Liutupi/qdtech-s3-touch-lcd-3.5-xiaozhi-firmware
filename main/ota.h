@@ -22,6 +22,8 @@ public:
     bool HasServerTime() { return has_server_time_; }
     void StartUpgrade(std::function<void(int progress, size_t speed)> callback);
     void StartUpgradeFromUrl(const std::string& firmware_url,
+                             const std::string& expected_sha256,
+                             size_t expected_size,
                              std::function<void(int progress, size_t speed)> callback);
     void MarkCurrentVersionValid();
 
@@ -48,7 +50,7 @@ private:
     std::string serial_number_;
     int activation_timeout_ms_ = 30000;
 
-    void Upgrade(const std::string& firmware_url);
+    void Upgrade(const std::string& firmware_url, const std::string& expected_sha256, size_t expected_size);
     std::function<void(int progress, size_t speed)> upgrade_callback_;
     std::vector<int> ParseVersion(const std::string& version);
     bool IsNewVersionAvailable(const std::string& currentVersion, const std::string& newVersion);

@@ -1675,6 +1675,12 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
+                if (display_ && lvgl_port_lock(250)) {
+                    if (auto* desktop_ui = GetDesktopUI()) {
+                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
+                    }
+                    lvgl_port_unlock();
+                }
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
                 return result;
             });
@@ -1694,6 +1700,12 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
+                if (display_ && lvgl_port_lock(250)) {
+                    if (auto* desktop_ui = GetDesktopUI()) {
+                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
+                    }
+                    lvgl_port_unlock();
+                }
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
                 return result;
             });
@@ -1802,6 +1814,13 @@ private:
             [this]() { radio_service_.Stop(); },
             [this]() { radio_service_.Next(); },
             [this]() { radio_service_.Prev(); });
+        desktop_ui->SetMusicReplayCallback([this](const std::string& title,
+                                                  const std::string& artist,
+                                                  const std::string& url) {
+            lyric_generation_.fetch_add(1);
+            SetCurrentLyricSong(title, artist, 0);
+            radio_service_.PlayUrlFromTool(title, artist, url);
+        });
         radio_service_.Start(desktop_ui);
     }
 

@@ -19,8 +19,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
+#include <mbedtls/sha256.h>
 
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -264,6 +266,34 @@ static std::vector<std::string> BuildFirmwareUrlCandidates(const std::string& fi
     return urls;
 }
 
+static bool IsSha256Hex(const std::string& text) {
+    if (text.size() != 64) {
+        return false;
+    }
+    for (char ch : text) {
+        if (!std::isxdigit(static_cast<unsigned char>(ch))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static std::string ToLowerHex(const std::string& text) {
+    std::string lower = text;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lower;
+}
+
+static std::string Sha256ToHex(const uint8_t digest[32]) {
+    char hex[65] = {};
+    for (int i = 0; i < 32; ++i) {
+        snprintf(hex + i * 2, sizeof(hex) - i * 2, "%02x", digest[i]);
+    }
+    return std::string(hex);
+}
+
 Ota::Ota() {
 #ifdef ESP_EFUSE_BLOCK_USR_DATA
     // Read Serial Number from efuse user_data
@@ -494,7 +524,7 @@ void Ota::MarkCurrentVersionValid() {
     }
 }
 
-void Ota::Upgrade(const std::string& firmware_url) {
+void Ota::Upgrade(const std::string& firmware_url, const std::string& expected_sha256, size_t expected_size) {
     ESP_LOGI(TAG, "Upgrading firmware from %s", firmware_url.c_str());
     auto update_partition = esp_ota_get_next_update_partition(NULL);
     if (update_partition == NULL) {
@@ -502,7 +532,20 @@ void Ota::Upgrade(const std::string& firmware_url) {
         return;
     }
 
-    ESP_LOGI(TAG, "Writing to partition %s at offset 0x%lx", update_partition->label, update_partition->address);
+    ESP_LOGI(TAG, "Writing to partition %s at offset 0x%lx size=0x%lx expected_size=%u",
+             update_partition->label, update_partition->address, update_partition->size,
+             static_cast<unsigned>(expected_size));
+    if (expected_size > 0 && expected_size > update_partition->size) {
+        ESP_LOGE(TAG, "Firmware asset too large for OTA partition: %u bytes > %lu bytes",
+                 static_cast<unsigned>(expected_size), update_partition->size);
+        return;
+    }
+    const std::string expected_sha256_lower = ToLowerHex(expected_sha256);
+    const bool verify_sha256 = IsSha256Hex(expected_sha256_lower);
+    if (!expected_sha256.empty() && !verify_sha256) {
+        ESP_LOGW(TAG, "Ignoring invalid expected SHA256 length=%u",
+                 static_cast<unsigned>(expected_sha256.size()));
+    }
     bool image_header_checked = false;
     constexpr size_t kRequiredHeaderSize =
         sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t);
@@ -568,6 +611,12 @@ void Ota::Upgrade(const std::string& firmware_url) {
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return;
+    } else if (expected_size > 0 && static_cast<size_t>(content_length) != expected_size) {
+        ESP_LOGE(TAG, "Firmware content length mismatch: header=%d expected=%u",
+                 content_length, static_cast<unsigned>(expected_size));
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return;
     }
 
     auto buffer_free = [](char* ptr) {
@@ -593,6 +642,17 @@ void Ota::Upgrade(const std::string& firmware_url) {
         return;
     }
 
+    mbedtls_sha256_context sha_ctx;
+    if (verify_sha256) {
+        mbedtls_sha256_init(&sha_ctx);
+        mbedtls_sha256_starts(&sha_ctx, 0);
+    }
+    auto free_sha = [&]() {
+        if (verify_sha256) {
+            mbedtls_sha256_free(&sha_ctx);
+        }
+    };
+
     bool ota_begun = false;
     size_t total_read = 0, recent_read = 0;
     auto last_calc_time = esp_timer_get_time();
@@ -600,6 +660,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
         int ret = esp_http_client_read(client, buffer.get(), kFirmwareHttpBufferSize);
         if (ret < 0) {
             ESP_LOGE(TAG, "Failed to read HTTP data: %s", esp_err_to_name(ret));
+            free_sha();
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
             return;
@@ -608,6 +669,20 @@ void Ota::Upgrade(const std::string& firmware_url) {
         // Calculate speed and progress every second
         recent_read += ret;
         total_read += ret;
+        if (ret > 0 && verify_sha256) {
+            mbedtls_sha256_update(&sha_ctx, reinterpret_cast<const unsigned char*>(buffer.get()), ret);
+        }
+        if (total_read > update_partition->size) {
+            ESP_LOGE(TAG, "Firmware stream exceeded partition size: %u > %lu",
+                     static_cast<unsigned>(total_read), update_partition->size);
+            if (ota_begun) {
+                flash.Abort();
+            }
+            free_sha();
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            return;
+        }
         if (esp_timer_get_time() - last_calc_time >= 1000000 || ret == 0) {
             size_t progress = content_length > 0 ? total_read * 100 / content_length : 0;
             if (content_length > 0) {
@@ -648,6 +723,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
             auto current_version = esp_app_get_description()->version;
             if (memcmp(new_app_info.version, current_version, sizeof(new_app_info.version)) == 0) {
                 ESP_LOGE(TAG, "Firmware version is the same, skipping upgrade");
+                free_sha();
                 esp_http_client_close(client);
                 esp_http_client_cleanup(client);
                 return;
@@ -656,6 +732,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
             esp_err_t begin_err = flash.Begin();
             if (begin_err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to begin OTA: %s", esp_err_to_name(begin_err));
+                free_sha();
                 esp_http_client_close(client);
                 esp_http_client_cleanup(client);
                 return;
@@ -667,6 +744,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to write OTA header data: %s", esp_err_to_name(err));
                 flash.Abort();
+                free_sha();
                 esp_http_client_close(client);
                 esp_http_client_cleanup(client);
                 return;
@@ -678,6 +756,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
                 if (err != ESP_OK) {
                     ESP_LOGE(TAG, "Failed to write OTA buffered data: %s", esp_err_to_name(err));
                     flash.Abort();
+                    free_sha();
                     esp_http_client_close(client);
                     esp_http_client_cleanup(client);
                     return;
@@ -688,6 +767,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
         if (!ota_begun) {
             ESP_LOGE(TAG, "OTA data arrived before OTA begin");
+            free_sha();
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
             return;
@@ -697,6 +777,7 @@ void Ota::Upgrade(const std::string& firmware_url) {
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to write OTA data: %s", esp_err_to_name(err));
             flash.Abort();
+            free_sha();
             esp_http_client_close(client);
             esp_http_client_cleanup(client);
             return;
@@ -707,7 +788,28 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
     if (!ota_begun) {
         ESP_LOGE(TAG, "Firmware download ended before image header was received");
+        free_sha();
         return;
+    }
+    if (expected_size > 0 && total_read != expected_size) {
+        ESP_LOGE(TAG, "Firmware downloaded size mismatch: %u != %u",
+                 static_cast<unsigned>(total_read), static_cast<unsigned>(expected_size));
+        flash.Abort();
+        free_sha();
+        return;
+    }
+    if (verify_sha256) {
+        uint8_t digest[32];
+        mbedtls_sha256_finish(&sha_ctx, digest);
+        mbedtls_sha256_free(&sha_ctx);
+        const std::string actual_sha256 = Sha256ToHex(digest);
+        if (actual_sha256 != expected_sha256_lower) {
+            ESP_LOGE(TAG, "Firmware SHA256 mismatch actual=%s expected=%s",
+                     actual_sha256.c_str(), expected_sha256_lower.c_str());
+            flash.Abort();
+            return;
+        }
+        ESP_LOGI(TAG, "Firmware SHA256 verified: %s", actual_sha256.c_str());
     }
 
     esp_err_t err = flash.End();
@@ -733,13 +835,15 @@ void Ota::Upgrade(const std::string& firmware_url) {
 
 void Ota::StartUpgrade(std::function<void(int progress, size_t speed)> callback) {
     upgrade_callback_ = callback;
-    Upgrade(firmware_url_);
+    Upgrade(firmware_url_, "", 0);
 }
 
 void Ota::StartUpgradeFromUrl(const std::string& firmware_url,
+                              const std::string& expected_sha256,
+                              size_t expected_size,
                               std::function<void(int progress, size_t speed)> callback) {
     upgrade_callback_ = callback;
-    Upgrade(firmware_url);
+    Upgrade(firmware_url, expected_sha256, expected_size);
 }
 
 std::vector<int> Ota::ParseVersion(const std::string& version) {

@@ -17,6 +17,14 @@ public:
     void HandleButton();
 
 private:
+    struct ReleaseInfo {
+        std::string version;
+        std::string firmware_url;
+        std::string asset_name;
+        std::string sha256;
+        size_t asset_size = 0;
+    };
+
     enum class TaskAction {
         Check,
         Upgrade,
@@ -33,13 +41,17 @@ private:
     bool update_available_ = false;
     std::string latest_version_;
     std::string firmware_url_;
+    std::string firmware_asset_name_;
+    std::string firmware_sha256_;
+    size_t firmware_size_ = 0;
     std::mutex state_mutex_;
 
     void StartTask(TaskAction action);
     static void TaskWrapper(void* arg);
     void Task(TaskAction action);
     void CheckLatest();
-    bool FetchLatestRelease(std::string* version, std::string* firmware_url);
+    bool FetchLatestRelease(ReleaseInfo* release);
+    bool FetchSha256ForAsset(const std::string& sums_url, const std::string& asset_name, std::string* sha256);
     void RunUpgrade();
     void SetUi(const char* status, bool update_available, bool busy, int progress = -1);
 

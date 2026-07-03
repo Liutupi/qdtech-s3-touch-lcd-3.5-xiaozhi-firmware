@@ -16,12 +16,15 @@
 #include <utility>
 
 #include <esp_app_desc.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
+#include <wifi_station.h>
 #include <libs/gif/lv_gif.h>
 
 #define TAG "DesktopUI"
@@ -672,20 +675,27 @@ void DesktopUI::FaceTimerCb(lv_timer_t* timer) {
     }
 }
 
-static void SaveFocusCount(uint16_t count) {
+static void SaveFocusStats(uint16_t count, uint32_t date_key) {
     nvs_handle_t handle;
     if (nvs_open("focus", NVS_READWRITE, &handle) == ESP_OK) {
         nvs_set_u16(handle, "completed", count);
+        nvs_set_u32(handle, "date", date_key);
         nvs_commit(handle);
         nvs_close(handle);
     }
 }
 
-static uint16_t LoadFocusCount() {
+static uint16_t LoadFocusStats(uint32_t* date_key) {
     nvs_handle_t handle;
     uint16_t count = 0;
+    if (date_key) {
+        *date_key = 0;
+    }
     if (nvs_open("focus", NVS_READONLY, &handle) == ESP_OK) {
         nvs_get_u16(handle, "completed", &count);
+        if (date_key) {
+            nvs_get_u32(handle, "date", date_key);
+        }
         nvs_close(handle);
     }
     return count;
@@ -702,9 +712,12 @@ void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
     if (self->focus_remaining_sec_ == 0) {
         self->focus_running_ = false;
         if (self->focus_is_work_) {
+            self->ReconcileFocusDate(false);
             self->focus_completed_count_++;
-            SaveFocusCount(self->focus_completed_count_);
-            ESP_LOGI(TAG, "Focus session completed count=%u", self->focus_completed_count_);
+            SaveFocusStats(self->focus_completed_count_, self->focus_count_date_);
+            ESP_LOGI(TAG, "Focus session completed count=%u date=%lu",
+                     self->focus_completed_count_,
+                     static_cast<unsigned long>(self->focus_count_date_));
         } else {
             ESP_LOGI(TAG, "Focus break completed");
         }
@@ -785,6 +798,23 @@ static void open_app_card(uint8_t index) {
                 g_desktop_ui->ShowPage(DesktopPage::SETTINGS);
             }
             break;
+        case 8:
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::MUSIC);
+            }
+            break;
+        case 9:
+            if (g_desktop_ui) {
+                if (g_desktop_ui->podcast_stop_other_media_) {
+                    g_desktop_ui->podcast_stop_other_media_();
+                }
+                g_desktop_ui->ShowPage(DesktopPage::PODCAST);
+                g_desktop_ui->ShowPodcastDetail(false);
+                if (g_desktop_ui->podcast_activate_) {
+                    g_desktop_ui->podcast_activate_();
+                }
+            }
+            break;
         default:
             break;
     }
@@ -793,6 +823,12 @@ static void open_app_card(uint8_t index) {
 static void xiaozhi_card_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         open_app_card(2);
+    }
+}
+
+static void music_card_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_app_card(8);
     }
 }
 
@@ -909,6 +945,65 @@ static void radio_gesture_cb(lv_event_t* event) {
     lv_indev_t* indev = lv_indev_get_act();
     if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
         g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void music_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
+static void music_talk_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+        open_xiaozhi_with_message("Music", "Tell me a song name.", true);
+    }
+}
+
+static void music_face_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+    }
+}
+
+static void music_again_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ReplayMusicRecent(0);
+    }
+}
+
+static void music_stop_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        if (g_desktop_ui->radio_stop_) {
+            g_desktop_ui->radio_stop_();
+        }
+        g_desktop_ui->ClearMusicLyric();
+    }
+}
+
+static void music_recent_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        const auto index = reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
+        g_desktop_ui->ReplayMusicRecent(static_cast<size_t>(index));
+    }
+}
+
+static void music_recent_clear_cb(lv_event_t* event) {
+    if (!g_desktop_ui) {
+        return;
+    }
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_CLICKED) {
+        g_desktop_ui->ClearMusicRecent();
+    }
+}
+
+static void music_recent_remove_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_LONG_PRESSED && g_desktop_ui) {
+        const auto index = reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
+        g_desktop_ui->RemoveMusicRecent(static_cast<size_t>(index));
     }
 }
 
@@ -1197,6 +1292,14 @@ static void settings_gesture_cb(lv_event_t* event) {
     }
 }
 
+static void diagnostics_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::APPS);
+    }
+}
+
 static void network_gesture_cb(lv_event_t* event) {
     if (lv_event_get_code(event) != LV_EVENT_GESTURE) return;
     lv_indev_t* indev = lv_indev_get_act();
@@ -1229,6 +1332,13 @@ static void settings_volume_cb(lv_event_t* event) {
 static void settings_firmware_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         FirmwareUpdateService::GetInstance().HandleButton();
+    }
+}
+
+static void diagnostics_open_cb(lv_event_t* event) {
+    if ((lv_event_get_code(event) == LV_EVENT_LONG_PRESSED ||
+         lv_event_get_code(event) == LV_EVENT_CLICKED) && g_desktop_ui) {
+        g_desktop_ui->ShowPage(DesktopPage::DIAGNOSTICS);
     }
 }
 
@@ -1267,6 +1377,12 @@ void DesktopUI::Create() {
     memset(brand_owner_labels_, 0, sizeof(brand_owner_labels_));
     memset(status_bar_time_labels_, 0, sizeof(status_bar_time_labels_));
     memset(status_bar_battery_labels_, 0, sizeof(status_bar_battery_labels_));
+    memset(app_status_labels_, 0, sizeof(app_status_labels_));
+    memset(app_status_dots_, 0, sizeof(app_status_dots_));
+    memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
+    memset(music_recent_labels_, 0, sizeof(music_recent_labels_));
+    memset(diagnostics_labels_, 0, sizeof(diagnostics_labels_));
+    LoadMusicRecent();
 
     CreateMainPage(root);
     CreateAppsPage(root);
@@ -1274,12 +1390,14 @@ void DesktopUI::Create() {
     CreateFcPage(root);
     CreateCalendarPage(root);
     CreateRadioPage(root);
+    CreateMusicPage(root);
     CreateMediaPage(root);
     CreatePodcastPage(root);
     CreateFocusPage(root);
     CreateXiaozhiPage(root);
     CreateNetworkPage(root);
     CreateSettingsPage(root);
+    CreateDiagnosticsPage(root);
 
     // Start with main page
     ShowPage(DesktopPage::MAIN);
@@ -1314,6 +1432,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
         lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
+    if (music_page_) {
+        lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     if (media_page_) {
         lv_obj_add_flag(media_page_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -1326,6 +1447,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     }
     if (settings_page_) {
         lv_obj_add_flag(settings_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (diagnostics_page_) {
+        lv_obj_add_flag(diagnostics_page_, LV_OBJ_FLAG_HIDDEN);
     }
 
     switch (page) {
@@ -1359,6 +1483,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
         case DesktopPage::RADIO:
             lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show radio page");
+            break;
+        case DesktopPage::MUSIC:
+            if (music_page_) {
+                lv_obj_clear_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show music page");
             break;
         case DesktopPage::MEDIA:
             if (media_page_) {
@@ -1397,6 +1527,13 @@ void DesktopUI::ShowPage(DesktopPage page) {
                 RefreshSettingsControls();
             }
             ESP_LOGI(TAG, "Show settings page");
+            break;
+        case DesktopPage::DIAGNOSTICS:
+            if (diagnostics_page_) {
+                RefreshDiagnostics();
+                lv_obj_clear_flag(diagnostics_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Show diagnostics page");
             break;
     }
 
@@ -2040,25 +2177,32 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
         {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
         {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
+        {"MUS", "Music", "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
+        {"POD", "Podcast", "Episodes", COLOR_GOLD, podcast_card_cb},
     };
 
-    for (uint8_t i = 0; i < 8; ++i) {
+    for (uint8_t i = 0; i < sizeof(apps) / sizeof(apps[0]); ++i) {
         lv_obj_t* tile = CreateAppTile(apps_page_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
         if (apps[i].cb) {
             lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
+        }
+        if (i == 7) {
+            lv_obj_add_event_cb(tile, diagnostics_open_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
     }
 
     lv_obj_t* hint = label_en(apps_page_, "Swipe right: Home", &style_muted);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
+
+    RefreshAppTileStatuses();
 }
 
 lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color) {
     lv_obj_t* box = lv_obj_create(parent);
     lv_obj_add_style(box, &style_panel, 0);
-    lv_obj_set_size(box, 204, 48);
+    lv_obj_set_size(box, 204, 42);
     const int16_t x = 24 + (index % 2) * 218;
-    const int16_t y = 82 + (index / 2) * 54;
+    const int16_t y = 76 + (index / 2) * 45;
     lv_obj_align(box, LV_ALIGN_TOP_LEFT, x, y);
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, apps_gesture_cb, LV_EVENT_GESTURE, NULL);
@@ -2083,7 +2227,7 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
 
     lv_obj_t* icon_box = lv_obj_create(box);
     lv_obj_remove_style_all(icon_box);
-    lv_obj_set_size(icon_box, 36, 34);
+    lv_obj_set_size(icon_box, 36, 30);
     lv_obj_set_style_radius(icon_box, 6, 0);
     lv_obj_set_style_bg_color(icon_box,
                               is_tupi_warm_theme() ? COLOR_SURFACE_2 :
@@ -2091,7 +2235,7 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(icon_box, is_tupi_warm_theme() ? COLOR_LINE : COLOR_GOLD, 0);
     lv_obj_set_style_border_width(icon_box, 1, 0);
-    lv_obj_align(icon_box, LV_ALIGN_TOP_LEFT, 10, 7);
+    lv_obj_align(icon_box, LV_ALIGN_TOP_LEFT, 10, 6);
     add_gesture_bubble(icon_box);
 
     lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
@@ -2102,13 +2246,19 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
     lv_obj_set_style_text_font(en_label, &lv_font_montserrat_16, 0);
-    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 8);
+    lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 5);
 
     lv_obj_t* dot = circle(box, 5, color, LV_OPA_COVER);
-    lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 58, 31);
+    lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 58, 29);
     lv_obj_t* status_label = label_en(box, status, &style_muted);
     lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
-    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 67, 27);
+    lv_obj_set_width(status_label, 82);
+    lv_label_set_long_mode(status_label, LV_LABEL_LONG_DOT);
+    lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 67, 25);
+    if (index < sizeof(app_status_labels_) / sizeof(app_status_labels_[0])) {
+        app_status_labels_[index] = status_label;
+        app_status_dots_[index] = dot;
+    }
     if (index == 4) {
         calendar_app_status_label_ = status_label;
     }
@@ -2671,6 +2821,133 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
+void DesktopUI::CreateMusicPage(lv_obj_t* root) {
+    music_page_ = lv_obj_create(root);
+    lv_obj_add_style(music_page_, &style_screen, 0);
+    lv_obj_set_size(music_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(music_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(music_page_, music_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(music_page_);
+
+    lv_obj_set_style_bg_color(music_page_,
+                              is_tupi_warm_theme() ? COLOR_BG :
+                              themed_color(LV_COLOR_MAKE(0x09, 0x0c, 0x13), COLOR_BG), 0);
+
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(music_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
+    CreateStatusBar(music_page_);
+
+    lv_obj_t* title = label_en(music_page_, "Music", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(music_page_, "NetEase request", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
+
+    lv_obj_t* back = CreateButton(music_page_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* panel = CreatePanel(music_page_, 432, 126, 24, 84);
+    lv_obj_set_style_bg_color(panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x12, 0x16, 0x22), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(panel,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x42, 0x55, 0x78), COLOR_LINE), 0);
+    lv_obj_set_style_radius(panel, 8, 0);
+
+    lv_obj_t* badge = circle(panel, 58,
+                             is_tupi_warm_theme() ? COLOR_SURFACE_2 :
+                             themed_color(LV_COLOR_MAKE(0x1a, 0x22, 0x32), COLOR_CREAM),
+                             LV_OPA_COVER);
+    lv_obj_set_style_border_color(badge, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(badge, 2, 0);
+    lv_obj_align(badge, LV_ALIGN_TOP_LEFT, 16, 14);
+    lv_obj_t* note = label_en(badge, "♪", &style_gold);
+    lv_obj_set_style_text_font(note, &lv_font_montserrat_48, 0);
+    lv_obj_center(note);
+
+    music_title_label_ = label_en(panel, music_title_.c_str(), &style_en);
+    lv_obj_set_style_text_font(music_title_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(music_title_label_, 320);
+    lv_label_set_long_mode(music_title_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(music_title_label_, LV_ALIGN_TOP_LEFT, 92, 16);
+
+    music_artist_label_ = label_en(panel, music_artist_.c_str(), &style_muted);
+    lv_obj_set_style_text_font(music_artist_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(music_artist_label_, 320);
+    lv_label_set_long_mode(music_artist_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(music_artist_label_, LV_ALIGN_TOP_LEFT, 92, 44);
+
+    music_line_label_ = label_en(panel, music_line_.c_str(), &style_gold);
+    lv_obj_set_style_text_font(music_line_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(music_line_label_, 398);
+    lv_obj_set_height(music_line_label_, 32);
+    lv_label_set_long_mode(music_line_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(music_line_label_, LV_ALIGN_TOP_LEFT, 16, 84);
+
+    lv_obj_t* talk = CreateButton(music_page_, "Talk", music_talk_cb);
+    lv_obj_set_size(talk, 92, 32);
+    lv_obj_set_style_bg_color(talk, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(talk, 0, 0);
+    lv_obj_align(talk, LV_ALIGN_TOP_LEFT, 32, 218);
+
+    lv_obj_t* again = CreateButton(music_page_, "Again", music_again_cb);
+    lv_obj_set_size(again, 92, 32);
+    lv_obj_set_style_border_color(again, COLOR_GREEN, 0);
+    lv_obj_align(again, LV_ALIGN_TOP_LEFT, 140, 218);
+
+    lv_obj_t* face = CreateButton(music_page_, "Face", music_face_cb);
+    lv_obj_set_size(face, 92, 32);
+    lv_obj_align(face, LV_ALIGN_TOP_LEFT, 248, 218);
+
+    lv_obj_t* stop = CreateButton(music_page_, "Stop", music_stop_cb);
+    lv_obj_set_size(stop, 92, 32);
+    lv_obj_set_style_border_color(stop, lv_color_make(0xff, 0x88, 0x68), 0);
+    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 356, 218);
+
+    lv_obj_t* recent_title = label_en(music_page_, "Recent", &style_muted);
+    lv_obj_set_style_text_font(recent_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(recent_title, LV_ALIGN_TOP_LEFT, 32, 254);
+    music_recent_clear_button_ = CreateButton(music_page_, "Clear", music_recent_clear_cb);
+    lv_obj_set_size(music_recent_clear_button_, 52, 20);
+    lv_obj_set_style_radius(music_recent_clear_button_, 8, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(music_recent_clear_button_, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(music_recent_clear_button_, LV_ALIGN_TOP_LEFT, 32, 274);
+    for (size_t i = 0; i < kMusicRecentCount; ++i) {
+        lv_obj_t* row = lv_obj_create(music_page_);
+        lv_obj_add_style(row, &style_panel, 0);
+        lv_obj_set_size(row, 352, 18);
+        lv_obj_set_style_radius(row, 5, 0);
+        lv_obj_set_style_bg_color(row,
+                                  is_tupi_warm_theme() ? COLOR_SURFACE :
+                                  themed_color(LV_COLOR_MAKE(0x12, 0x16, 0x22), COLOR_SURFACE), 0);
+        lv_obj_set_style_border_color(row, i == 0 ? COLOR_GOLD : COLOR_LINE, 0);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(row, music_recent_cb, LV_EVENT_CLICKED, reinterpret_cast<void*>(i));
+        lv_obj_add_event_cb(row, music_recent_remove_cb, LV_EVENT_LONG_PRESSED, reinterpret_cast<void*>(i));
+        lv_obj_align(row, LV_ALIGN_TOP_LEFT, 92, 252 + static_cast<int16_t>(i) * 21);
+        add_gesture_bubble(row);
+        music_recent_buttons_[i] = row;
+
+        lv_obj_t* label = label_en(row, "--", &style_muted);
+        lv_obj_set_style_text_font(label, qd_cn_font_16(), 0);
+        lv_obj_set_width(label, 328);
+        lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+        lv_obj_align(label, LV_ALIGN_LEFT_MID, 10, 0);
+        music_recent_labels_[i] = label;
+    }
+    RefreshMusicRecent();
+
+    music_hint_label_ = label_en(music_page_, "Say: play Jay Chou, or ask for a NetEase song", &style_muted);
+    lv_obj_set_style_text_font(music_hint_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(music_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -6);
+}
+
 void DesktopUI::CreateMediaPage(lv_obj_t* root) {
     media_page_ = lv_obj_create(root);
     lv_obj_add_style(media_page_, &style_screen, 0);
@@ -2991,7 +3268,8 @@ void DesktopUI::CreateFocusPage(lv_obj_t* root) {
 
     focus_timer_ = lv_timer_create(FocusTimerCb, 1000, this);
     lv_timer_pause(focus_timer_);
-    focus_completed_count_ = LoadFocusCount();
+    focus_completed_count_ = LoadFocusStats(&focus_count_date_);
+    ReconcileFocusDate(true);
     UpdateFocusUI();
 }
 
@@ -3092,6 +3370,127 @@ void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(network_list_container_, 5, 0);
     add_gesture_bubble(network_list_container_);
+}
+
+// ===== Diagnostics page =====
+void DesktopUI::CreateDiagnosticsPage(lv_obj_t* root) {
+    diagnostics_page_ = lv_obj_create(root);
+    lv_obj_add_style(diagnostics_page_, &style_screen, 0);
+    lv_obj_set_size(diagnostics_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(diagnostics_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(diagnostics_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(diagnostics_page_, diagnostics_gesture_cb, LV_EVENT_GESTURE, NULL);
+    add_gesture_bubble(diagnostics_page_);
+
+    lv_obj_t* logo = nullptr;
+    lv_obj_t* owner = nullptr;
+    create_brand_mark(diagnostics_page_, 18, 4, &logo, &owner);
+    RegisterBrandLabels(logo, owner);
+    CreateStatusBar(diagnostics_page_);
+
+    lv_obj_t* title = label_en(diagnostics_page_, "Diagnostics", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
+
+    lv_obj_t* sub = label_en(diagnostics_page_, "Long-press Settings", &style_muted);
+    lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 146, 53);
+
+    lv_obj_t* back = CreateButton(diagnostics_page_, "Back", navigate_back_cb);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
+
+    lv_obj_t* refresh = CreateButton(diagnostics_page_, "Refresh", diagnostics_open_cb);
+    lv_obj_set_size(refresh, 92, 30);
+    lv_obj_align(refresh, LV_ALIGN_TOP_RIGHT, -118, 46);
+
+    lv_obj_t* panel = CreatePanel(diagnostics_page_, 432, 214, 24, 86);
+    lv_obj_set_style_bg_color(panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE :
+                              themed_color(LV_COLOR_MAKE(0x0c, 0x10, 0x12), COLOR_SURFACE), 0);
+    lv_obj_set_style_border_color(panel,
+                                  is_tupi_warm_theme() ? COLOR_LINE :
+                                  themed_color(LV_COLOR_MAKE(0x36, 0x47, 0x56), COLOR_LINE), 0);
+    lv_obj_set_style_radius(panel, 8, 0);
+
+    for (size_t i = 0; i < sizeof(diagnostics_labels_) / sizeof(diagnostics_labels_[0]); ++i) {
+        diagnostics_labels_[i] = label_en(panel, "--", &style_muted);
+        lv_obj_set_style_text_font(diagnostics_labels_[i], &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_color(diagnostics_labels_[i], i == 0 ? COLOR_GOLD : COLOR_TEXT, 0);
+        lv_obj_set_width(diagnostics_labels_[i], 404);
+        lv_label_set_long_mode(diagnostics_labels_[i], LV_LABEL_LONG_DOT);
+        lv_obj_align(diagnostics_labels_[i], LV_ALIGN_TOP_LEFT, 14, 8 + i * 20);
+    }
+}
+
+void DesktopUI::RefreshDiagnostics() {
+    if (!diagnostics_page_) {
+        return;
+    }
+
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+    auto& wifi = WifiStation::GetInstance();
+    auto ssid_list = SsidManager::GetInstance().GetSsidList();
+
+    const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
+    const size_t largest_psram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+
+    char rows[10][128] = {};
+    snprintf(rows[0], sizeof(rows[0]), "Version: %s  Board: %s",
+             app_desc ? app_desc->version : "unknown", BOARD_NAME);
+    snprintf(rows[1], sizeof(rows[1]), "Running: %s @0x%06lx size=%luKB",
+             running ? running->label : "--",
+             running ? static_cast<unsigned long>(running->address) : 0UL,
+             running ? static_cast<unsigned long>(running->size / 1024) : 0UL);
+    snprintf(rows[2], sizeof(rows[2]), "Next OTA: %s @0x%06lx size=%luKB",
+             next ? next->label : "--",
+             next ? static_cast<unsigned long>(next->address) : 0UL,
+             next ? static_cast<unsigned long>(next->size / 1024) : 0UL);
+    if (firmware_update_asset_size_ > 0 && firmware_update_partition_size_ > 0) {
+        const long margin_kb = static_cast<long>(firmware_update_partition_size_ / 1024) -
+                               static_cast<long>((firmware_update_asset_size_ + 1023) / 1024);
+        snprintf(rows[3], sizeof(rows[3]), "OTA file: %uKB  slot=%uKB  margin=%ldKB",
+                 static_cast<unsigned>((firmware_update_asset_size_ + 1023) / 1024),
+                 static_cast<unsigned>(firmware_update_partition_size_ / 1024),
+                 margin_kb);
+    } else {
+        snprintf(rows[3], sizeof(rows[3]), "OTA file: --  slot=%uKB",
+                 static_cast<unsigned>((firmware_update_partition_size_ > 0
+                     ? firmware_update_partition_size_
+                     : (next ? next->size : 0)) / 1024));
+    }
+    snprintf(rows[4], sizeof(rows[4]), "Internal heap: free=%uKB largest=%uKB",
+             static_cast<unsigned>(free_internal / 1024),
+             static_cast<unsigned>(largest_internal / 1024));
+    snprintf(rows[5], sizeof(rows[5]), "PSRAM: free=%uKB largest=%uKB",
+             static_cast<unsigned>(free_psram / 1024),
+             static_cast<unsigned>(largest_psram / 1024));
+    if (wifi.IsConnected()) {
+        snprintf(rows[6], sizeof(rows[6]), "WiFi: %s  %s  RSSI=%ddBm",
+                 wifi.GetSsid().c_str(), wifi.GetIpAddress().c_str(), wifi.GetRssi());
+    } else {
+        snprintf(rows[6], sizeof(rows[6]), "WiFi: disconnected");
+    }
+    snprintf(rows[7], sizeof(rows[7]), "Saved WiFi: %u profile%s",
+             static_cast<unsigned>(ssid_list.size()), ssid_list.size() == 1 ? "" : "s");
+    if (battery_level_ < 0) {
+        snprintf(rows[8], sizeof(rows[8]), "Battery: --");
+    } else {
+        snprintf(rows[8], sizeof(rows[8]), "Battery: %d%%%s",
+                 battery_level_, battery_charging_ ? " charging" : "");
+    }
+    snprintf(rows[9], sizeof(rows[9]), "OTA: %s%s%s",
+             firmware_update_status_.c_str(),
+             firmware_update_busy_ ? " busy" : "",
+             firmware_update_available_ ? " update-ready" : "");
+
+    for (size_t i = 0; i < sizeof(diagnostics_labels_) / sizeof(diagnostics_labels_[0]); ++i) {
+        if (diagnostics_labels_[i]) {
+            lv_label_set_text(diagnostics_labels_[i], rows[i]);
+        }
+    }
 }
 
 // ===== Settings page =====
@@ -4109,6 +4508,9 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
     current_year_ = year;
     current_month_ = month;
     current_day_ = day;
+    if (date_changed) {
+        ReconcileFocusDate(false);
+    }
     if (calendar_year_ <= 0 || calendar_month_ <= 0 || calendar_follow_today_) {
         calendar_year_ = year;
         calendar_month_ = month;
@@ -4128,10 +4530,10 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
         lv_label_set_text(date_label_, date_text);
         lv_label_set_text(week_label_, weekday ? weekday : "---");
     }
-    if (date_changed && calendar_app_status_label_) {
+    if (date_changed) {
         char app_status[24];
         snprintf(app_status, sizeof(app_status), "%04d/%02d/%02d", year, month, day);
-        lv_label_set_text(calendar_app_status_label_, app_status);
+        SetAppTileStatus(4, app_status, is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE);
     }
 
     if (date_changed) {
@@ -4162,14 +4564,33 @@ void DesktopUI::RequestPhotoRefresh() {
 }
 
 void DesktopUI::SetPhotoState(const char* title, const char* detail) {
-    (void)title;
-    (void)detail;
     if (photo_title_label_) {
         lv_obj_add_flag(photo_title_label_, LV_OBJ_FLAG_HIDDEN);
     }
     if (photo_detail_label_) {
         lv_obj_add_flag(photo_detail_label_, LV_OBJ_FLAG_HIDDEN);
     }
+
+    std::string state = title ? title : "";
+    lv_color_t color = COLOR_GREEN;
+    if (state == "Photos") {
+        state = "Ready";
+    } else if (state == "Refreshing" || state == "Scanning") {
+        color = COLOR_GOLD;
+    } else if (state.find("No ") == 0 || state.find("failed") != std::string::npos ||
+               state.find("Failed") != std::string::npos || state == "SD card not ready" ||
+               state == "Decode failed" || state == "Photos unavailable") {
+        color = lv_color_make(0xff, 0x88, 0x68);
+    } else if (state.empty()) {
+        state = detail && detail[0] ? detail : "SD Slideshow";
+    }
+    photo_app_status_ = clean_subtitle_text(state.c_str(), 18);
+    if (photo_app_status_.empty()) {
+        photo_app_status_ = "SD Slideshow";
+    }
+    photo_app_color_ = color;
+    SetAppTileStatus(1, photo_app_status_.c_str(),
+                     photo_app_status_ == "SD Slideshow" ? COLOR_GREEN : photo_app_color_);
 }
 
 void DesktopUI::SetPhotoFrame(const lv_img_dsc_t* image, const lv_img_dsc_t* background,
@@ -4280,6 +4701,32 @@ void DesktopUI::SetFcState(const char* title, const char* detail, const char* ro
     if (fc_list_label_ && rom_list) {
         lv_label_set_text(fc_list_label_, rom_list);
     }
+
+    if (!fc_playing_view_) {
+        std::string state = title ? title : "";
+        std::string detail_text = detail ? detail : "";
+        lv_color_t color = COLOR_GREEN;
+        if (state == "Select ROM") {
+            state = detail_text.empty() ? "Ready" : clean_subtitle_text(detail, 18);
+        } else if (state == "Scanning" || state == "Loading ROM") {
+            color = COLOR_GOLD;
+        } else if (state.find("No ") == 0 || state.find("failed") != std::string::npos ||
+                   state.find("Failed") != std::string::npos ||
+                   state.find("Unsupported") != std::string::npos ||
+                   state.find("Bad ") == 0 || state == "Open failed" ||
+                   state == "ROM too large" || state == "FC unavailable" ||
+                   state == "SD card not ready") {
+            color = lv_color_make(0xff, 0x88, 0x68);
+        } else if (state.empty()) {
+            state = "SD ROMs";
+        }
+        fc_app_status_ = clean_subtitle_text(state.c_str(), 18);
+        if (fc_app_status_.empty()) {
+            fc_app_status_ = "SD ROMs";
+        }
+        fc_app_color_ = color;
+        SetAppTileStatus(3, fc_app_status_.c_str(), fc_app_color_);
+    }
 }
 
 void DesktopUI::SetFcMode(bool playing) {
@@ -4299,6 +4746,15 @@ void DesktopUI::SetFcMode(bool playing) {
             lv_obj_add_flag(fc_game_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (playing) {
+        fc_app_status_ = "Playing";
+        fc_app_color_ = COLOR_GREEN;
+    } else if (fc_app_status_ == "Playing") {
+        fc_app_status_ = "Ready";
+        fc_app_color_ = COLOR_GREEN;
+    }
+    SetAppTileStatus(3, fc_app_status_.c_str(),
+                     fc_app_status_ == "SD ROMs" ? COLOR_GREEN : fc_app_color_);
 }
 
 void DesktopUI::SetFcFrame(const lv_img_dsc_t* image) {
@@ -4519,12 +4975,22 @@ void DesktopUI::ReloadUserProfile() {
     fc_page_ = nullptr;
     calendar_page_ = nullptr;
     radio_page_ = nullptr;
+    music_page_ = nullptr;
+    music_title_label_ = nullptr;
+    music_artist_label_ = nullptr;
+    music_line_label_ = nullptr;
+    music_hint_label_ = nullptr;
+    music_recent_clear_button_ = nullptr;
+    memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
+    memset(music_recent_labels_, 0, sizeof(music_recent_labels_));
     focus_page_ = nullptr;
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
+    diagnostics_page_ = nullptr;
+    memset(diagnostics_labels_, 0, sizeof(diagnostics_labels_));
 
     weather_particle_timer_ = nullptr;
     radio_anim_timer_ = nullptr;
@@ -4553,12 +5019,22 @@ void DesktopUI::CycleTheme() {
     fc_page_ = nullptr;
     calendar_page_ = nullptr;
     radio_page_ = nullptr;
+    music_page_ = nullptr;
+    music_title_label_ = nullptr;
+    music_artist_label_ = nullptr;
+    music_line_label_ = nullptr;
+    music_hint_label_ = nullptr;
+    music_recent_clear_button_ = nullptr;
+    memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
+    memset(music_recent_labels_, 0, sizeof(music_recent_labels_));
     focus_page_ = nullptr;
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
+    diagnostics_page_ = nullptr;
+    memset(diagnostics_labels_, 0, sizeof(diagnostics_labels_));
     
     weather_particle_timer_ = nullptr;
     radio_anim_timer_ = nullptr;
@@ -4661,7 +5137,9 @@ bool DesktopUI::HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, 
 
 void DesktopUI::ToggleFocusTimer() {
     if (focus_remaining_sec_ == 0) {
-        ResetFocusTimer();
+        focus_is_work_ = !focus_is_work_;
+        focus_total_sec_ = focus_is_work_ ? 25 * 60 : 5 * 60;
+        focus_remaining_sec_ = focus_total_sec_;
     }
     focus_running_ = !focus_running_;
     if (focus_timer_) {
@@ -4698,6 +5176,40 @@ void DesktopUI::SetFocusMode(bool work_mode) {
     ESP_LOGI(TAG, "Focus mode changed to %s", focus_is_work_ ? "work" : "break");
 }
 
+uint32_t DesktopUI::CurrentFocusDateKey() const {
+    if (current_year_ <= 0 || current_month_ <= 0 || current_day_ <= 0) {
+        return 0;
+    }
+    return static_cast<uint32_t>(current_year_ * 10000 + current_month_ * 100 + current_day_);
+}
+
+void DesktopUI::ReconcileFocusDate(bool persist) {
+    const uint32_t today = CurrentFocusDateKey();
+    if (today == 0) {
+        return;
+    }
+    if (focus_count_date_ == today) {
+        return;
+    }
+    if (focus_count_date_ == 0) {
+        focus_count_date_ = today;
+        if (persist) {
+            SaveFocusStats(focus_completed_count_, focus_count_date_);
+        }
+        ESP_LOGI(TAG, "Focus count date initialized date=%lu count=%u",
+                 static_cast<unsigned long>(focus_count_date_), focus_completed_count_);
+        return;
+    }
+    focus_count_date_ = today;
+    focus_completed_count_ = 0;
+    if (persist) {
+        SaveFocusStats(focus_completed_count_, focus_count_date_);
+    }
+    ESP_LOGI(TAG, "Focus count reset for new day date=%lu",
+             static_cast<unsigned long>(focus_count_date_));
+    UpdateFocusUI();
+}
+
 void DesktopUI::UpdateFocusUI() {
     if (!focus_time_label_) {
         return;
@@ -4730,13 +5242,85 @@ void DesktopUI::UpdateFocusUI() {
         lv_label_set_text(focus_mode_label_, focus_is_work_ ? "Focus Timer" : "Break Timer");
     }
     if (focus_start_label_) {
-        lv_label_set_text(focus_start_label_, focus_running_ ? "暂停" : "开始");
+        const char* start_text = focus_running_
+            ? "暂停"
+            : (focus_remaining_sec_ == 0 ? (focus_is_work_ ? "休息" : "专注") : "开始");
+        lv_label_set_text(focus_start_label_, start_text);
     }
     if (focus_completed_label_) {
         char done_text[32];
         snprintf(done_text, sizeof(done_text), "%u 个番茄", focus_completed_count_);
         lv_label_set_text(focus_completed_label_, done_text);
     }
+
+    char app_status[16];
+    lv_color_t app_color = focus_is_work_ ? COLOR_GOLD : COLOR_BLUE;
+    if (focus_remaining_sec_ == 0) {
+        snprintf(app_status, sizeof(app_status), "Done");
+        app_color = COLOR_GREEN;
+    } else if (focus_running_) {
+        snprintf(app_status, sizeof(app_status), "%lum",
+                 static_cast<unsigned long>((focus_remaining_sec_ + 59) / 60));
+    } else if (focus_remaining_sec_ != focus_total_sec_) {
+        snprintf(app_status, sizeof(app_status), "Paused");
+        app_color = COLOR_MUTED;
+    } else {
+        snprintf(app_status, sizeof(app_status), "%lu min",
+                 static_cast<unsigned long>(focus_total_sec_ / 60));
+    }
+    SetAppTileStatus(5, app_status, app_color);
+}
+
+void DesktopUI::SetAppTileStatus(uint8_t index, const char* status, lv_color_t color) {
+    if (index >= sizeof(app_status_labels_) / sizeof(app_status_labels_[0])) {
+        return;
+    }
+    if (app_status_labels_[index] && status) {
+        lv_label_set_text(app_status_labels_[index], status);
+    }
+    if (app_status_dots_[index]) {
+        lv_obj_set_style_bg_color(app_status_dots_[index], color, 0);
+    }
+}
+
+void DesktopUI::RefreshAppTileStatuses() {
+    SetAppTileStatus(0, radio_playing_ ? "Playing" : "Music FM",
+                     radio_playing_ ? COLOR_GREEN : COLOR_GOLD);
+    if (current_year_ > 0 && current_month_ > 0 && current_day_ > 0) {
+        char calendar_status[40];
+        snprintf(calendar_status, sizeof(calendar_status), "%04d/%02d/%02d",
+                 current_year_, current_month_, current_day_);
+        SetAppTileStatus(4, calendar_status, is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE);
+    } else {
+        SetAppTileStatus(4, "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE);
+    }
+    SetAppTileStatus(1, photo_app_status_.c_str(),
+                     photo_app_status_ == "SD Slideshow" ? COLOR_GREEN : photo_app_color_);
+    SetAppTileStatus(3, fc_app_status_.c_str(),
+                     fc_app_status_ == "SD ROMs" ? COLOR_GREEN : fc_app_color_);
+    UpdateFocusUI();
+    SetAppTileStatus(6, network_app_status_.c_str(),
+                     network_app_status_ == "WiFi Hub"
+                         ? (is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE)
+                         : network_app_color_);
+    if (firmware_update_busy_) {
+        char progress_text[12];
+        if (firmware_update_progress_ >= 0) {
+            snprintf(progress_text, sizeof(progress_text), "%d%%",
+                     std::max(0, std::min(100, firmware_update_progress_)));
+            SetAppTileStatus(7, progress_text, COLOR_GOLD);
+        } else {
+            SetAppTileStatus(7, "Wait", COLOR_GOLD);
+        }
+    } else if (firmware_update_available_) {
+        SetAppTileStatus(7, "Update", COLOR_GOLD);
+    } else {
+        SetAppTileStatus(7, "System", COLOR_GREEN);
+    }
+    SetAppTileStatus(8, music_title_ == "No song yet" ? "Ask song" : music_title_.c_str(),
+                     music_title_ == "No song yet" ? (is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE) : COLOR_GREEN);
+    SetAppTileStatus(9, podcast_app_status_.c_str(),
+                     podcast_app_status_ == "Episodes" ? COLOR_GOLD : podcast_app_color_);
 }
 
 void DesktopUI::SetNetworkStatus(const char* status) {
@@ -4747,6 +5331,30 @@ void DesktopUI::SetNetworkStatus(const char* status) {
     if (network_detail_label_) {
         lv_label_set_text(network_detail_label_, status);
     }
+
+    const bool offline = strstr(status, "disconnect") || strstr(status, "Disconnect") ||
+                         strstr(status, "Offline") || strstr(status, "offline") ||
+                         strstr(status, "failed") || strstr(status, "Failed");
+    const bool online = strstr(status, "Ready") || strstr(status, "ready") ||
+                        strstr(status, "Connected") || strstr(status, "connected") ||
+                        strstr(status, "IP") || strstr(status, "Online") ||
+                        strstr(status, "online");
+    auto& wifi = WifiStation::GetInstance();
+    const std::string ip = wifi.IsConnected() ? wifi.GetIpAddress() : "";
+    if (online && !offline && !ip.empty()) {
+        network_app_status_ = ip;
+        network_app_color_ = COLOR_GREEN;
+    } else if (online && !offline) {
+        network_app_status_ = "Online";
+        network_app_color_ = COLOR_GREEN;
+    } else if (offline) {
+        network_app_status_ = "Offline";
+        network_app_color_ = COLOR_MUTED;
+    } else {
+        network_app_status_ = "WiFi";
+        network_app_color_ = COLOR_GOLD;
+    }
+    SetAppTileStatus(6, network_app_status_.c_str(), network_app_color_);
 }
 
 void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
@@ -4778,8 +5386,18 @@ void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
         }
     }
 }
-void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress) {
-    (void)progress;
+void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress,
+                                        size_t asset_size, size_t partition_size) {
+    const bool usb_required = status && strstr(status, "USB");
+    if (status) {
+        firmware_update_status_ = status;
+    }
+    firmware_update_available_ = update_available;
+    firmware_update_busy_ = busy;
+    firmware_update_progress_ = busy ? progress : -1;
+    firmware_update_asset_size_ = asset_size;
+    firmware_update_partition_size_ = partition_size;
+
     if (settings_firmware_status_label_ && status) {
         lv_label_set_text(settings_firmware_status_label_, status);
     }
@@ -4791,16 +5409,39 @@ void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_availabl
             lv_obj_remove_state(settings_firmware_button_, LV_STATE_DISABLED);
         }
         lv_obj_set_style_border_color(settings_firmware_button_,
-                                      busy ? COLOR_MUTED : (update_available ? COLOR_GOLD : COLOR_GREEN),
+                                      busy ? COLOR_MUTED : (update_available || usb_required ? COLOR_GOLD : COLOR_GREEN),
                                       0);
     }
 
     if (settings_firmware_button_label_) {
-        const char* text = busy ? "Wait" : (update_available ? "Update" : "Check");
+        char progress_text[12];
+        const char* text = nullptr;
+        if (busy && progress >= 0) {
+            snprintf(progress_text, sizeof(progress_text), "%d%%", std::max(0, std::min(100, progress)));
+            text = progress_text;
+        } else {
+            text = busy ? "Wait" : (update_available ? "Update" : (usb_required ? "USB" : "Check"));
+        }
         lv_label_set_text(settings_firmware_button_label_, text);
         lv_obj_set_style_text_color(settings_firmware_button_label_,
-                                    update_available && !busy ? COLOR_GOLD : COLOR_TEXT, 0);
+                                    (update_available || usb_required) && !busy ? COLOR_GOLD : COLOR_TEXT, 0);
         lv_obj_center(settings_firmware_button_label_);
+    }
+
+    if (busy) {
+        char progress_text[12];
+        if (progress >= 0) {
+            snprintf(progress_text, sizeof(progress_text), "%d%%", std::max(0, std::min(100, progress)));
+            SetAppTileStatus(7, progress_text, COLOR_GOLD);
+        } else {
+            SetAppTileStatus(7, "Wait", COLOR_GOLD);
+        }
+    } else if (update_available) {
+        SetAppTileStatus(7, "Update", COLOR_GOLD);
+    } else if (usb_required) {
+        SetAppTileStatus(7, "USB", COLOR_GOLD);
+    } else {
+        SetAppTileStatus(7, status && strstr(status, "Latest") ? "Latest" : "Check", COLOR_GREEN);
     }
 }
 
@@ -4810,6 +5451,12 @@ void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<
     radio_stop_ = std::move(stop);
     radio_next_ = std::move(next);
     radio_prev_ = std::move(prev);
+}
+
+void DesktopUI::SetMusicReplayCallback(std::function<void(const std::string& title,
+                                                          const std::string& artist,
+                                                          const std::string& url)> callback) {
+    music_replay_cb_ = std::move(callback);
 }
 
 void DesktopUI::SetRadioState(const char* station, const char* state, const char* meta) {
@@ -4823,6 +5470,42 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
     }
     if (radio_meta_label_ && meta) {
         lv_label_set_text(radio_meta_label_, meta);
+    }
+    if (state) {
+        if (music_recent_pending_index_ < kMusicRecentCount) {
+            const bool same_station = station && music_recent_pending_title_.size() > 0 &&
+                                      std::string(station).find(music_recent_pending_title_) != std::string::npos;
+            if (same_station && (strcmp(state, "Playing") == 0 || strcmp(state, "Buffering") == 0)) {
+                music_recent_pending_index_ = kMusicRecentCount;
+                music_recent_pending_title_.clear();
+                music_recent_failed_index_ = kMusicRecentCount;
+                music_recent_failed_reason_.clear();
+                RefreshMusicRecent();
+            } else if (same_station && strcmp(state, "Error") == 0) {
+                const std::string failure = clean_subtitle_text(meta && meta[0] ? meta : "Replay failed", 24);
+                music_recent_failed_index_ = music_recent_pending_index_;
+                music_recent_failed_reason_ = failure.empty() ? "Replay failed" : failure;
+                music_recent_pending_index_ = kMusicRecentCount;
+                music_recent_pending_title_.clear();
+                RefreshMusicRecent();
+                music_line_ = meta && meta[0] ? meta : "Replay failed. Ask XiaoZhi for a fresh URL.";
+                if (music_line_label_) {
+                    lv_label_set_text(music_line_label_, music_line_.c_str());
+                }
+                SetAppTileStatus(8, "Failed", lv_color_make(0xff, 0x88, 0x68));
+            }
+        }
+
+        lv_color_t color = COLOR_MUTED;
+        const char* app_status = "Stopped";
+        if (strcmp(state, "Playing") == 0) {
+            color = COLOR_GREEN;
+            app_status = "Playing";
+        } else if (strcmp(state, "Buffering") == 0 || strcmp(state, "Connecting") == 0) {
+            color = COLOR_GOLD;
+            app_status = strcmp(state, "Buffering") == 0 ? "Buffer" : "Connect";
+        }
+        SetAppTileStatus(0, app_status, color);
     }
 }
 
@@ -4855,6 +5538,18 @@ void DesktopUI::SetPodcastState(const char* title, const char* state, const char
     }
     if (podcast_list_label_) {
         lv_label_set_text(podcast_list_label_, list ? list : "");
+    }
+    if (state) {
+        lv_color_t color = COLOR_GOLD;
+        const char* app_status = state;
+        if (strcmp(state, "Playing") == 0 || strcmp(state, "Buffering") == 0) {
+            color = COLOR_GREEN;
+        } else if (strcmp(state, "Ready") == 0 || strcmp(state, "Stopped") == 0) {
+            color = COLOR_MUTED;
+        }
+        podcast_app_status_ = app_status;
+        podcast_app_color_ = color;
+        SetAppTileStatus(9, podcast_app_status_.c_str(), podcast_app_color_);
     }
 }
 
@@ -4958,6 +5653,197 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
 
 }
 
+void DesktopUI::LoadMusicRecent() {
+    for (auto& item : music_recent_) {
+        item = {};
+    }
+
+    nvs_handle_t handle;
+    if (nvs_open("music_ui", NVS_READONLY, &handle) != ESP_OK) {
+        return;
+    }
+    for (size_t i = 0; i < kMusicRecentCount; ++i) {
+        char title_key[12];
+        char artist_key[12];
+        char url_key[12];
+        snprintf(title_key, sizeof(title_key), "mt%u_t", static_cast<unsigned>(i));
+        snprintf(artist_key, sizeof(artist_key), "mt%u_a", static_cast<unsigned>(i));
+        snprintf(url_key, sizeof(url_key), "mt%u_u", static_cast<unsigned>(i));
+
+        char title[72] = {};
+        char artist[72] = {};
+        char url[384] = {};
+        size_t title_len = sizeof(title);
+        size_t artist_len = sizeof(artist);
+        size_t url_len = sizeof(url);
+        nvs_get_str(handle, title_key, title, &title_len);
+        nvs_get_str(handle, artist_key, artist, &artist_len);
+        nvs_get_str(handle, url_key, url, &url_len);
+        music_recent_[i].title = title;
+        music_recent_[i].artist = artist;
+        music_recent_[i].url = url;
+    }
+    nvs_close(handle);
+}
+
+void DesktopUI::SaveMusicRecent() {
+    nvs_handle_t handle;
+    if (nvs_open("music_ui", NVS_READWRITE, &handle) != ESP_OK) {
+        return;
+    }
+    for (size_t i = 0; i < kMusicRecentCount; ++i) {
+        char title_key[12];
+        char artist_key[12];
+        char url_key[12];
+        snprintf(title_key, sizeof(title_key), "mt%u_t", static_cast<unsigned>(i));
+        snprintf(artist_key, sizeof(artist_key), "mt%u_a", static_cast<unsigned>(i));
+        snprintf(url_key, sizeof(url_key), "mt%u_u", static_cast<unsigned>(i));
+        nvs_set_str(handle, title_key, music_recent_[i].title.c_str());
+        nvs_set_str(handle, artist_key, music_recent_[i].artist.c_str());
+        nvs_set_str(handle, url_key, music_recent_[i].url.c_str());
+    }
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+void DesktopUI::RefreshMusicRecent() {
+    for (size_t i = 0; i < kMusicRecentCount; ++i) {
+        const bool has_track = !music_recent_[i].title.empty() && !music_recent_[i].url.empty();
+        if (music_recent_labels_[i]) {
+            const bool pending = has_track && i == music_recent_pending_index_;
+            const bool failed = has_track && i == music_recent_failed_index_;
+            std::string text = pending ? "Replaying..." :
+                               (failed ? music_recent_failed_reason_ :
+                                (has_track ? music_recent_[i].title : "No recent song"));
+            if (has_track && !pending && !failed && !music_recent_[i].artist.empty()) {
+                text += " - ";
+                text += music_recent_[i].artist;
+            }
+            lv_label_set_text(music_recent_labels_[i], text.c_str());
+            lv_obj_set_style_text_color(music_recent_labels_[i],
+                                        failed ? lv_color_make(0xff, 0x88, 0x68) :
+                                        (pending ? COLOR_GOLD : (has_track ? COLOR_TEXT : COLOR_MUTED)), 0);
+        }
+        if (music_recent_buttons_[i]) {
+            if (has_track) {
+                lv_obj_remove_state(music_recent_buttons_[i], LV_STATE_DISABLED);
+            } else {
+                lv_obj_add_state(music_recent_buttons_[i], LV_STATE_DISABLED);
+            }
+            lv_obj_set_style_border_color(music_recent_buttons_[i],
+                                          i == music_recent_failed_index_ ? lv_color_make(0xff, 0x88, 0x68) :
+                                          i == music_recent_pending_index_ ? COLOR_GOLD :
+                                          (i == 0 && has_track ? COLOR_GOLD : COLOR_LINE), 0);
+        }
+    }
+}
+
+void DesktopUI::ClearMusicRecent() {
+    bool had_recent = false;
+    for (auto& item : music_recent_) {
+        had_recent = had_recent || !item.title.empty() || !item.artist.empty() || !item.url.empty();
+        item = {};
+    }
+    music_recent_pending_index_ = kMusicRecentCount;
+    music_recent_pending_title_.clear();
+    music_recent_failed_index_ = kMusicRecentCount;
+    music_recent_failed_reason_.clear();
+    SaveMusicRecent();
+    RefreshMusicRecent();
+    music_line_ = had_recent ? "Recent songs cleared." : "No recent songs yet.";
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+}
+
+void DesktopUI::RemoveMusicRecent(size_t index) {
+    if (index >= kMusicRecentCount || music_recent_[index].url.empty()) {
+        return;
+    }
+    const std::string removed_title = music_recent_[index].title;
+    for (size_t i = index; i + 1 < kMusicRecentCount; ++i) {
+        music_recent_[i] = music_recent_[i + 1];
+    }
+    music_recent_[kMusicRecentCount - 1] = {};
+    music_recent_pending_index_ = kMusicRecentCount;
+    music_recent_pending_title_.clear();
+    music_recent_failed_index_ = kMusicRecentCount;
+    music_recent_failed_reason_.clear();
+    SaveMusicRecent();
+    RefreshMusicRecent();
+    music_line_ = removed_title.empty() ? "Recent song removed." : "Removed from recent.";
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+}
+
+void DesktopUI::RememberMusicTrack(const char* title, const char* artist, const char* url) {
+    if (!url || !url[0]) {
+        return;
+    }
+    MusicRecentTrack track;
+    track.title = clean_subtitle_text(title && title[0] ? title : "Music", 28);
+    track.artist = clean_subtitle_text(artist, 18);
+    track.url = std::string(url).substr(0, 360);
+    if (track.title.empty()) {
+        track.title = "Music";
+    }
+
+    size_t existing = kMusicRecentCount;
+    for (size_t i = 0; i < kMusicRecentCount; ++i) {
+        if ((!music_recent_[i].url.empty() && music_recent_[i].url == track.url) ||
+            (!music_recent_[i].title.empty() && music_recent_[i].title == track.title &&
+             music_recent_[i].artist == track.artist)) {
+            existing = i;
+            break;
+        }
+    }
+    const size_t stop = existing < kMusicRecentCount ? existing : kMusicRecentCount - 1;
+    for (size_t i = stop; i > 0; --i) {
+        music_recent_[i] = music_recent_[i - 1];
+    }
+    music_recent_[0] = std::move(track);
+    music_recent_pending_index_ = kMusicRecentCount;
+    music_recent_pending_title_.clear();
+    music_recent_failed_index_ = kMusicRecentCount;
+    music_recent_failed_reason_.clear();
+    SaveMusicRecent();
+    RefreshMusicRecent();
+}
+
+void DesktopUI::ReplayMusicRecent(size_t index) {
+    if (index >= kMusicRecentCount || music_recent_[index].url.empty()) {
+        music_line_ = "No recent songs yet.";
+        if (music_line_label_) {
+            lv_label_set_text(music_line_label_, music_line_.c_str());
+        }
+        return;
+    }
+    const auto track = music_recent_[index];
+    RememberMusicTrack(track.title.c_str(), track.artist.c_str(), track.url.c_str());
+    music_recent_pending_index_ = 0;
+    music_recent_pending_title_ = track.title;
+    music_recent_failed_index_ = kMusicRecentCount;
+    music_recent_failed_reason_.clear();
+    music_title_ = track.title;
+    music_artist_ = track.artist.empty() ? "Recent song" : track.artist;
+    music_line_ = "Replaying recent song";
+    if (music_title_label_) {
+        lv_label_set_text(music_title_label_, music_title_.c_str());
+    }
+    if (music_artist_label_) {
+        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+    }
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    RefreshMusicRecent();
+    SetAppTileStatus(8, music_title_.c_str(), COLOR_GREEN);
+    if (music_replay_cb_) {
+        music_replay_cb_(track.title, track.artist, track.url);
+    }
+}
+
 void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char* line) {
     const int64_t now_ms = esp_timer_get_time() / 1000;
     music_lyric_hold_until_ms_ = now_ms + kMusicLyricHoldMs;
@@ -4972,6 +5858,20 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
     if (clean_line.empty()) {
         clean_line = state;
     }
+
+    music_title_ = clean_subtitle_text(title && title[0] ? title : "Music", 32);
+    music_artist_ = clean_artist.empty() ? "Music URL playback" : clean_artist;
+    music_line_ = clean_line;
+    if (music_title_label_) {
+        lv_label_set_text(music_title_label_, music_title_.c_str());
+    }
+    if (music_artist_label_) {
+        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+    }
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    SetAppTileStatus(8, music_title_.c_str(), COLOR_GREEN);
 
     ESP_LOGI(TAG, "SetMusicLyric line=%s title=%s artist=%s",
              clean_line.c_str(), title ? title : "", artist ? artist : "");
@@ -5001,6 +5901,18 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
 
 void DesktopUI::ClearMusicLyric() {
     music_lyric_hold_until_ms_ = 0;
+    music_title_ = "No song yet";
+    music_artist_ = "Ask XiaoZhi to play NetEase music";
+    music_line_ = "Tap Talk and say a song name.";
+    if (music_title_label_) {
+        lv_label_set_text(music_title_label_, music_title_.c_str());
+    }
+    if (music_artist_label_) {
+        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+    }
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
     if (music_lyric_label_) {
         lv_label_set_text(music_lyric_label_, "");
     }
@@ -5008,6 +5920,7 @@ void DesktopUI::ClearMusicLyric() {
         lv_obj_add_flag(music_lyric_panel_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_invalidate(music_lyric_panel_);
     }
+    SetAppTileStatus(8, "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE);
     ESP_LOGI(TAG, "ClearMusicLyric");
 }
 

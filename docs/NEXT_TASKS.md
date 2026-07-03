@@ -1,3 +1,41 @@
+# 2026-07-03 v1.7.76 OTA Safety Follow-Up
+
+Current state:
+
+- Source baseline is `v1.7.75`; this follow-up is being prepared as `v1.7.76`.
+- The firmware update service now reads release app asset size plus `SHA256SUMS.txt` when available.
+- Oversized OTA assets are blocked before offering the update and again before starting the upgrade.
+- OTA download now checks expected size, partition capacity, downloaded byte count, and SHA256 before boot selection.
+- OTA download progress now appears on the Settings update button and Apps `Settings` tile, and the Apps tile keeps the last percentage across refreshes.
+- The Apps page now has 10 compact tiles, adding `Music` and `Podcast` to the existing Radio, Photos, XiaoZhi, NES, Calendar, Focus, Network, and Settings entries.
+- `Music` opens XiaoZhi chat for voice song requests; `Podcast` opens the podcast list and activates the podcast path.
+- Long-pressing the Apps page `Settings` tile opens a hidden Diagnostics page.
+- Diagnostics shows version, board, running/next OTA partitions, OTA app file size/slot/margin, internal heap, PSRAM, WiFi/IP/RSSI, saved WiFi count, battery, and last OTA status.
+- The Apps `Music` tile now opens a dedicated Music request page.
+- Music shows latest title, artist/source, and lyric/playback line; `Talk` starts a XiaoZhi song request, `Again` replays the newest saved recent song, `Face` opens the lyric face, and `Stop` stops music URL/radio playback plus clears lyrics.
+- Apps tiles now show lightweight live status badges for Radio playing/buffering/stopped, Music active title, Podcast state, WiFi online/offline, and Settings/OTA update state.
+- Photos now keeps its Apps tile live across refreshes and shows slideshow refresh/ready/no-photo/SD/decode states.
+- NES now keeps its Apps tile live across refreshes and shows FC emulator scanning/loading/error/selected/playing states.
+- Calendar now refreshes its Apps tile through the shared Apps status path and shows the synced date when available.
+- Focus now updates its Apps tile with ready duration, remaining minutes, paused, or done state.
+- Focus now supports one-tap work/break cycling after a timer completes.
+- Focus `今日完成` now resets automatically when synced time moves to a new day.
+- Startup OTA check failure no longer blocks normal XiaoZhi/MQTT startup; if the OTA API times out, firmware continues with the default MQTT path.
+- Focus date reconciliation no longer writes NVS from the time/weather task, avoiding the flash assert that looked like repeated network failure after WiFi connected.
+- Network now keeps its Apps tile live across refreshes and shows the connected IP when available.
+- Podcast now keeps its Apps tile live across refreshes instead of resetting to `Episodes`.
+- Oversized OTA now stays visible as a `USB` Settings badge instead of reverting to `Check`.
+- Music now persists three recent direct-URL songs in NVS, supports tap-to-replay and one-tap newest-song replay from the Music page, can clear the whole saved recent list, and can remove a single recent row by long-press.
+- Music recent-song replay now shows pending state and keeps short RadioService failure reasons on the selected row until the user acts again.
+- The changed OTA files compile on macOS ESP-IDF 5.5 for `esp32s3`.
+- Full no-space-path build passed from `/Users/tupi/qdtech_worktree_nospace` with QDTech 7 MB / 7 MB OTA partition defaults. `xiaozhi.bin` size is `0x639120`, leaving `0xc6ee0` free in the 7 MB app slot.
+- Local `v1.7.76` release candidate assets are in `releases/v1.7.76/`, including `SHA256SUMS.txt`.
+
+Next checks:
+
+- Upload `SHA256SUMS.txt` with the app/full/zip assets to the GitHub release and test a real OTA from an older 7 MB-partition build.
+- Optional polish: add direct Music search/play queue controls if touch-first music needs to work without voice input.
+
 # 2026-07-01 v1.7.75 NetEase Music Lyric Follow-Up
 
 Current state:

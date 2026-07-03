@@ -2,6 +2,76 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-03: v1.7.76 OTA Safety, Apps, Music Recent
+
+Scope:
+
+- Bumped firmware version to `1.7.76`.
+- Added GitHub release asset size and `SHA256SUMS.txt` lookup to the QDTech firmware update service.
+- Blocked OTA offers and OTA starts when the release app binary is larger than the next OTA partition.
+- Added expected-size and SHA256 verification to direct URL OTA, including `Content-Length`, downloaded byte count, partition overflow, and final digest checks.
+- OTA progress now appears directly on the Settings update button and the Apps `Settings` tile while downloading, and the Apps tile preserves the last percentage across shared status refreshes.
+- Preferred the exact release app asset name before broad fallback app asset matches.
+- Expanded the Apps page from 8 tiles to 10 compact tiles by adding `Music` and `Podcast`.
+- The `Music` tile opens XiaoZhi chat for voice song requests; the `Podcast` tile opens and activates the podcast list.
+- Added a hidden Diagnostics page opened by long-pressing the Apps page `Settings` tile.
+- Diagnostics displays version, board, running/next OTA partitions, OTA app file size/slot/margin, heap/PSRAM, WiFi/IP/RSSI, saved WiFi count, battery, and last OTA status, with a manual refresh button.
+- Added a dedicated Music request page behind the Apps `Music` tile.
+- The Music page shows the latest song title, artist/source, and current lyric/playback line, with `Talk`, `Again`, `Face`, and `Stop` actions.
+- Added lightweight live status badges on Apps tiles for Radio, Network, Settings/OTA, Music, and Podcast.
+- Added live Apps tile status for Photos refresh, ready, no-photo, SD-card, and decode states without reintroducing overlay text on the full-screen slideshow.
+- Added live Apps tile status for NES/FC emulator scanning, loading, error, selected-ROM, and playing states.
+- Kept the Settings/OTA badge in an explicit `USB` state when the available app binary is too large for OTA.
+- Calendar's Apps tile status now refreshes from the shared Apps status path and shows the synced current date when available.
+- Added live Apps tile status for Focus, showing ready duration, running minutes, paused, or done state.
+- Focus now supports one-tap work/break cycling after completion: finished work offers `休息`, and finished break offers `专注`.
+- Focus `今日完成` now stores its count with a synced date and automatically resets on a new day.
+- Startup OTA check failure no longer blocks normal XiaoZhi/MQTT startup; if the OTA API times out, firmware continues with the default MQTT path.
+- Focus date reconciliation no longer writes NVS from the PSRAM-stack time/weather task, avoiding a cache-disabled flash assert after WiFi/time sync.
+- Network's Apps tile now preserves live WiFi status across Apps refreshes and shows the current IP when connected.
+- Podcast's Apps tile now preserves the latest playback/list state across Apps refreshes instead of resetting to `Episodes`.
+- Added a three-item Music recent-song list persisted in NVS. Recent rows can replay the stored direct URL through the existing radio/music URL playback path. `Again` replays the newest saved song, `Clear` removes all saved songs, and long-pressing a row removes only that song.
+- Recent-song replay rows now show `Replaying...` while waiting for the stream and keep a short RadioService failure reason when RadioService reports an error for that replayed song.
+
+Verification:
+
+- macOS ESP-IDF 5.5 configured for `esp32s3` with the QDTech 7 MB / 7 MB OTA partition table.
+- `main/ota.cc`, `main/boards/qdtech-s3-touch-lcd-3.5/firmware_update_service.cc`, and `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc` compiled to object files.
+- `esp-idf/main/libmain.a` built successfully.
+- After Diagnostics was added, `esp-idf/main/libmain.a` was rebuilt successfully again. The only warning observed was the existing unused `rgb565` helper in `fc_emulator_service.cc`.
+- After the Music request page was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Apps tile status badges were added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Music recent-song replay was added, `desktop_ui.cc.obj`, `qdtech_s3_touch_lcd_3_5.cc.obj`, and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Music recent clear was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After recent replay pending/failure feedback was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After the oversized OTA `USB` badge was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Music recent single-row removal was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After inline Music replay failure reasons were added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After persistent Music recent failure marks were added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After live Focus tile status was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After shared Calendar tile date refresh was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After persistent Network tile status and connected-IP display were added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After persistent Podcast tile status was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Music `Again` one-tap recent replay was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again.
+- After Focus one-tap work/break cycling was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again.
+- After OTA progress labels were added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again.
+- After OTA file/slot/margin details were added to Diagnostics, `desktop_ui.cc.obj`, `firmware_update_service.cc.obj`, and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After Focus daily count reset was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After live NES tile status was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After live Photos tile status was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After OTA progress preservation across Apps tile refreshes was added, `desktop_ui.cc.obj` and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- After the startup-connectivity hotfix was added, `desktop_ui.cc.obj`, `application.cc.obj`, and `esp-idf/main/libmain.a` rebuilt successfully again with the same existing `rgb565` warning.
+- Full no-space-path build passed from `/Users/tupi/qdtech_worktree_nospace` using QDTech board defaults and the existing local `78__esp-opus-encoder` dependency fix. The final `xiaozhi.bin` was generated at `0x639120`; the 7 MB app partition has `0xc6ee0` free (11%).
+- Final `v1.7.76` no-space-path build confirmed `App "xiaozhi" version: 1.7.76`.
+- `idf.py merge-bin` generated `merged-binary.bin` at `0x739120`.
+- Local release candidate assets:
+  - `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-app.bin`: `48eef6a10e44dbaa1e9d9b495feac4ca9501792efd9efeb642704879ea20bbc3`
+  - `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-full.bin`: `411fa3a642d1fe9df837924ef7eda75adb1838a62bb96ee2aa60f688944c0e76`
+  - `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-firmware.zip`: `207c302fa006a2fc05596b3bf86baebd12e75b2a7d78305e94055f7420b010d9`
+  - `releases/v1.7.76/SHA256SUMS.txt` records the same hashes.
+- `git diff --check` passed.
+- Full link remains blocked only while the repo path contains the space in `带小智 3.5 寸`; ESP-SR prebuilt library paths are not quoted correctly by the generated link line.
+
 ## 2026-07-01: v1.7.75 NetEase Lyric Overlay and Cutover Stability
 
 Scope:

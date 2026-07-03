@@ -21,6 +21,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "esp_ota_ops.h"
 #include "freertos/idf_additions.h"
 #include "wifi_station.h"
 
@@ -29,10 +30,12 @@ static constexpr char kLatestReleaseUrl[] =
     "https://api.github.com/repos/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/latest";
 static constexpr char kBoardAssetPrefix[] = "qdtech-s3-touch-lcd-3.5-";
 static constexpr char kAppAssetSuffix[] = "-app.bin";
+static constexpr char kSha256SumsAsset[] = "SHA256SUMS.txt";
 static constexpr size_t kMaxReleaseJson = 32768;
 
 struct ReleaseHttpBuffer {
     std::string data;
+    size_t max_bytes = kMaxReleaseJson;
     bool truncated = false;
 };
 
@@ -49,14 +52,33 @@ static std::string StripLeadingV(const std::string& version) {
     return version;
 }
 
+static std::string ToLowerAscii(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return text;
+}
+
+static bool IsSha256Hex(const std::string& text) {
+    if (text.size() != 64) {
+        return false;
+    }
+    for (char ch : text) {
+        if (!std::isxdigit(static_cast<unsigned char>(ch))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static esp_err_t ReleaseHttpEventHandler(esp_http_client_event_t* evt) {
     if (evt->event_id != HTTP_EVENT_ON_DATA || !evt->user_data || !evt->data || evt->data_len <= 0) {
         return ESP_OK;
     }
 
     auto* buffer = static_cast<ReleaseHttpBuffer*>(evt->user_data);
-    const size_t room = kMaxReleaseJson > buffer->data.size()
-        ? kMaxReleaseJson - buffer->data.size()
+    const size_t room = buffer->max_bytes > buffer->data.size()
+        ? buffer->max_bytes - buffer->data.size()
         : 0;
     if (room == 0) {
         buffer->truncated = true;
@@ -69,6 +91,60 @@ static esp_err_t ReleaseHttpEventHandler(esp_http_client_event_t* evt) {
         buffer->truncated = true;
     }
     return ESP_OK;
+}
+
+static bool FetchHttpText(const char* url, size_t max_bytes, std::string* output) {
+    ReleaseHttpBuffer buffer;
+    esp_err_t err = ESP_FAIL;
+    int status = 0;
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        buffer = ReleaseHttpBuffer{};
+        buffer.max_bytes = max_bytes;
+        buffer.data.reserve(std::min(max_bytes, static_cast<size_t>(8192)));
+
+        esp_http_client_config_t config = {};
+        config.url = url;
+        config.timeout_ms = 12000;
+        config.event_handler = ReleaseHttpEventHandler;
+        config.user_data = &buffer;
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+        config.buffer_size = 1024;
+
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (!client) {
+            ESP_LOGE(TAG, "http text init failed url=%s", url);
+            return false;
+        }
+
+        const esp_app_desc_t* app_desc = esp_app_get_description();
+        std::string user_agent = std::string(BOARD_NAME "/") + (app_desc ? app_desc->version : "unknown");
+        esp_http_client_set_header(client, "User-Agent", user_agent.c_str());
+        esp_http_client_set_header(client, "Accept", "application/vnd.github+json,text/plain,*/*");
+
+        err = esp_http_client_perform(client);
+        status = esp_http_client_get_status_code(client);
+        esp_http_client_cleanup(client);
+        if (err == ESP_OK && status >= 200 && status < 300 &&
+            !buffer.data.empty() && !buffer.truncated && buffer.data.size() <= max_bytes) {
+            *output = std::move(buffer.data);
+            return true;
+        }
+
+        ESP_LOGW(TAG, "http text attempt %d failed err=%s status=%d len=%u truncated=%d",
+                 attempt + 1, esp_err_to_name(err), status,
+                 static_cast<unsigned>(buffer.data.size()), buffer.truncated ? 1 : 0);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    ESP_LOGE(TAG, "http text fetch failed err=%s status=%d url=%s",
+             esp_err_to_name(err), status, url);
+    return false;
+}
+
+static size_t NextOtaPartitionSize() {
+    const esp_partition_t* partition = esp_ota_get_next_update_partition(nullptr);
+    return partition ? partition->size : 0;
 }
 
 FirmwareUpdateService& FirmwareUpdateService::GetInstance() {
@@ -164,104 +240,91 @@ void FirmwareUpdateService::CheckLatest() {
     }
 
     SetUi("Checking...", false, true);
-    std::string latest_version;
-    std::string firmware_url;
-    if (!FetchLatestRelease(&latest_version, &firmware_url)) {
+    ReleaseInfo release;
+    if (!FetchLatestRelease(&release)) {
         SetUi("Check failed", false, false);
         return;
     }
 
     const esp_app_desc_t* app_desc = esp_app_get_description();
     const std::string current_version = app_desc ? app_desc->version : "";
-    const bool newer = IsNewerVersion(current_version, latest_version);
+    const bool newer = IsNewerVersion(current_version, release.version);
     if (!newer) {
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            latest_version_ = latest_version;
+            latest_version_ = release.version;
             firmware_url_.clear();
+            firmware_asset_name_.clear();
+            firmware_sha256_.clear();
+            firmware_size_ = 0;
             update_available_ = false;
         }
         SetUi("Latest", false, false);
         ESP_LOGI(TAG, "firmware latest current=%s release=%s",
-                 current_version.c_str(), latest_version.c_str());
+                 current_version.c_str(), release.version.c_str());
         return;
     }
 
-    if (firmware_url.empty()) {
+    if (release.firmware_url.empty()) {
         {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            latest_version_ = latest_version;
+            latest_version_ = release.version;
             firmware_url_.clear();
+            firmware_asset_name_.clear();
+            firmware_sha256_.clear();
+            firmware_size_ = 0;
             update_available_ = false;
         }
         SetUi("No OTA asset", false, false);
-        ESP_LOGW(TAG, "new release %s has no app OTA asset", latest_version.c_str());
+        ESP_LOGW(TAG, "new release %s has no app OTA asset", release.version.c_str());
+        return;
+    }
+
+    const size_t partition_size = NextOtaPartitionSize();
+    if (release.asset_size > 0 && partition_size > 0 && release.asset_size > partition_size) {
+        {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            latest_version_ = release.version;
+            firmware_url_.clear();
+            firmware_asset_name_ = release.asset_name;
+            firmware_sha256_ = release.sha256;
+            firmware_size_ = release.asset_size;
+            update_available_ = false;
+        }
+        SetUi("Need USB flash", false, false);
+        ESP_LOGW(TAG, "release %s asset too large for OTA partition asset=%u partition=%u",
+                 release.version.c_str(), static_cast<unsigned>(release.asset_size),
+                 static_cast<unsigned>(partition_size));
         return;
     }
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        latest_version_ = latest_version;
-        firmware_url_ = firmware_url;
+        latest_version_ = release.version;
+        firmware_url_ = release.firmware_url;
+        firmware_asset_name_ = release.asset_name;
+        firmware_sha256_ = release.sha256;
+        firmware_size_ = release.asset_size;
         update_available_ = true;
     }
 
     char status[32];
-    snprintf(status, sizeof(status), "v%s ready", latest_version.c_str());
+    snprintf(status, sizeof(status), "v%s ready", release.version.c_str());
     SetUi(status, true, false);
-    ESP_LOGI(TAG, "firmware update ready current=%s latest=%s url=%s",
-             current_version.c_str(), latest_version.c_str(), firmware_url.c_str());
+    ESP_LOGI(TAG, "firmware update ready current=%s latest=%s asset=%s size=%u sha256=%s url=%s",
+             current_version.c_str(), release.version.c_str(), release.asset_name.c_str(),
+             static_cast<unsigned>(release.asset_size),
+             release.sha256.empty() ? "(none)" : release.sha256.c_str(),
+             release.firmware_url.c_str());
 }
 
-bool FirmwareUpdateService::FetchLatestRelease(std::string* version, std::string* firmware_url) {
-    ReleaseHttpBuffer buffer;
-    esp_err_t err = ESP_FAIL;
-    int status = 0;
-
-    for (int attempt = 0; attempt < 2; ++attempt) {
-        buffer = ReleaseHttpBuffer{};
-        buffer.data.reserve(8192);
-
-        esp_http_client_config_t config = {};
-        config.url = kLatestReleaseUrl;
-        config.timeout_ms = 12000;
-        config.event_handler = ReleaseHttpEventHandler;
-        config.user_data = &buffer;
-        config.crt_bundle_attach = esp_crt_bundle_attach;
-        config.buffer_size = 1024;
-
-        esp_http_client_handle_t client = esp_http_client_init(&config);
-        if (!client) {
-            ESP_LOGE(TAG, "release http init failed");
-            return false;
-        }
-
-        const esp_app_desc_t* app_desc = esp_app_get_description();
-        std::string user_agent = std::string(BOARD_NAME "/") + (app_desc ? app_desc->version : "unknown");
-        esp_http_client_set_header(client, "User-Agent", user_agent.c_str());
-        esp_http_client_set_header(client, "Accept", "application/vnd.github+json");
-
-        err = esp_http_client_perform(client);
-        status = esp_http_client_get_status_code(client);
-        esp_http_client_cleanup(client);
-        if (err == ESP_OK && status >= 200 && status < 300 && !buffer.data.empty() && !buffer.truncated) {
-            break;
-        }
-
-        ESP_LOGW(TAG, "release fetch attempt %d failed err=%s status=%d len=%u truncated=%d",
-                 attempt + 1, esp_err_to_name(err), status,
-                 static_cast<unsigned>(buffer.data.size()), buffer.truncated ? 1 : 0);
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    if (err != ESP_OK || status < 200 || status >= 300 || buffer.data.empty() || buffer.truncated) {
-        ESP_LOGE(TAG, "release fetch failed err=%s status=%d len=%u truncated=%d",
-                 esp_err_to_name(err), status, static_cast<unsigned>(buffer.data.size()),
-                 buffer.truncated ? 1 : 0);
+bool FirmwareUpdateService::FetchLatestRelease(ReleaseInfo* release) {
+    std::string release_json;
+    if (!FetchHttpText(kLatestReleaseUrl, kMaxReleaseJson, &release_json)) {
         return false;
     }
 
-    cJSON* root = cJSON_Parse(buffer.data.c_str());
+    cJSON* root = cJSON_Parse(release_json.c_str());
     if (!root) {
         ESP_LOGE(TAG, "release json parse failed");
         return false;
@@ -275,13 +338,18 @@ bool FirmwareUpdateService::FetchLatestRelease(std::string* version, std::string
     }
 
     const std::string release_tag = tag->valuestring;
-    *version = StripLeadingV(release_tag);
-    firmware_url->clear();
+    release->version = StripLeadingV(release_tag);
+    release->firmware_url.clear();
+    release->asset_name.clear();
+    release->sha256.clear();
+    release->asset_size = 0;
 
     const std::string expected_asset =
         std::string(kBoardAssetPrefix) + release_tag + kAppAssetSuffix;
     cJSON* assets = cJSON_GetObjectItem(root, "assets");
     cJSON* item = nullptr;
+    std::string sums_url;
+    bool exact_asset_found = false;
     cJSON_ArrayForEach(item, assets) {
         cJSON* name = cJSON_GetObjectItem(item, "name");
         cJSON* download_url = cJSON_GetObjectItem(item, "browser_download_url");
@@ -289,25 +357,78 @@ bool FirmwareUpdateService::FetchLatestRelease(std::string* version, std::string
             continue;
         }
         const std::string asset_name = name->valuestring;
-        if (asset_name == expected_asset ||
-            (asset_name.find(kBoardAssetPrefix) != std::string::npos &&
-             EndsWith(asset_name, kAppAssetSuffix))) {
-            *firmware_url = download_url->valuestring;
-            ESP_LOGI(TAG, "release asset selected: %s", asset_name.c_str());
-            break;
+        if (asset_name == kSha256SumsAsset) {
+            sums_url = download_url->valuestring;
+            continue;
+        }
+        const bool exact_match = asset_name == expected_asset;
+        const bool fallback_match = !exact_asset_found &&
+            asset_name.find(kBoardAssetPrefix) != std::string::npos &&
+            EndsWith(asset_name, kAppAssetSuffix);
+        if (exact_match || fallback_match) {
+            cJSON* size = cJSON_GetObjectItem(item, "size");
+            release->asset_name = asset_name;
+            release->firmware_url = download_url->valuestring;
+            release->asset_size = cJSON_IsNumber(size) && size->valuedouble > 0
+                ? static_cast<size_t>(size->valuedouble)
+                : 0;
+            exact_asset_found = exact_match;
+            ESP_LOGI(TAG, "release asset selected: %s size=%u",
+                     asset_name.c_str(), static_cast<unsigned>(release->asset_size));
         }
     }
 
     cJSON_Delete(root);
+    if (!release->asset_name.empty() && !sums_url.empty()) {
+        FetchSha256ForAsset(sums_url, release->asset_name, &release->sha256);
+    }
     return true;
+}
+
+bool FirmwareUpdateService::FetchSha256ForAsset(const std::string& sums_url, const std::string& asset_name, std::string* sha256) {
+    std::string sums;
+    sha256->clear();
+    if (!FetchHttpText(sums_url.c_str(), 4096, &sums)) {
+        ESP_LOGW(TAG, "SHA256SUMS fetch failed");
+        return false;
+    }
+
+    size_t line_start = 0;
+    while (line_start < sums.size()) {
+        size_t line_end = sums.find('\n', line_start);
+        if (line_end == std::string::npos) {
+            line_end = sums.size();
+        }
+        std::string line = sums.substr(line_start, line_end - line_start);
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+        if (line.find(asset_name) != std::string::npos && line.size() >= 64) {
+            std::string candidate = ToLowerAscii(line.substr(0, 64));
+            if (IsSha256Hex(candidate)) {
+                *sha256 = candidate;
+                ESP_LOGI(TAG, "release SHA256 selected asset=%s sha256=%s",
+                         asset_name.c_str(), sha256->c_str());
+                return true;
+            }
+        }
+        line_start = line_end + 1;
+    }
+
+    ESP_LOGW(TAG, "SHA256SUMS missing asset=%s", asset_name.c_str());
+    return false;
 }
 
 void FirmwareUpdateService::RunUpgrade() {
     std::string firmware_url;
+    std::string firmware_sha256;
+    size_t firmware_size = 0;
     bool has_update = false;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         firmware_url = firmware_url_;
+        firmware_sha256 = firmware_sha256_;
+        firmware_size = firmware_size_;
         has_update = update_available_ && !firmware_url.empty();
     }
 
@@ -329,6 +450,13 @@ void FirmwareUpdateService::RunUpgrade() {
         SetUi("Wait idle", true, false);
         return;
     }
+    const size_t partition_size = NextOtaPartitionSize();
+    if (firmware_size > 0 && partition_size > 0 && firmware_size > partition_size) {
+        SetUi("Need USB flash", false, false);
+        ESP_LOGW(TAG, "upgrade blocked, asset too large for OTA partition asset=%u partition=%u",
+                 static_cast<unsigned>(firmware_size), static_cast<unsigned>(partition_size));
+        return;
+    }
 
     Board::GetInstance().SetPowerSaveMode(false);
     app.PrepareForFirmwareUpgrade();
@@ -346,7 +474,7 @@ void FirmwareUpdateService::RunUpgrade() {
     SetUi("Updating...", true, true, 0);
 
     Ota ota;
-    ota.StartUpgradeFromUrl(firmware_url, [this](int progress, size_t speed) {
+    ota.StartUpgradeFromUrl(firmware_url, firmware_sha256, firmware_size, [this](int progress, size_t speed) {
         char status[32];
         snprintf(status, sizeof(status), "%d%% %uKB/s", progress,
                  static_cast<unsigned>(speed / 1024));
@@ -367,8 +495,15 @@ void FirmwareUpdateService::SetUi(const char* status, bool update_available, boo
     if (!desktop_ui_) {
         return;
     }
+    size_t firmware_size = 0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        firmware_size = firmware_size_;
+    }
+    const size_t partition_size = NextOtaPartitionSize();
     if (lvgl_port_lock(200)) {
-        desktop_ui_->SetFirmwareUpdateStatus(status, update_available, busy, progress);
+        desktop_ui_->SetFirmwareUpdateStatus(status, update_available, busy, progress,
+                                             firmware_size, partition_size);
         lvgl_port_unlock();
     }
 }

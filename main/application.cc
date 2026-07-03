@@ -101,10 +101,6 @@ Application::~Application() {
 }
 
 void Application::CheckNewVersion(Ota& ota) {
-    const int MAX_RETRY = 10;
-    int retry_count = 0;
-    int retry_delay = 10; // 初始重试延迟为10秒
-
     while (true) {
         if (external_audio_active_.load(std::memory_order_relaxed)) {
             ESP_LOGW(TAG, "Skip version check retry while external audio is active");
@@ -115,36 +111,10 @@ void Application::CheckNewVersion(Ota& ota) {
         display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
 
         if (!ota.CheckVersion()) {
-            retry_count++;
-            if (retry_count >= MAX_RETRY) {
-                ESP_LOGE(TAG, "Too many retries, exit version check");
-                return;
-            }
-
-            if (external_audio_active_.load(std::memory_order_relaxed)) {
-                ESP_LOGW(TAG, "Suppress version check alert while external audio is active");
-                return;
-            }
-            char buffer[128];
-            snprintf(buffer, sizeof(buffer), Lang::Strings::CHECK_NEW_VERSION_FAILED, retry_delay, ota.GetCheckVersionUrl().c_str());
-            Alert(Lang::Strings::ERROR, buffer, "sad", Lang::Sounds::P3_EXCLAMATION);
-
-            ESP_LOGW(TAG, "Check new version failed, retry in %d seconds (%d/%d)", retry_delay, retry_count, MAX_RETRY);
-            for (int i = 0; i < retry_delay; i++) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                if (external_audio_active_.load(std::memory_order_relaxed)) {
-                    ESP_LOGW(TAG, "Cancel version check retry while external audio is active");
-                    return;
-                }
-                if (device_state_ == kDeviceStateIdle) {
-                    break;
-                }
-            }
-            retry_delay *= 2; // 每次重试后延迟时间翻倍
-            continue;
+            ESP_LOGW(TAG, "Startup version check failed, continue protocol startup");
+            xEventGroupSetBits(event_group_, CHECK_NEW_VERSION_DONE_EVENT);
+            return;
         }
-        retry_count = 0;
-        retry_delay = 10; // 重置重试延迟时间
 
         if (ota.HasNewVersion()) {
             Alert(Lang::Strings::OTA_UPGRADE, Lang::Strings::UPGRADING, "happy", Lang::Sounds::P3_UPGRADE);

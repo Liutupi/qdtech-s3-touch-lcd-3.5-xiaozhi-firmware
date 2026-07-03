@@ -13,12 +13,14 @@ enum class DesktopPage {
     FC,
     CALENDAR,
     RADIO,
+    MUSIC,
     MEDIA,
     PODCAST,
     FOCUS,
     XIAOZHI,
     NETWORK,
     SETTINGS,
+    DIAGNOSTICS,
 };
 
 class DesktopUI {
@@ -41,7 +43,8 @@ public:
     void SetNetworkStatus(const char* status);
     void SetBatteryStatus(int level, bool charging, bool valid);
     void SetDefaultNetwork(size_t index);
-    void SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress);
+    void SetFirmwareUpdateStatus(const char* status, bool update_available, bool busy, int progress,
+                                 size_t asset_size = 0, size_t partition_size = 0);
     void CycleTheme();
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
@@ -58,6 +61,7 @@ public:
     void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetMusicLyric(const char* title, const char* artist, const char* line);
+    void RememberMusicTrack(const char* title, const char* artist, const char* url);
     void ClearMusicLyric();
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
@@ -87,6 +91,12 @@ public:
     void SetFcFrame(const lv_img_dsc_t* image);
     void SetFcControllerCallback(std::function<void(uint8_t)> callback);
     bool IsFcPlayingView() const { return fc_playing_view_; }
+    void SetMusicReplayCallback(std::function<void(const std::string& title,
+                                                   const std::string& artist,
+                                                   const std::string& url)> callback);
+    void ReplayMusicRecent(size_t index);
+    void RemoveMusicRecent(size_t index);
+    void ClearMusicRecent();
 
     // Radio actions (public for LVGL callbacks)
     std::function<void()> radio_play_pause_;
@@ -108,6 +118,8 @@ public:
     std::function<void()> fc_prev_;
     std::function<void(uint8_t)> fc_controller_cb_;
     std::function<void()> fc_stop_other_media_;
+    std::function<void(const std::string& title, const std::string& artist,
+                       const std::string& url)> music_replay_cb_;
 
     // Radio animation (public for timer callback)
     lv_obj_t* radio_bars_[16] = {};  // 音量动态柱
@@ -124,11 +136,13 @@ private:
     lv_obj_t* fc_page_ = nullptr;
     lv_obj_t* calendar_page_ = nullptr;
     lv_obj_t* radio_page_ = nullptr;
+    lv_obj_t* music_page_ = nullptr;
     lv_obj_t* media_page_ = nullptr;
     lv_obj_t* podcast_page_ = nullptr;
     lv_obj_t* xiaozhi_page_ = nullptr;
     lv_obj_t* network_page_ = nullptr;
     lv_obj_t* settings_page_ = nullptr;
+    lv_obj_t* diagnostics_page_ = nullptr;
     DesktopPage current_page_ = DesktopPage::MAIN;
 
     // Main page elements
@@ -161,6 +175,8 @@ private:
     lv_obj_t* status_bar_battery_labels_[6] = {};
     int battery_level_ = -1;
     bool battery_charging_ = false;
+    lv_obj_t* app_status_labels_[10] = {};
+    lv_obj_t* app_status_dots_[10] = {};
     lv_obj_t* calendar_app_status_label_ = nullptr;
     std::function<void()> main_page_callback_;
     int current_hour_ = -1;
@@ -183,6 +199,8 @@ private:
     lv_obj_t* photo_detail_label_ = nullptr;
     lv_obj_t* photo_refresh_label_ = nullptr;
     bool photo_show_a_ = true;
+    std::string photo_app_status_ = "SD Slideshow";
+    lv_color_t photo_app_color_ = {};
     std::function<void(bool)> photo_active_callback_;
     std::function<void()> photo_refresh_callback_;
 
@@ -195,6 +213,8 @@ private:
     lv_obj_t* fc_list_label_ = nullptr;
     bool fc_playing_view_ = false;
     bool fc_list_touch_latched_ = false;
+    std::string fc_app_status_ = "SD ROMs";
+    lv_color_t fc_app_color_ = {};
     std::function<void(bool)> fc_active_callback_;
     std::function<void()> fc_exit_callback_;
 
@@ -219,6 +239,29 @@ private:
     lv_obj_t* radio_meta_label_ = nullptr;
     lv_timer_t* radio_anim_timer_ = nullptr;
 
+    // Music request page elements
+    lv_obj_t* music_title_label_ = nullptr;
+    lv_obj_t* music_artist_label_ = nullptr;
+    lv_obj_t* music_line_label_ = nullptr;
+    lv_obj_t* music_hint_label_ = nullptr;
+    lv_obj_t* music_recent_clear_button_ = nullptr;
+    static constexpr size_t kMusicRecentCount = 3;
+    struct MusicRecentTrack {
+        std::string title;
+        std::string artist;
+        std::string url;
+    };
+    MusicRecentTrack music_recent_[kMusicRecentCount];
+    lv_obj_t* music_recent_buttons_[kMusicRecentCount] = {};
+    lv_obj_t* music_recent_labels_[kMusicRecentCount] = {};
+    size_t music_recent_pending_index_ = kMusicRecentCount;
+    std::string music_recent_pending_title_;
+    size_t music_recent_failed_index_ = kMusicRecentCount;
+    std::string music_recent_failed_reason_;
+    std::string music_title_ = "No song yet";
+    std::string music_artist_ = "Ask XiaoZhi to play NetEase music";
+    std::string music_line_ = "Tap Talk and say a song name.";
+
     // Podcast page elements
     lv_obj_t* podcast_list_group_ = nullptr;
     lv_obj_t* podcast_detail_group_ = nullptr;
@@ -232,6 +275,8 @@ private:
     lv_obj_t* podcast_progress_label_ = nullptr;
     bool podcast_detail_view_ = false;
     bool podcast_progress_dragging_ = false;
+    std::string podcast_app_status_ = "Episodes";
+    lv_color_t podcast_app_color_ = {};
 
     // Focus timer page elements
     lv_obj_t* focus_page_ = nullptr;
@@ -247,6 +292,7 @@ private:
     uint32_t focus_remaining_sec_ = 25 * 60;
     uint32_t focus_total_sec_ = 25 * 60;
     uint16_t focus_completed_count_ = 0;
+    uint32_t focus_count_date_ = 0;
 
     // Settings page elements
     lv_obj_t* settings_brightness_slider_ = nullptr;
@@ -268,11 +314,22 @@ private:
     lv_obj_t* settings_ble_status_label_ = nullptr;
     std::string settings_wifi_config_status_ = "WiFi config idle";
     std::string settings_ble_status_ = "BLE idle";
+    std::string firmware_update_status_ = "Not checked";
+    bool firmware_update_available_ = false;
+    bool firmware_update_busy_ = false;
+    int firmware_update_progress_ = -1;
+    size_t firmware_update_asset_size_ = 0;
+    size_t firmware_update_partition_size_ = 0;
+    std::string network_app_status_ = "WiFi Hub";
+    lv_color_t network_app_color_ = {};
 
     // Network page elements
     lv_obj_t* network_list_container_ = nullptr;
     lv_obj_t* network_saved_count_label_ = nullptr;
     lv_obj_t* network_detail_label_ = nullptr;
+
+    // Diagnostics page elements
+    lv_obj_t* diagnostics_labels_[10] = {};
 
     // Xiaozhi page elements
     lv_obj_t* face_container_ = nullptr;
@@ -316,12 +373,14 @@ private:
     void CreateFcPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
     void CreateRadioPage(lv_obj_t* root);
+    void CreateMusicPage(lv_obj_t* root);
     void CreateMediaPage(lv_obj_t* root);
     void CreatePodcastPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
+    void CreateDiagnosticsPage(lv_obj_t* root);
     void CreateStatusBar(lv_obj_t* parent);
     void CreateBigTime(lv_obj_t* parent);
     void CreateWeatherPanel(lv_obj_t* parent);
@@ -333,10 +392,18 @@ private:
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);
     lv_obj_t* CreatePanel(lv_obj_t* parent, int16_t w, int16_t h, int16_t x, int16_t y);
     void UpdateWifiList();
+    void RefreshDiagnostics();
+    void SetAppTileStatus(uint8_t index, const char* status, lv_color_t color);
+    void RefreshAppTileStatuses();
+    void LoadMusicRecent();
+    void SaveMusicRecent();
+    void RefreshMusicRecent();
     bool HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x);
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
     void UpdateFocusUI();
+    uint32_t CurrentFocusDateKey() const;
+    void ReconcileFocusDate(bool persist);
 
     void RenderBigTime(int hour, int minute, bool animate);
     void FlipDigit(uint8_t index, uint8_t digit, bool animate);
