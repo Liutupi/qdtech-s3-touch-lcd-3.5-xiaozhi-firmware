@@ -2839,27 +2839,7 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(lv_obj_get_child(back, 0), &lv_font_montserrat_12, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -14, 8);
 
-    lv_obj_t* lyric_panel = CreatePanel(music_page_, 300, 224, 16, 14);
-    lv_obj_set_style_bg_color(lyric_panel,
-                              is_tupi_warm_theme() ? COLOR_SURFACE_2 :
-                              themed_color(LV_COLOR_MAKE(0x0f, 0x17, 0x24), COLOR_SURFACE_2), 0);
-    lv_obj_set_style_border_color(lyric_panel, COLOR_GOLD, 0);
-    lv_obj_set_style_border_opa(lyric_panel, LV_OPA_40, 0);
-    lv_obj_set_style_radius(lyric_panel, 8, 0);
-
-    lv_obj_t* lyric_title = label_en(lyric_panel, "LYRICS", &style_muted);
-    lv_obj_set_style_text_font(lyric_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(lyric_title, LV_ALIGN_TOP_LEFT, 14, 12);
-
-    music_side_lyric_label_ = label_en(lyric_panel, music_line_.c_str(), &style_en);
-    lv_obj_set_style_text_font(music_side_lyric_label_, qd_cn_font_20(), 0);
-    lv_obj_set_width(music_side_lyric_label_, 268);
-    lv_obj_set_height(music_side_lyric_label_, 166);
-    lv_obj_set_style_text_align(music_side_lyric_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(music_side_lyric_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_align(music_side_lyric_label_, LV_ALIGN_CENTER, 0, 14);
-
-    lv_obj_t* cover = CreatePanel(music_page_, 136, 104, 328, 38);
+    lv_obj_t* cover = CreatePanel(music_page_, 128, 112, 18, 18);
     lv_obj_set_style_bg_color(cover,
                               is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x11, 0x17, 0x22), COLOR_SURFACE), 0);
@@ -2870,14 +2850,14 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_add_event_cb(cover, music_face_cb, LV_EVENT_CLICKED, NULL);
     add_gesture_bubble(cover);
 
-    music_cover_disc_ = circle(cover, 58,
+    music_cover_disc_ = circle(cover, 64,
                                is_tupi_warm_theme() ? COLOR_SURFACE_2 :
                                themed_color(LV_COLOR_MAKE(0x1b, 0x24, 0x32), COLOR_CREAM),
                                LV_OPA_COVER);
     lv_obj_set_style_border_color(music_cover_disc_, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(music_cover_disc_, 2, 0);
-    lv_obj_align(music_cover_disc_, LV_ALIGN_TOP_MID, 0, 10);
-    lv_obj_t* disc_hole = circle(music_cover_disc_, 14,
+    lv_obj_align(music_cover_disc_, LV_ALIGN_TOP_MID, 0, 12);
+    lv_obj_t* disc_hole = circle(music_cover_disc_, 16,
                                  is_tupi_warm_theme() ? COLOR_BG :
                                  themed_color(LV_COLOR_MAKE(0x09, 0x0c, 0x13), COLOR_BG),
                                  LV_OPA_COVER);
@@ -2886,25 +2866,25 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(music_cover_note_, &lv_font_montserrat_20, 0);
     lv_obj_align(music_cover_note_, LV_ALIGN_CENTER, 0, -2);
 
-    static constexpr int16_t kBarX[] = {16, 28, 40, 52};
+    static constexpr int16_t kBarX[] = {18, 32, 46, 60};
     for (size_t i = 0; i < sizeof(music_cover_bars_) / sizeof(music_cover_bars_[0]); ++i) {
         lv_obj_t* bar = lv_obj_create(cover);
         lv_obj_remove_style_all(bar);
-        lv_obj_set_size(bar, 6, 12 + static_cast<int16_t>(i) * 3);
+        lv_obj_set_size(bar, 6, 13 + static_cast<int16_t>(i) * 3);
         lv_obj_set_style_radius(bar, 4, 0);
         lv_obj_set_style_bg_color(bar, i % 2 == 0 ? COLOR_GOLD : COLOR_GREEN, 0);
         lv_obj_set_style_bg_opa(bar, LV_OPA_70, 0);
-        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -14);
+        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -16);
         music_cover_bars_[i] = bar;
     }
 
     lv_obj_t* source = label_en(cover, "NetEase", &style_muted);
     lv_obj_set_style_text_font(source, &lv_font_montserrat_12, 0);
-    lv_obj_set_width(source, 64);
+    lv_obj_set_width(source, 74);
     lv_obj_set_style_text_align(source, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align(source, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
 
-    lv_obj_t* panel = CreatePanel(music_page_, 136, 88, 328, 150);
+    lv_obj_t* panel = CreatePanel(music_page_, 220, 112, 158, 18);
     lv_obj_set_style_bg_color(panel,
                               is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x12, 0x16, 0x22), COLOR_SURFACE), 0);
@@ -2914,36 +2894,61 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_style_radius(panel, 8, 0);
 
     music_title_label_ = label_en(panel, music_title_.c_str(), &style_en);
-    lv_obj_set_style_text_font(music_title_label_, qd_cn_font_16(), 0);
-    lv_obj_set_width(music_title_label_, 112);
+    lv_obj_set_style_text_font(music_title_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(music_title_label_, 190);
     lv_label_set_long_mode(music_title_label_, LV_LABEL_LONG_DOT);
-    lv_obj_align(music_title_label_, LV_ALIGN_TOP_LEFT, 12, 10);
+    lv_obj_align(music_title_label_, LV_ALIGN_TOP_LEFT, 14, 14);
 
     music_artist_label_ = label_en(panel, music_artist_.c_str(), &style_muted);
     lv_obj_set_style_text_font(music_artist_label_, qd_cn_font_16(), 0);
-    lv_obj_set_width(music_artist_label_, 112);
+    lv_obj_set_width(music_artist_label_, 190);
     lv_label_set_long_mode(music_artist_label_, LV_LABEL_LONG_DOT);
-    lv_obj_align(music_artist_label_, LV_ALIGN_TOP_LEFT, 12, 34);
+    lv_obj_align(music_artist_label_, LV_ALIGN_TOP_LEFT, 14, 46);
 
-    music_line_label_ = label_en(panel, music_line_.c_str(), &style_gold);
+    music_line_label_ = label_en(panel, "Ready", &style_gold);
     lv_obj_set_style_text_font(music_line_label_, &lv_font_montserrat_12, 0);
-    lv_obj_set_width(music_line_label_, 112);
-    lv_obj_set_height(music_line_label_, 26);
+    lv_obj_set_width(music_line_label_, 190);
+    lv_obj_set_height(music_line_label_, 22);
+    lv_obj_set_style_text_letter_space(music_line_label_, 0, 0);
     lv_label_set_long_mode(music_line_label_, LV_LABEL_LONG_DOT);
-    lv_obj_align(music_line_label_, LV_ALIGN_BOTTOM_LEFT, 12, -8);
+    lv_obj_align(music_line_label_, LV_ALIGN_BOTTOM_LEFT, 14, -12);
+
+    lv_obj_t* lyric_panel = CreatePanel(music_page_, 446, 74, 18, 144);
+    lv_obj_set_style_bg_color(lyric_panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE_2 :
+                              themed_color(LV_COLOR_MAKE(0x0f, 0x17, 0x24), COLOR_SURFACE_2), 0);
+    lv_obj_set_style_border_color(lyric_panel, COLOR_GOLD, 0);
+    lv_obj_set_style_border_opa(lyric_panel, LV_OPA_50, 0);
+    lv_obj_set_style_radius(lyric_panel, 8, 0);
+
+    lv_obj_t* lyric_accent = lv_obj_create(lyric_panel);
+    lv_obj_remove_style_all(lyric_accent);
+    lv_obj_set_size(lyric_accent, 3, 50);
+    lv_obj_set_style_radius(lyric_accent, 2, 0);
+    lv_obj_set_style_bg_color(lyric_accent, COLOR_GOLD, 0);
+    lv_obj_set_style_bg_opa(lyric_accent, LV_OPA_80, 0);
+    lv_obj_align(lyric_accent, LV_ALIGN_LEFT_MID, 14, 0);
+
+    music_side_lyric_label_ = label_en(lyric_panel, music_line_.c_str(), &style_en);
+    lv_obj_set_style_text_font(music_side_lyric_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(music_side_lyric_label_, 390);
+    lv_obj_set_height(music_side_lyric_label_, 48);
+    lv_obj_set_style_text_align(music_side_lyric_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(music_side_lyric_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_align(music_side_lyric_label_, LV_ALIGN_RIGHT_MID, -18, 0);
 
     lv_obj_t* recent_title = label_en(music_page_, "Recent", &style_muted);
     lv_obj_set_style_text_font(recent_title, &lv_font_montserrat_12, 0);
-    lv_obj_align(recent_title, LV_ALIGN_TOP_LEFT, 20, 242);
+    lv_obj_align(recent_title, LV_ALIGN_TOP_LEFT, 22, 226);
     music_recent_clear_button_ = CreateButton(music_page_, "Clear", music_recent_clear_cb);
     lv_obj_set_size(music_recent_clear_button_, 58, 22);
     lv_obj_set_style_radius(music_recent_clear_button_, 8, 0);
     lv_obj_set_style_text_font(lv_obj_get_child(music_recent_clear_button_, 0), &lv_font_montserrat_12, 0);
-    lv_obj_align(music_recent_clear_button_, LV_ALIGN_TOP_LEFT, 258, 240);
+    lv_obj_align(music_recent_clear_button_, LV_ALIGN_TOP_LEFT, 252, 224);
     for (size_t i = 0; i < kMusicRecentCount; ++i) {
         lv_obj_t* row = lv_obj_create(music_page_);
         lv_obj_add_style(row, &style_panel, 0);
-        lv_obj_set_size(row, 300, 17);
+        lv_obj_set_size(row, 290, 19);
         lv_obj_set_style_radius(row, 5, 0);
         lv_obj_set_style_bg_color(row,
                                   is_tupi_warm_theme() ? COLOR_SURFACE :
@@ -2953,13 +2958,13 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
         lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(row, music_recent_cb, LV_EVENT_CLICKED, reinterpret_cast<void*>(i));
         lv_obj_add_event_cb(row, music_recent_remove_cb, LV_EVENT_LONG_PRESSED, reinterpret_cast<void*>(i));
-        lv_obj_align(row, LV_ALIGN_TOP_LEFT, 16, 262 + static_cast<int16_t>(i) * 19);
+        lv_obj_align(row, LV_ALIGN_TOP_LEFT, 18, 248 + static_cast<int16_t>(i) * 22);
         add_gesture_bubble(row);
         music_recent_buttons_[i] = row;
 
         lv_obj_t* label = label_en(row, "--", &style_muted);
         lv_obj_set_style_text_font(label, qd_cn_font_16(), 0);
-        lv_obj_set_width(label, 280);
+        lv_obj_set_width(label, 270);
         lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
         lv_obj_align(label, LV_ALIGN_LEFT_MID, 10, 0);
         music_recent_labels_[i] = label;
@@ -2967,23 +2972,23 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     RefreshMusicRecent();
 
     lv_obj_t* talk = CreateButton(music_page_, "Ask", music_talk_cb);
-    lv_obj_set_size(talk, 136, 22);
+    lv_obj_set_size(talk, 134, 24);
     lv_obj_set_style_bg_color(talk, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(talk, 0, 0);
     lv_obj_set_style_text_font(lv_obj_get_child(talk, 0), &lv_font_montserrat_12, 0);
-    lv_obj_align(talk, LV_ALIGN_TOP_LEFT, 328, 246);
+    lv_obj_align(talk, LV_ALIGN_TOP_LEFT, 330, 226);
 
     lv_obj_t* again = CreateButton(music_page_, "Again", music_again_cb);
-    lv_obj_set_size(again, 136, 22);
+    lv_obj_set_size(again, 134, 24);
     lv_obj_set_style_border_color(again, COLOR_GREEN, 0);
     lv_obj_set_style_text_font(lv_obj_get_child(again, 0), &lv_font_montserrat_12, 0);
-    lv_obj_align(again, LV_ALIGN_TOP_LEFT, 328, 272);
+    lv_obj_align(again, LV_ALIGN_TOP_LEFT, 330, 258);
 
     lv_obj_t* stop = CreateButton(music_page_, "Stop", music_stop_cb);
-    lv_obj_set_size(stop, 136, 22);
+    lv_obj_set_size(stop, 134, 24);
     lv_obj_set_style_border_color(stop, lv_color_make(0xff, 0x88, 0x68), 0);
     lv_obj_set_style_text_font(lv_obj_get_child(stop, 0), &lv_font_montserrat_12, 0);
-    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 328, 298);
+    lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 330, 290);
 
     music_cover_timer_ = lv_timer_create(MusicCoverTimerCb, 180, this);
 }
@@ -5513,7 +5518,7 @@ void DesktopUI::SetMusicReplayCallback(std::function<void(const std::string& tit
 void DesktopUI::StartMusicAsk() {
     music_line_ = "Listening... say a song name.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Listening");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5560,7 +5565,7 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
                 RefreshMusicRecent();
                 music_line_ = meta && meta[0] ? meta : "Replay failed. Ask XiaoZhi for a fresh URL.";
                 if (music_line_label_) {
-                    lv_label_set_text(music_line_label_, music_line_.c_str());
+                    lv_label_set_text(music_line_label_, "Error");
                 }
                 SetAppTileStatus(8, "Failed", lv_color_make(0xff, 0x88, 0x68));
             }
@@ -5822,7 +5827,7 @@ void DesktopUI::ClearMusicRecent() {
     RefreshMusicRecent();
     music_line_ = had_recent ? "Recent songs cleared." : "No recent songs yet.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5846,7 +5851,7 @@ void DesktopUI::RemoveMusicRecent(size_t index) {
     RefreshMusicRecent();
     music_line_ = removed_title.empty() ? "Recent song removed." : "Removed from recent.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5894,7 +5899,7 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
     if (index >= kMusicRecentCount || music_recent_[index].url.empty()) {
         music_line_ = "No recent songs yet.";
         if (music_line_label_) {
-            lv_label_set_text(music_line_label_, music_line_.c_str());
+            lv_label_set_text(music_line_label_, "Ready");
         }
         if (music_side_lyric_label_) {
             lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5917,7 +5922,7 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
         lv_label_set_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Replaying");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5954,7 +5959,7 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
         lv_label_set_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Playing");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -5999,7 +6004,7 @@ void DesktopUI::ClearMusicLyric() {
         lv_label_set_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, music_line_.c_str());
+        lv_label_set_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());

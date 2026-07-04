@@ -2,6 +2,33 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.83 Music Page Premium Subtitle Layout
+
+Scope:
+
+- Bumped firmware version to `1.7.83`.
+- Reworked the Music page from a large lyric sheet into a tighter player layout with cover visual, song info, a single subtitle-style lyric band, recent songs, and action buttons.
+- Kept only one lyric display on the Music page. The small song-info status label no longer mirrors lyric text.
+- Changed the small status label to short English states (`Ready`, `Listening`, `Playing`, `Replaying`, `Error`) to avoid yellow square glyphs from Chinese lyric text being rendered with an English font.
+- Kept Chinese lyrics in the main subtitle band with the QDTech Chinese font.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_183_build build merge-bin` passed from `/Users/tupi/qdtech_release_183_src`.
+- CMake reported `App "xiaozhi" version: 1.7.83`.
+- `xiaozhi.bin` size is `0x63bf70` / `6537072` bytes; QDTech 7 MB app slot has `0xc4090` free.
+- `merged-binary.bin` size is `0x73bf70` / `7585648` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.83`, WiFi IP `192.168.1.104`, MCP music tools registered, MQTT connected, `Application: STATE: idle`, SNTP time sync, and weather update.
+- Known runtime note: startup OTA HTTP can time out and fall back to MQTT; BLE config service may skip under low internal SRAM, while normal WiFi/MQTT/weather operation remained OK in the verified boot.
+
+Release assets:
+
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-app.bin`: `282f1fd60e6f4e349a45d135972dad55eb52bf03e104976fe03d3377b1f5a286`
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-full.bin`: `e522bc7a9d2db21002027f268974834b9934e06c348ee88997fb3830fadea9ce`
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-firmware.zip`: `09ef09d277fe5dd679707dc73197543e5de3bd96ec6c8d0020bede9d837b1c28`
+
 ## 2026-07-04: v1.7.82 Music Lyric Sync and Layout Polish
 
 Scope:

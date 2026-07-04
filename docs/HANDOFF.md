@@ -2,6 +2,48 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.83 Music Page Premium Subtitle Layout
+
+Current target:
+
+- Firmware version target is now `v1.7.83`.
+- Built on macOS with ESP-IDF 5.5 from `/Users/tupi/qdtech_release_183_src`, build directory `/Users/tupi/qdtech_release_183_build`.
+- Release assets were generated in `releases/v1.7.83/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.83` at `0x100000`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.83`.
+- Reworked the Music page again after hardware feedback that the large lyric panel looked empty when only one lyric line is available.
+- Changed the Music page into a tighter premium player layout: cover visual at upper-left, song title/artist/status at upper-center, a single horizontal subtitle-style lyric band in the middle, recent songs at lower-left, and `Ask / Again / Stop` at lower-right.
+- Removed duplicate lyric syncing from the small right-side status area. The small status now only shows short English states such as `Ready`, `Listening`, `Playing`, `Replaying`, or `Error`.
+- This also removes the yellow square glyph issue caused by feeding Chinese lyric text into the small English-font status label.
+- Kept Chinese lyric rendering only in the main lyric band using the QDTech Chinese font.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_183_build build merge-bin` passed from `/Users/tupi/qdtech_release_183_src`.
+- CMake reported `App "xiaozhi" version: 1.7.83`.
+- Final app image: `/Users/tupi/qdtech_release_183_build/xiaozhi.bin`, size `0x63bf70` / `6537072` bytes; QDTech 7 MB OTA app slot has `0xc4090` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73bf70` / `7585648` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.83`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, `Application: STATE: idle`, SNTP time sync, and weather update.
+- Startup OTA HTTP check timed out once and firmware correctly continued to MQTT fallback; this is existing network behavior and did not block XiaoZhi service connection.
+- Runtime note: BLE phone-config startup still skipped under low internal SRAM, while HTTP config, WiFi, MQTT, weather, and idle state were normal.
+
+Known limitation:
+
+- The firmware still only receives one active lyric line at a time, so the Music page is now designed around a subtitle band rather than a large lyric sheet.
+- `lyrics_json` is still kept in RAM only. Songs freshly played during the current boot can restart synced lyrics through `Again`; older persisted recents or post-reboot recents can replay audio but cannot restart exact lyric sync.
+- Real album artwork is still not available until the music/MCP contract provides a `cover_url` or image payload.
+
+Release asset SHA256:
+
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-app.bin`: `282f1fd60e6f4e349a45d135972dad55eb52bf03e104976fe03d3377b1f5a286`
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-full.bin`: `e522bc7a9d2db21002027f268974834b9934e06c348ee88997fb3830fadea9ce`
+- `releases/v1.7.83/qdtech-s3-touch-lcd-3.5-v1.7.83-firmware.zip`: `09ef09d277fe5dd679707dc73197543e5de3bd96ec6c8d0020bede9d837b1c28`
+
 ## 2026-07-04 Handoff: v1.7.82 Music Lyric Sync and Layout Polish
 
 Current target:
