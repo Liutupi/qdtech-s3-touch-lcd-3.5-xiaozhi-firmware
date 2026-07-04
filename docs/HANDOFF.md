@@ -31,6 +31,10 @@ Verification:
 - CMake reported `App "xiaozhi" version: 1.7.77`.
 - Final app image: `/Users/tupi/qdtech_worktree_build/xiaozhi.bin`, size `0x6398b0`; QDTech 7 MB OTA app slot has `0xc6750` free.
 - Final full image: `/Users/tupi/qdtech_worktree_build/merged-binary.bin`, size `0x7398b0`.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.77`, `Ota: Current version: 1.7.77`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, and weather sync succeeded.
+- Runtime issue still observed after flash: the startup OTA config check timed out, firmware correctly continued with MQTT fallback, but MQTT connection to `mqtt.xiaozhi.me:8883` failed after certificate validation. The device entered idle and showed `无法连接服务，请稍后再试`; this explains "speaking to XiaoZhi has no response" until MQTT connects.
+- Mac-side network check from the same workspace could open TCP connections to `mqtt.xiaozhi.me` on ports `1883`, `8883`, `443`, and `80`, so the remaining XiaoZhi-response issue is not simple DNS/domain reachability. Next investigation should capture MQTT auth/credential state and device-side TLS/MQTT memory during `StartMqttClient()`.
 - Release asset SHA256:
   - `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-app.bin`: `52bc42d511d6cd1646b67aa53a99b5c983300d0170caf80de1480ee8528e538c`
   - `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-full.bin`: `a71a1d2f1d1847d7aebba46cb1fa19a87ca67eb723146c4b7cd49d22d21b7a4c`
@@ -39,6 +43,7 @@ Verification:
 Known limitation:
 
 - This improves firmware-side tolerance for network/CDN stalls, but it still cannot turn a preview or expired music URL into a stable full-song URL. If a specific song still stops or refuses to play, capture whether the URL is short/expired or whether the server returns a fatal HTTP status.
+- `v1.7.77` does not yet fix the observed MQTT service connection failure. When MQTT fails, wake word/listen can still try to reconnect, but XiaoZhi cannot answer until the protocol connects.
 
 ## 2026-07-04 Handoff: v1.7.76 QDTech Stability Hotfix
 

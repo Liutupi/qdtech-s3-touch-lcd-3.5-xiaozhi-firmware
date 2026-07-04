@@ -19,6 +19,9 @@ Verification:
 - CMake reported `App "xiaozhi" version: 1.7.77`.
 - `xiaozhi.bin` size is `0x6398b0`; QDTech 7 MB app slot has `0xc6750` free.
 - `merged-binary.bin` size is `0x7398b0`.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.77`, `Ota: Current version: 1.7.77`, WiFi connected, IP `192.168.1.104`, MCP music tools registered, and weather sync succeeded.
+- Runtime note: MQTT connection to `mqtt.xiaozhi.me:8883` failed after certificate validation, causing the device to show `无法连接服务，请稍后再试`. Mac-side TCP checks could reach `mqtt.xiaozhi.me` on `1883`, `8883`, `443`, and `80`, so further XiaoZhi-response diagnosis should focus on device MQTT credentials/auth and low-memory behavior during MQTT connect.
 
 Release assets:
 
