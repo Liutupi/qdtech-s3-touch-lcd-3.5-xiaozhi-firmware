@@ -40,7 +40,8 @@ static constexpr int kReadChunkBytes = 2048;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
 static constexpr TickType_t kCustomUrlSpeakingGraceTicks = pdMS_TO_TICKS(4000);
 static constexpr int kRadioEmptyReadLimit = 200;
-static constexpr int kCustomUrlEmptyReadLimit = 600;
+static constexpr int kCustomUrlEmptyReadLimit = 1200;
+static constexpr int kCustomUrlMaxReconnectAttempts = 3;
 static constexpr int kMinimumCustomMusicBytes = 1024 * 1024;
 
 enum class RadioCategory {
@@ -714,11 +715,28 @@ void RadioService::Task() {
             continue;
         }
         if (play_requested_ && playing_custom_url_) {
+            if (custom_url_stream_completed_) {
+                play_requested_ = false;
+                stop_requested_ = true;
+                reconnect_attempt_ = 0;
+                Application::GetInstance().SetExternalAudioActive(false);
+                SetUi("Stopped", "Music ended");
+                continue;
+            }
+            if (!custom_url_fatal_error_ && reconnect_attempt_ < kCustomUrlMaxReconnectAttempts) {
+                ++reconnect_attempt_;
+                int delay_ms = std::min(4000, 800 + reconnect_attempt_ * 800);
+                ESP_LOGW(TAG, "music url reconnect scheduled title=%s attempt=%d delay=%dms",
+                         kStations[station_index_].name.c_str(), reconnect_attempt_, delay_ms);
+                SetUi("Reconnecting", "Music network retry");
+                vTaskDelay(pdMS_TO_TICKS(delay_ms));
+                continue;
+            }
             play_requested_ = false;
             stop_requested_ = true;
             reconnect_attempt_ = 0;
             Application::GetInstance().SetExternalAudioActive(false);
-            SetUi("Stopped", "Music ended");
+            SetUi("Stopped", custom_url_fatal_error_ ? "Music unavailable" : "Music interrupted");
             continue;
         }
         if (play_requested_) {
@@ -877,10 +895,14 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     const std::string station_name = kStations[station_index_].name;
     SetUi("Connecting", url_index == 0 ? "Opening stream" : "Fallback source");
     ResetAudioLeveler();
+    if (playing_custom_url_) {
+        custom_url_stream_completed_ = false;
+        custom_url_fatal_error_ = false;
+    }
 
     esp_http_client_config_t config = {};
     config.url = url.c_str();
-    config.timeout_ms = 2500;
+    config.timeout_ms = playing_custom_url_ ? 5000 : 2500;
     config.buffer_size = 4096;
     config.buffer_size_tx = 1024;
     config.disable_auto_redirect = false;
@@ -922,6 +944,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         if (playing_custom_url_ && (status == 401 || status == 403 || status == 404 || status == 410)) {
             ESP_LOGW(TAG, "custom music url rejected status=%d, stopping retries station=%s",
                      status, station_name.c_str());
+            custom_url_fatal_error_ = true;
             play_requested_ = false;
             stop_requested_ = true;
             Application::GetInstance().SetExternalAudioActive(false);
@@ -1012,9 +1035,8 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
                         break;
                     }
                     if (playing_custom_url_ && decoded_frames > 0) {
-                        play_requested_ = false;
-                        stop_requested_ = true;
-                        SetUi("Stopped", "Music interrupted");
+                        stream_failed = true;
+                        SetUi("Reconnecting", "Music network stall");
                     } else {
                         stream_failed = true;
                     }
@@ -1032,6 +1054,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         }
         if (stream_completed) {
             if (playing_custom_url_) {
+                custom_url_stream_completed_ = true;
                 play_requested_ = false;
                 stop_requested_ = true;
                 SetUi("Stopped", "Music ended");
@@ -1039,11 +1062,8 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             break;
         }
         if (stream_failed) {
-            SetUi(playing_custom_url_ ? "Stopped" : "Reconnecting", playing_custom_url_ ? "Music interrupted" : "Read failed");
-            if (playing_custom_url_) {
-                play_requested_ = false;
-                stop_requested_ = true;
-            }
+            SetUi(playing_custom_url_ ? "Reconnecting" : "Reconnecting",
+                  playing_custom_url_ ? "Music network retry" : "Read failed");
             break;
         }
 
@@ -1072,11 +1092,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             ++decode_errors;
             ESP_LOGW(TAG, "mp3 decode failed station=%s url_index=%d err=%d count=%d", station_name.c_str(), url_index, mp3_err, decode_errors);
             if (decode_errors > 20) {
-                SetUi(playing_custom_url_ ? "Stopped" : "Reconnecting", playing_custom_url_ ? "Music decode error" : "Decode errors");
-                if (playing_custom_url_) {
-                    play_requested_ = false;
-                    stop_requested_ = true;
-                }
+                SetUi(playing_custom_url_ ? "Reconnecting" : "Reconnecting",
+                      playing_custom_url_ ? "Music decode retry" : "Decode errors");
+                stream_failed = true;
                 break;
             }
             if (bytes_left > 0) {

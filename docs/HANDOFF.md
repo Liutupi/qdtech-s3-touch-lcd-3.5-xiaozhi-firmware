@@ -2,6 +2,44 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.77 Music Stream Retry Stabilization
+
+Current target:
+
+- Firmware version target is now `v1.7.77`.
+- Built on macOS with ESP-IDF 5.5 from the no-space worktree `/Users/tupi/qdtech_worktree_nospace`, build directory `/Users/tupi/qdtech_worktree_build`.
+- Release assets were generated in `releases/v1.7.77/`.
+
+Why:
+
+- After `v1.7.76`, custom music URL playback could still stop mid-song when the HTTP stream stalled or returned transient empty reads.
+- The old custom-URL path treated several transient stream failures as final interruption, while radio stations had broader reconnect behavior.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.77`.
+- Custom music URLs now tolerate more empty reads before declaring a stall.
+- Custom music URL HTTP read timeout is longer than radio stream timeout, so slow music CDNs have more time to respond.
+- Mid-song stalls, read failures, and repeated MP3 decode errors now enter a limited reconnect path instead of immediately stopping playback.
+- Custom music URL retries are capped at 3 attempts, with short backoff, so a dead URL does not loop forever.
+- Explicit unavailable responses (`401`, `403`, `404`, `410`) still stop as fatal music URL errors.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_worktree_build build merge-bin` passed on macOS ESP-IDF 5.5.
+- CMake reported `App "xiaozhi" version: 1.7.77`.
+- Final app image: `/Users/tupi/qdtech_worktree_build/xiaozhi.bin`, size `0x6398b0`; QDTech 7 MB OTA app slot has `0xc6750` free.
+- Final full image: `/Users/tupi/qdtech_worktree_build/merged-binary.bin`, size `0x7398b0`.
+- Release asset SHA256:
+  - `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-app.bin`: `52bc42d511d6cd1646b67aa53a99b5c983300d0170caf80de1480ee8528e538c`
+  - `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-full.bin`: `a71a1d2f1d1847d7aebba46cb1fa19a87ca67eb723146c4b7cd49d22d21b7a4c`
+  - `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-firmware.zip`: `98a5c929d3cabedddffae5f1da7dcf425a79138134e15c49ec5eab1b3aa790f6`
+
+Known limitation:
+
+- This improves firmware-side tolerance for network/CDN stalls, but it still cannot turn a preview or expired music URL into a stable full-song URL. If a specific song still stops or refuses to play, capture whether the URL is short/expired or whether the server returns a fatal HTTP status.
+
 ## 2026-07-04 Handoff: v1.7.76 QDTech Stability Hotfix
 
 Current target:

@@ -2,6 +2,30 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.77 Music URL Retry Stabilization
+
+Scope:
+
+- Bumped firmware version to `1.7.77`.
+- Increased custom music URL stall tolerance and HTTP read timeout for slow music CDNs.
+- Changed mid-song custom music URL stalls, read failures, and repeated decode errors from immediate stop into a capped reconnect path.
+- Limited custom music URL retries to 3 attempts so broken links do not loop forever.
+- Kept fatal unavailable HTTP responses (`401`, `403`, `404`, `410`) as hard stops.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_worktree_build build merge-bin` passed from `/Users/tupi/qdtech_worktree_nospace`.
+- CMake reported `App "xiaozhi" version: 1.7.77`.
+- `xiaozhi.bin` size is `0x6398b0`; QDTech 7 MB app slot has `0xc6750` free.
+- `merged-binary.bin` size is `0x7398b0`.
+
+Release assets:
+
+- `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-app.bin`: `52bc42d511d6cd1646b67aa53a99b5c983300d0170caf80de1480ee8528e538c`
+- `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-full.bin`: `a71a1d2f1d1847d7aebba46cb1fa19a87ca67eb723146c4b7cd49d22d21b7a4c`
+- `releases/v1.7.77/qdtech-s3-touch-lcd-3.5-v1.7.77-firmware.zip`: `98a5c929d3cabedddffae5f1da7dcf425a79138134e15c49ec5eab1b3aa790f6`
+
 ## 2026-07-04: v1.7.76 Weather, Wake, and Music Crash Hotfix
 
 Scope:

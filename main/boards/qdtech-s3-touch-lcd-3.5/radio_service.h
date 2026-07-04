@@ -77,6 +77,8 @@ private:
     int custom_station_index_ = -1;
     int last_radio_station_index_ = 0;
     bool playing_custom_url_ = false;
+    bool custom_url_stream_completed_ = false;
+    bool custom_url_fatal_error_ = false;
     TickType_t custom_url_speaking_grace_until_ = 0;
     std::atomic<uint32_t> stream_generation_{0};
     std::vector<int16_t> pcm_mono_buf_;
