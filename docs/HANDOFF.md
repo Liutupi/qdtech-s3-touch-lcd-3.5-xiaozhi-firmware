@@ -2,6 +2,48 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.82 Music Lyric Sync and Layout Polish
+
+Current target:
+
+- Firmware version target is now `v1.7.82`.
+- Built on macOS with ESP-IDF 5.5 from the clean no-space release worktree `/Users/tupi/qdtech_release_182_src`, build directory `/Users/tupi/qdtech_release_182_build`.
+- Release assets were generated in `releases/v1.7.82/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.82` at `0x100000`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.82`.
+- Music lyric updates no longer force navigation to the XiaoZhi face page. `SetMusicLyric()` now refreshes both the XiaoZhi lyric overlay and the Music page lyric area while leaving the current page alone.
+- `self.music.play` and `self.music.play_url` now remember the incoming `lyrics_json` in the Music recent-song RAM entry.
+- `Again` / recent replay now passes the remembered `lyrics_json` back into the replay callback and restarts the lyric scheduler when lyrics are available, so replayed songs can keep lyric sync in the same boot session.
+- Reworked the Music page again based on hardware feedback: removed the top title/WiFi/time/status clutter, moved the lyrics into a large left-side reading panel, and moved the cover visual plus song title/artist/status and `Ask / Again / Stop` controls to the right.
+- The recent-song list is now compact and stays at the lower-left, leaving the main area for readable lyrics.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_182_build build merge-bin` passed from `/Users/tupi/qdtech_release_182_src`.
+- CMake reported `App "xiaozhi" version: 1.7.82`.
+- Final app image: `/Users/tupi/qdtech_release_182_build/xiaozhi.bin`, size `0x63bf70` / `6537072` bytes; QDTech 7 MB OTA app slot has `0xc4090` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73bf70` / `7585648` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.82`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, `Application: STATE: idle`, SNTP time sync, and weather update.
+- Runtime note: BLE phone-config startup still skipped under low internal SRAM (`skip BLE init, not enough internal memory`), while HTTP config, WiFi, MQTT, weather, and idle state were normal.
+- A user touch opened the Apps page and Music page after final flash. Tapping an older persisted recent song started playback and updated the Music page lyric/status path (`SetMusicLyric`), but `lyrics_json length=0`, so exact per-line lyric replay was skipped for that old recent entry as expected.
+- End-to-end touch song request and `Again` lyric replay were not re-tested after the final flash because they require physical screen/voice interaction. The code path is wired and compiled; ask the user to test a fresh song after boot, then tap `Again` before reboot to verify the RAM-backed lyrics replay.
+- Release asset SHA256:
+  - `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-app.bin`: `04abaa3cb88562affd32220edc47b0762171e8ba86ff2f036506a2bfef2acc20`
+  - `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-full.bin`: `133dfcdbe72622819ea394a1ce6a2f88843b75280b4d1448644a7891eea278ca`
+  - `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-firmware.zip`: `c46560f30870ed2af5b496875120cffbca0a79d5f3e5c31bfae62a1f5839c1d6`
+
+Known limitation:
+
+- `lyrics_json` is kept in RAM only. Songs already saved in NVS before this firmware, or songs replayed after a reboot, still only have title/artist/url, so `Again` can replay audio but cannot restart exact lyric sync unless the song was freshly played during the current boot.
+- Real album artwork is still not available. The music/MCP tool contract still only passes `title`, `artist`, `url`, and `lyrics_json`; firmware needs a reliable `cover_url` or image payload before it can show real song covers safely.
+- Short/preview MP3 URLs are still rejected by firmware. The music-search side should retry for a full direct MP3 URL when preview rejection is returned.
+- Internal SRAM is still tight while XiaoZhi, HTTP probing, music decoding, LVGL, and lyrics are active together.
+
 ## 2026-07-04 Handoff: v1.7.81 Music Ask and Playback Hotfix
 
 Current target:

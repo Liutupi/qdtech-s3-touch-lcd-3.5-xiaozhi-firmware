@@ -2,6 +2,37 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.82 Music Lyric Sync and Layout Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.82`.
+- Kept Music page lyric updates on the Music page instead of forcing navigation to the XiaoZhi face page.
+- Stored incoming `lyrics_json` in the RAM copy of Music recent-song entries.
+- Passed remembered `lyrics_json` through `Again` / recent replay so the lyric scheduler can restart for replayed songs in the same boot session.
+- Removed the Music page top info/title/status clutter and gave lyrics the large left-side panel.
+- Moved the cover visual, song title/artist/status, and `Ask / Again / Stop` controls into a compact right-side column.
+- Compressed the recent-song list into the lower-left area so the main reading area stays open.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_182_build build merge-bin` passed from `/Users/tupi/qdtech_release_182_src`.
+- CMake reported `App "xiaozhi" version: 1.7.82`.
+- `xiaozhi.bin` size is `0x63bf70` / `6537072` bytes; QDTech 7 MB app slot has `0xc4090` free.
+- `merged-binary.bin` size is `0x73bf70` / `7585648` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.82`, WiFi IP `192.168.1.104`, MCP music tools registered, MQTT connected, `Application: STATE: idle`, SNTP time sync, and weather update.
+- After final flash, a user touch opened the Music page and replayed an older persisted recent song; playback started and the Music page status/lyric label updated, while exact lyric sync was skipped because the old recent entry had no `lyrics_json`.
+- Known runtime note: BLE config service may skip startup under low internal SRAM, while HTTP config remains available.
+- Known Music limitation: `lyrics_json` is RAM-only for now, so `Again` lyric sync works for songs played during the current boot, but older persisted recents and post-reboot recents still only have title/artist/url.
+
+Release assets:
+
+- `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-app.bin`: `04abaa3cb88562affd32220edc47b0762171e8ba86ff2f036506a2bfef2acc20`
+- `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-full.bin`: `133dfcdbe72622819ea394a1ce6a2f88843b75280b4d1448644a7891eea278ca`
+- `releases/v1.7.82/qdtech-s3-touch-lcd-3.5-v1.7.82-firmware.zip`: `c46560f30870ed2af5b496875120cffbca0a79d5f3e5c31bfae62a1f5839c1d6`
+
 ## 2026-07-04: v1.7.81 Music Ask and Playback Hotfix
 
 Scope:

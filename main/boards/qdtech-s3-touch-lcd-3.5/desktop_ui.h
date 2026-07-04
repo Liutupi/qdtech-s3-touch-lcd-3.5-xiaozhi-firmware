@@ -61,7 +61,8 @@ public:
     void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
     void SetMusicLyric(const char* title, const char* artist, const char* line);
-    void RememberMusicTrack(const char* title, const char* artist, const char* url);
+    void RememberMusicTrack(const char* title, const char* artist, const char* url,
+                            const char* lyrics_json = nullptr);
     void ClearMusicLyric();
     void StartMusicAsk();
     void SetXiaozhiEmotion(const char* emotion);
@@ -94,7 +95,8 @@ public:
     bool IsFcPlayingView() const { return fc_playing_view_; }
     void SetMusicReplayCallback(std::function<void(const std::string& title,
                                                    const std::string& artist,
-                                                   const std::string& url)> callback);
+                                                   const std::string& url,
+                                                   const std::string& lyrics_json)> callback);
     void ReplayMusicRecent(size_t index);
     void RemoveMusicRecent(size_t index);
     void ClearMusicRecent();
@@ -120,7 +122,7 @@ public:
     std::function<void(uint8_t)> fc_controller_cb_;
     std::function<void()> fc_stop_other_media_;
     std::function<void(const std::string& title, const std::string& artist,
-                       const std::string& url)> music_replay_cb_;
+                       const std::string& url, const std::string& lyrics_json)> music_replay_cb_;
 
     // Radio animation (public for timer callback)
     lv_obj_t* radio_bars_[16] = {};  // 音量动态柱
@@ -257,6 +259,7 @@ private:
         std::string title;
         std::string artist;
         std::string url;
+        std::string lyrics_json;
     };
     MusicRecentTrack music_recent_[kMusicRecentCount];
     lv_obj_t* music_recent_buttons_[kMusicRecentCount] = {};

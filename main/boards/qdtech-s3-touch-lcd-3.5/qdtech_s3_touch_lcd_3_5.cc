@@ -1086,9 +1086,6 @@ private:
             ESP_LOGW(TAG, "ShowMusicLyric skipped: desktop_ui null");
             return;
         }
-        if (ensure_page) {
-            desktop_ui->ShowPage(DesktopPage::XIAOZHI);
-        }
         desktop_ui->SetMusicLyric(title.c_str(), artist.c_str(), line.c_str());
         lvgl_port_unlock();
         ESP_LOGI(TAG, "ShowMusicLyric applied line=%s", line.c_str());
@@ -1691,7 +1688,7 @@ private:
                 const bool started = result.rfind("Music URL started", 0) == 0;
                 if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
-                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
+                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str(), lyrics_json.c_str());
                     }
                     lvgl_port_unlock();
                 }
@@ -1719,7 +1716,7 @@ private:
                 const bool started = result.rfind("Music URL started", 0) == 0;
                 if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
-                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
+                        desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str(), lyrics_json.c_str());
                     }
                     lvgl_port_unlock();
                 }
@@ -1835,10 +1832,16 @@ private:
             [this]() { radio_service_.Prev(); });
         desktop_ui->SetMusicReplayCallback([this](const std::string& title,
                                                   const std::string& artist,
-                                                  const std::string& url) {
-            lyric_generation_.fetch_add(1);
-            SetCurrentLyricSong(title, artist, 0);
-            radio_service_.PlayUrlFromTool(title, artist, url);
+                                                  const std::string& url,
+                                                  const std::string& lyrics_json) {
+            const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
+            const bool started = result.rfind("Music URL started", 0) == 0;
+            if (started) {
+                StartLyricsFromPlayUrl(title, artist, lyrics_json);
+            } else {
+                lyric_generation_.fetch_add(1);
+                SetCurrentLyricSong(title, artist, 0);
+            }
         });
         radio_service_.Start(desktop_ui);
     }
