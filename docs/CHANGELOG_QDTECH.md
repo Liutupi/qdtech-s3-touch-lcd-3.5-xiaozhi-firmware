@@ -2,6 +2,36 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.81 Music Ask and Playback Hotfix
+
+Scope:
+
+- Bumped firmware version to `1.7.81`.
+- Fixed Music page `Ask` by switching from manual-stop listening to XiaoZhi's normal auto-stop/realtime chat toggle while staying on the Music page.
+- Added `Application::PrepareExternalAudioPlayback()` to stop voice capture/playback, clear voice queues, and close only the voice audio channel before music URL probing/playback.
+- Moved custom music URL playback to use that synchronous cleanup path, so music and lyrics start with more internal memory available.
+- Released external-audio focus when a music URL is rejected as a short preview.
+- Changed the animated Music cover tap from "open XiaoZhi page" to the same Music `Ask` flow, reducing accidental page switches.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_181_build build merge-bin` passed from `/Users/tupi/qdtech_release_181_src`.
+- CMake reported `App "xiaozhi" version: 1.7.81`.
+- `xiaozhi.bin` size is `0x63bbc0` / `6536128` bytes; QDTech 7 MB app slot has `0xc4440` free.
+- `merged-binary.bin` size is `0x73bbc0` / `7584704` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.81`, WiFi IP `192.168.1.104`, MCP music tools registered, MQTT connected, `Application: STATE: idle`, and later weather recovery after initial HTTP timeouts.
+- Live Music Ask test succeeded with `莫愁乡 - 亞細亞曠世奇才`: song request was recognized, NetEase search/play was called, the stream opened, music played, and the right-side lyric path updated continuously.
+- A second test with `逝去的歌` was rejected as a short preview URL (`len=480813`), which is expected; the music-search side should retry for a full direct MP3 URL.
+- Known runtime note: touch I2C reset warnings and very low minimum internal SRAM were observed during long music testing, so future cleanup should continue reducing internal RAM pressure.
+
+Release assets:
+
+- `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-app.bin`: `8554e22548c1bea004cb841ec2ddf510d3654ce6fdd52211788783b072de17be`
+- `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-full.bin`: `1293be6c23a7d8036d26220d235ccf07cae276755f656f44481960a8f668a414`
+- `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-firmware.zip`: `712aa6eee2bec59b14f4bdd91a6ba9223d73072a46f1cafa6198330c1d3edfcb`
+
 ## 2026-07-04: v1.7.80 Music Player Interaction Polish
 
 Scope:

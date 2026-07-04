@@ -884,6 +884,32 @@ void Application::PrepareVoiceInteraction() {
     audio_decode_cv_.notify_all();
 }
 
+void Application::PrepareExternalAudioPlayback() {
+    ESP_LOGW(TAG, "External audio playback requested; yielding voice audio");
+    external_audio_active_.store(true, std::memory_order_relaxed);
+    aborted_ = true;
+    audio_processor_->Stop();
+    wake_word_->StopDetection();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        audio_decode_queue_.clear();
+        audio_send_queue_.clear();
+        audio_testing_queue_.clear();
+        timestamp_queue_.clear();
+        last_output_time_ = std::chrono::steady_clock::now();
+    }
+    audio_decode_cv_.notify_all();
+    background_task_->WaitForCompletion();
+    if (protocol_ && protocol_->IsAudioChannelOpened()) {
+        protocol_->CloseAudioChannel();
+    }
+    if (device_state_ == kDeviceStateListening ||
+        device_state_ == kDeviceStateSpeaking ||
+        device_state_ == kDeviceStateConnecting) {
+        SetDeviceState(kDeviceStateIdle);
+    }
+}
+
 void Application::RegisterDeviceStateCallback(std::function<void(DeviceState previous, DeviceState current)> callback) {
     if (!callback) {
         return;

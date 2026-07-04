@@ -611,10 +611,13 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
         return "Music URL must start with http:// or https://.";
     }
 
+    Application::GetInstance().PrepareExternalAudioPlayback();
+
     const int music_length = ProbeMusicUrlLength(url);
     if (music_length > 0 && music_length < kMinimumCustomMusicBytes) {
         ESP_LOGW(TAG, "music url rejected as short preview len=%d url=%s", music_length, url.c_str());
         SetUi("Error", "Short music URL");
+        Application::GetInstance().SetExternalAudioActive(false);
         return "Music URL was NOT started: this direct MP3 is only a short preview clip. Search for another full direct MP3 song URL with Content-Length over 1 MB, then call self.music.play_url again.";
     }
 
@@ -657,17 +660,6 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
     reconnect_attempt_ = 0;
     SetUi("Connecting", "Music URL");
 
-    Application::GetInstance().Schedule([]() {
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() == kDeviceStateSpeaking) {
-            app.AbortSpeaking(kAbortReasonNone);
-        }
-        if (app.GetDeviceState() == kDeviceStateListening ||
-            app.GetDeviceState() == kDeviceStateSpeaking ||
-            app.GetDeviceState() == kDeviceStateConnecting) {
-            app.SetDeviceState(kDeviceStateIdle);
-        }
-    });
     PostCommand(Command::PLAY_CUSTOM_URL);
     return std::string("Music URL started on device; no spoken follow-up is needed: ") + station.name;
 }

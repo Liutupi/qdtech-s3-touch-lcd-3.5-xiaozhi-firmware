@@ -2,6 +2,49 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.81 Music Ask and Playback Hotfix
+
+Current target:
+
+- Firmware version target is now `v1.7.81`.
+- Built on macOS with ESP-IDF 5.5 from the clean no-space release worktree `/Users/tupi/qdtech_release_181_src`, build directory `/Users/tupi/qdtech_release_181_build`.
+- Release assets were generated in `releases/v1.7.81/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.81` at `0x100000`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.81`.
+- Fixed the Music page `Ask` action. `v1.7.80` used manual-stop listening from a one-tap button, so the device could keep listening and never submit the spoken song name. `Ask` now uses XiaoZhi's normal auto-stop/realtime chat toggle while staying on the Music page.
+- Added an external-audio playback preparation path that stops voice capture/playback, clears voice audio queues, and closes only the voice audio channel before music URL probing/playback. This keeps the MQTT control channel online while freeing internal memory for music and lyrics.
+- Music URL playback now uses that synchronous preparation path instead of a delayed state cleanup, so lyrics can start before internal SRAM gets squeezed by the old voice session.
+- If a URL is rejected as a short preview, external-audio focus is released immediately.
+- Tapping the animated Music cover no longer jumps to the XiaoZhi face page; it now starts the same Music `Ask` flow to avoid accidental page switches near the Ask area.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_181_build build merge-bin` passed from `/Users/tupi/qdtech_release_181_src`.
+- CMake reported `App "xiaozhi" version: 1.7.81`.
+- Final app image: `/Users/tupi/qdtech_release_181_build/xiaozhi.bin`, size `0x63bbc0` / `6536128` bytes; QDTech 7 MB OTA app slot has `0xc4440` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73bbc0` / `7584704` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.81`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, and `Application: STATE: idle`.
+- Live Music Ask test succeeded: from the Music page, `Ask` entered listening, recognized a spoken song request, searched NetEase, called `self.music.play_url`, opened the stream, and played `莫愁乡 - 亞細亞曠世奇才`.
+- Lyrics test succeeded for that same playback: `ParseLyricsJson bytes=4213 lines=87`, `play_url lyrics started`, and repeated `SetMusicLyric` updates were observed while music played.
+- A second test with `逝去的歌` reached `self.music.play_url` but the provided MP3 was rejected as a short preview (`len=480813`), which is expected behavior; the model/MCP side should retry with a full direct MP3 URL.
+- Runtime note: startup OTA/weather HTTP requests can still time out on a slow network, but firmware continues to MQTT and weather retry later recovered.
+- Runtime note: repeated touch I2C reset warnings were observed during a long playback test, and internal SRAM minimum can dip very low during music URL probing. Playback and lyric updates continued in the successful test, but this remains an area for future memory/touch-driver cleanup.
+- Release asset SHA256:
+  - `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-app.bin`: `8554e22548c1bea004cb841ec2ddf510d3654ce6fdd52211788783b072de17be`
+  - `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-full.bin`: `1293be6c23a7d8036d26220d235ccf07cae276755f656f44481960a8f668a414`
+  - `releases/v1.7.81/qdtech-s3-touch-lcd-3.5-v1.7.81-firmware.zip`: `712aa6eee2bec59b14f4bdd91a6ba9223d73072a46f1cafa6198330c1d3edfcb`
+
+Known limitation:
+
+- Real album artwork is still not available. The music/MCP tool contract still only passes `title`, `artist`, `url`, and `lyrics_json`; firmware needs a reliable `cover_url` or image payload before it can show real song covers safely.
+- Short/preview MP3 URLs are still rejected by firmware. The next improvement should be on the music-search side: when `self.music.play_url` returns preview rejection, automatically search again for a full direct MP3 URL instead of stopping.
+- Internal SRAM is still tight while XiaoZhi, HTTP probing, music decoding, LVGL, and lyrics are active together. Further work should reduce HTTP probe memory or move more transient allocations away from internal RAM.
+
 ## 2026-07-04 Handoff: v1.7.80 Music Player Interaction Polish
 
 Current target:

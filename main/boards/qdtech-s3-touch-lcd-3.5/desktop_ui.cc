@@ -964,7 +964,7 @@ static void music_talk_cb(lv_event_t* event) {
 
 static void music_face_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        g_desktop_ui->ShowPage(DesktopPage::XIAOZHI);
+        g_desktop_ui->StartMusicAsk();
     }
 }
 
@@ -5531,7 +5531,7 @@ void DesktopUI::StartMusicAsk() {
     auto& app = Application::GetInstance();
     app.PrepareVoiceInteraction();
     if (app.GetDeviceState() == kDeviceStateIdle) {
-        app.StartListening();
+        app.ToggleChatState();
     } else if (app.GetDeviceState() == kDeviceStateSpeaking) {
         app.ToggleChatState();
     }
