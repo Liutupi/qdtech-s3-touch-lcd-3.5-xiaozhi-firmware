@@ -10,6 +10,7 @@
 #include "firmware_update_service.h"
 #include "photo_service.h"
 #include "podcast_service.h"
+#include "qd_esp_mqtt.h"
 #include "qd_ble_config_service.h"
 #include "qd_wifi_config_server.h"
 #include "radio_service.h"
@@ -687,6 +688,10 @@ public:
     Backlight* GetBacklight() override {
         static PwmBacklight backlight(DISPLAY_BACKLIGHT_PIN, DISPLAY_BACKLIGHT_OUTPUT_INVERT);
         return &backlight;
+    }
+
+    Mqtt* CreateMqtt() override {
+        return new QdEspMqtt();
     }
 
     bool GetBatteryLevel(int& level, bool& charging, bool& discharging) override {

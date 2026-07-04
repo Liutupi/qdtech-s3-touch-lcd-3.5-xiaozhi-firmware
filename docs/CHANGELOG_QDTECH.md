@@ -2,6 +2,33 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.78 MQTT Connect and Music Retry Stability
+
+Scope:
+
+- Bumped firmware version to `1.7.78`.
+- Added a tracked QDTech-board MQTT implementation, `QdEspMqtt`, instead of patching the ignored managed component.
+- Increased QDTech MQTT connect wait/network timeout to 25 seconds, added up to 2 startup connect attempts, and waited for connected/error as the result signal.
+- Added MQTT diagnostics for host/port, client/user id lengths, heap, TLS/MQTT errors, and cleanup of half-open clients after failures.
+- Changed custom music URL retry accounting so the retry counter is not reset after the first decoded frame; the 3-attempt cap now stays effective for unstable or bad links.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_178_build build merge-bin` passed from the clean release worktree `/Users/tupi/qdtech_release_178_src`.
+- CMake reported `App "xiaozhi" version: 1.7.78`.
+- `xiaozhi.bin` size is `0x63b110` / `6533392` bytes; QDTech 7 MB app slot has `0xc4ef0` free.
+- `merged-binary.bin` size is `0x73b110` / `7581968` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.78`, `Ota: Current version: 1.7.78`, WiFi IP `192.168.1.104`, `QdEspMqtt: connect start attempt=1/2`, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, `Application: STATE: idle`, and successful weather/time sync.
+- Known runtime note: BLE config service may skip startup under low internal SRAM, while HTTP config remains available; this did not block WiFi, MQTT, or weather in the verified boot.
+
+Release assets:
+
+- `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-app.bin`: `c826fd1b7889cdd8bf5fc3ae77649313a56bef89da93b19eb1c09a96c6005255`
+- `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-full.bin`: `ebc28a76fa5bee1b8dc3e7a340bd2131511c575a5c50e71ea21b50ee0a9f99ea`
+- `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-firmware.zip`: `589f7e5a6d4026407cbfd309dabba5afc1a202b072233ee80ab6de1c9d041c9b`
+
 ## 2026-07-04: v1.7.77 Music URL Retry Stabilization
 
 Scope:

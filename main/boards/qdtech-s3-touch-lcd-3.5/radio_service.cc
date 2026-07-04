@@ -1112,7 +1112,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             if (station_index_ >= 0 && station_index_ < static_cast<int>(last_success_url_.size())) {
                 last_success_url_[station_index_] = url_index;
             }
-            reconnect_attempt_ = 0;
+            if (!playing_custom_url_) {
+                reconnect_attempt_ = 0;
+            }
             ESP_LOGI(TAG, "radio remembered successful url station=%s url_index=%d", station_name.c_str(), url_index);
         }
         ++decoded_frames;

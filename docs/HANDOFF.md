@@ -2,6 +2,51 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.78 QDTech MQTT and Music Retry Stability
+
+Current target:
+
+- Firmware version target is now `v1.7.78`.
+- Built on macOS with ESP-IDF 5.5 from the no-space worktree `/Users/tupi/qdtech_worktree_nospace`, build directory `/Users/tupi/qdtech_worktree_build`.
+- Release assets were generated in `releases/v1.7.78/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.78` at `0x100000`; esptool hash verification passed.
+
+Why:
+
+- `v1.7.77` improved music stream reconnect behavior, but the board still sometimes showed `无法连接服务，请稍后再试` after boot because MQTT could time out at the old 10 second wait even though TLS certificate validation had already succeeded.
+- A second music retry issue remained: custom music URL retry attempts were reset after every first decoded frame, so a bad or unstable stream could restart more times than intended.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.78`.
+- Added tracked QDTech-board MQTT implementation files `qd_esp_mqtt.h` and `qd_esp_mqtt.cc` instead of relying on an edited managed component.
+- QDTech now creates `QdEspMqtt` from `QdtechS3TouchLcd35Board::CreateMqtt()`.
+- `QdEspMqtt` raises the connect wait to 25 seconds, tries startup MQTT connect up to 2 times, waits for connected/error instead of treating a disconnected event as the main result, and sets the underlying MQTT network timeout to the same 25 second window.
+- MQTT startup now logs host/port, client/user id lengths, internal free/largest heap, TLS/MQTT error fields, and frees a half-open client on failure.
+- Custom music URL retry accounting no longer resets on the first decoded frame; the 3-attempt retry cap now stays meaningful for custom music links.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace after adding `QdEspMqtt`.
+- Full `idf.py -B /Users/tupi/qdtech_release_178_build build merge-bin` passed from the clean release worktree `/Users/tupi/qdtech_release_178_src`.
+- CMake reported `App "xiaozhi" version: 1.7.78`.
+- Final app image: `/Users/tupi/qdtech_release_178_build/xiaozhi.bin`, size `0x63b110` / `6533392` bytes; QDTech 7 MB OTA app slot has `0xc4ef0` free.
+- `idf.py -B /Users/tupi/qdtech_release_178_build merge-bin` passed and generated `merged-binary.bin`, size `0x73b110` / `7581968` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.78`, `Ota: Current version: 1.7.78`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, OTA check succeeded as latest, `QdEspMqtt: connect start attempt=1/2`, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, and `Application: STATE: idle`.
+- Weather/time sync also succeeded after boot: `weather ok 26 C 中山 毛毛雨`.
+- Runtime note: low internal SRAM still causes BLE phone-config startup to be skipped (`skip BLE init, not enough internal memory`), while HTTP config remains available. This did not prevent WiFi, OTA check, MQTT, idle state, or weather sync.
+- Release asset SHA256:
+  - `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-app.bin`: `c826fd1b7889cdd8bf5fc3ae77649313a56bef89da93b19eb1c09a96c6005255`
+  - `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-full.bin`: `ebc28a76fa5bee1b8dc3e7a340bd2131511c575a5c50e71ea21b50ee0a9f99ea`
+  - `releases/v1.7.78/qdtech-s3-touch-lcd-3.5-v1.7.78-firmware.zip`: `589f7e5a6d4026407cbfd309dabba5afc1a202b072233ee80ab6de1c9d041c9b`
+
+Known limitation:
+
+- The firmware is now online to XiaoZhi service in the verified boot path, but a real voice wake/listen conversation was not soak-tested after the final flash. If the screen is idle yet speech still gets no response, capture serial around wake/listen and check whether audio capture sends frames after MQTT is connected.
+- Music UI polish is still pending: the Music page is still cramped, has overlapping intent with Talk/Face, and does not yet show a richer lyric plus cover/related-image layout.
+- External local music HTTP health previously returned an empty reply in one Mac-side check. Revisit that service only if local HTTP music control is needed.
+
 ## 2026-07-04 Handoff: v1.7.77 Music Stream Retry Stabilization
 
 Current target:
