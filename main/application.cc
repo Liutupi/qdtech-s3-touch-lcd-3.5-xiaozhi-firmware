@@ -623,8 +623,7 @@ void Application::Start() {
                     }
 
                     if (timestamp_queue_.size() > 3) { // 限制队列长度3
-                        timestamp_queue_.pop_front(); // 该包发送前先出队保持队列长度
-                        return;
+                        timestamp_queue_.pop_front(); // 该包发送前先出队保持队列长�?                        return;
                     }
                 }
 #endif
@@ -871,6 +870,20 @@ void Application::SetExternalAudioActive(bool active) {
     }
 }
 
+void Application::PrepareVoiceInteraction() {
+    if (!external_audio_active_.exchange(false, std::memory_order_relaxed)) {
+        return;
+    }
+    ESP_LOGW(TAG, "Voice interaction requested; yielding external audio");
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        audio_decode_queue_.clear();
+        audio_send_queue_.clear();
+        last_output_time_ = std::chrono::steady_clock::now();
+    }
+    audio_decode_cv_.notify_all();
+}
+
 void Application::RegisterDeviceStateCallback(std::function<void(DeviceState previous, DeviceState current)> callback) {
     if (!callback) {
         return;
@@ -966,7 +979,7 @@ bool Application::ReadAudio(std::vector<int16_t>& data, int sample_rate, int sam
         }
     }
     
-    // 音频调试：发送原始音频数据
+    // 音频调试：发送原始音频数�?
     if (audio_debugger_) {
         audio_debugger_->Feed(data);
     }

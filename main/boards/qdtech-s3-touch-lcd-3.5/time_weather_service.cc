@@ -25,7 +25,7 @@
 
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 2048;
-static constexpr size_t kWeatherMinInternalFree = 5 * 1024;
+static constexpr size_t kWeatherMinInternalFree = 8 * 1024;
 static constexpr size_t kWeatherMinLargestInternalBlock = 4 * 1024;
 
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
@@ -452,11 +452,10 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 
 void TimeWeatherService::Task() {
     static constexpr int kWeatherRefreshSeconds = 3600;
-    static constexpr int kWeatherRetrySeconds = 10;
     static constexpr int kWeatherLowMemoryRetrySeconds = 60;
     static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
-    int retry_ticks = kWeatherRetrySeconds;
+    int retry_ticks = WeatherRetrySeconds();
     int clock_ticks = kClockRefreshSeconds;
     bool weather_ok = false;
     
@@ -485,7 +484,7 @@ void TimeWeatherService::Task() {
         // 获取天气
         const int retry_limit = weather_low_memory_deferred_
                                     ? kWeatherLowMemoryRetrySeconds
-                                    : kWeatherRetrySeconds;
+                                    : WeatherRetrySeconds();
         if (weather_ticks >= kWeatherRefreshSeconds) {
             ShowCachedWeather("Weather sync");
             weather_ok = FetchWeather();
@@ -510,7 +509,7 @@ void TimeWeatherService::Task() {
             if (notified || location_update || refresh_update || weather_refresh) {
                 if (location_update) {
                     weather_ticks = kWeatherRefreshSeconds;
-                    retry_ticks = kWeatherRetrySeconds;
+                    retry_ticks = WeatherRetrySeconds();
                 }
                 if (refresh_update || weather_refresh) {
                     UpdateTime();
@@ -520,7 +519,7 @@ void TimeWeatherService::Task() {
                     }
                     ShowCachedWeather(weather_ok ? "Weather sync" : "Weather retry");
                     if (weather_refresh && !weather_ok) {
-                        retry_ticks = kWeatherRetrySeconds;
+                        retry_ticks = WeatherRetrySeconds();
                     }
                 }
                 break;
@@ -542,7 +541,7 @@ void TimeWeatherService::Task() {
             }
             const int wake_retry_limit = weather_low_memory_deferred_
                                              ? kWeatherLowMemoryRetrySeconds
-                                             : kWeatherRetrySeconds;
+                                             : WeatherRetrySeconds();
             if (!weather_ok && retry_ticks >= wake_retry_limit) {
                 break;
             }
@@ -685,16 +684,20 @@ bool TimeWeatherService::FetchWeather() {
     
     char url[256];
     snprintf(url, sizeof(url),
-             "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
+             "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
              latitude, longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
     esp_http_client_config_t config = {};
     config.url = url;
-    config.timeout_ms = 3000;
+    config.timeout_ms = 6000;
     config.event_handler = HttpEventHandler;
     config.user_data = response;
-    config.buffer_size = 1024;
+    config.buffer_size = 1536;
+    config.buffer_size_tx = 512;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+    config.disable_auto_redirect = false;
+    config.max_redirection_count = 3;
     
     static constexpr int kWeatherFetchAttempts = 2;
     esp_err_t err = ESP_FAIL;
@@ -718,7 +721,7 @@ bool TimeWeatherService::FetchWeather() {
 
         ESP_LOGW(TAG, "weather fetch failed attempt=%d err=%s status=%d", attempt, esp_err_to_name(err), status);
         if (attempt < kWeatherFetchAttempts) {
-            vTaskDelay(pdMS_TO_TICKS(500));
+            vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 
@@ -781,6 +784,21 @@ bool TimeWeatherService::FetchWeather() {
     return true;
 }
 
+int TimeWeatherService::WeatherRetrySeconds() const {
+    if (weather_failure_count_ <= 0) {
+        return 10;
+    }
+    if (weather_failure_count_ == 1) {
+        return 30;
+    }
+    if (weather_failure_count_ == 2) {
+        return 60;
+    }
+    if (weather_failure_count_ == 3) {
+        return 120;
+    }
+    return 300;
+}
 void TimeWeatherService::ShowCachedWeather(const char* status) {
     char summary[128];
     if (last_weather_valid_) {

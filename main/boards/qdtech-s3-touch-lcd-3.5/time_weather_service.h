@@ -25,6 +25,7 @@ private:
     bool sntp_synced_once_ = false;
     bool last_weather_valid_ = false;
     bool weather_low_memory_deferred_ = false;
+    int weather_failure_count_ = 0;
     std::mutex location_mutex_;
     std::string location_city_ = "Zhongshan";
     double location_latitude_ = 22.5176;
@@ -45,6 +46,7 @@ private:
     bool WaitTimeReady();
     void UpdateTime();
     bool FetchWeather();
+    int WeatherRetrySeconds() const;
     void ShowCachedWeather(const char* status);
     void SetWeatherSafe(const char* temperature, const char* summary, int weather_code);
     void SetNetworkStatusSafe(const char* status);

@@ -1180,6 +1180,7 @@ private:
     void StartLyricsFromPlayUrl(const std::string& title, const std::string& artist, const std::string& lyrics_json) {
         const int generation = lyric_generation_.fetch_add(1) + 1;
         auto lines = ParseLyricsJson(lyrics_json);
+        const std::string fallback_line = lines.empty() ? ("Playing: " + title) : lines.front().text;
         ESP_LOGI(TAG, "StartLyricsFromPlayUrl title=%s lyrics_json length=%u lines=%u",
                  title.c_str(), static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
         SetCurrentLyricSong(title, artist, lines.empty() ? 0 : generation);
@@ -1209,7 +1210,10 @@ private:
                      static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
                      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
             SetCurrentLyricSong(title, artist, 0);
-            ShowMusicLyric(title, artist, lines.front().text, true);
+            const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            if (free_internal > 4096) {
+                ShowMusicLyric(title, artist, fallback_line, true);
+            }
             delete args;
             return;
         }
@@ -1327,10 +1331,12 @@ private:
 
         ESP_LOGI(TAG, "music command play title=%s artist=%s url=%s",
                  title_text.c_str(), artist_text.c_str(), url_text.c_str());
-        board->radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
-        board->lyric_generation_.fetch_add(1);
-        board->SetCurrentLyricSong(title_text, artist_text, 0);
-        board->ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
+        const auto result = board->radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
+        if (result.rfind("Music URL started", 0) == 0) {
+            board->lyric_generation_.fetch_add(1);
+            board->SetCurrentLyricSong(title_text, artist_text, 0);
+            board->ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
+        }
 
         httpd_resp_set_type(req, "application/json");
         return httpd_resp_sendstr(req, "{\"ok\":true}");
@@ -1396,10 +1402,12 @@ private:
                 cJSON_Delete(root);
                 ESP_LOGI(TAG, "music udp play title=%s artist=%s url=%s",
                          title_text.c_str(), artist_text.c_str(), url_text.c_str());
-                radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
-                lyric_generation_.fetch_add(1);
-                SetCurrentLyricSong(title_text, artist_text, 0);
-                ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
+                const auto result = radio_service_.PlayUrlFromTool(title_text, artist_text, url_text);
+                if (result.rfind("Music URL started", 0) == 0) {
+                    lyric_generation_.fetch_add(1);
+                    SetCurrentLyricSong(title_text, artist_text, 0);
+                    ShowMusicLyric(title_text, artist_text, "Playing: " + title_text, true);
+                }
                 continue;
             }
             cJSON* line = cJSON_GetObjectItem(root, "line");
@@ -1660,7 +1668,7 @@ private:
         
         // WiFi管理工具
         mcp_server.AddTool("self.music.play_url",
-            "Play a direct HTTP MP3 music URL on this device speaker. Calling this again interrupts the current URL or radio stream. The url must be a direct audio stream, not a web page. After this tool succeeds, do not speak any extra confirmation.",
+            "Play a FULL direct HTTP MP3 song URL on this device speaker. Do not use preview, trial, ringtone, web page, playlist, or short clip URLs. Prefer URLs with Content-Length over 1 MB and enough duration for a complete song. Calling this again interrupts the current URL or radio stream. If the tool says the URL is a short preview, search for a different full direct MP3 URL and call this tool again. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1675,17 +1683,20 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
-                if (display_ && lvgl_port_lock(250)) {
+                const bool started = result.rfind("Music URL started", 0) == 0;
+                if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
                         desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
                     }
                     lvgl_port_unlock();
                 }
-                StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                if (started) {
+                    StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                }
                 return result;
             });
         mcp_server.AddTool("self.music.play",
-            "Alias for self.music.play_url. Play a direct HTTP MP3 music URL on this device speaker, interrupting the current URL or radio stream. After this tool succeeds, do not speak any extra confirmation.",
+            "Alias for self.music.play_url. Play a FULL direct HTTP MP3 song URL, not a preview or short clip. If rejected as a short preview, search for a different full direct MP3 URL and call this tool again. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1700,13 +1711,16 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
-                if (display_ && lvgl_port_lock(250)) {
+                const bool started = result.rfind("Music URL started", 0) == 0;
+                if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
                         desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str());
                     }
                     lvgl_port_unlock();
                 }
-                StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                if (started) {
+                    StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                }
                 return result;
             });
         mcp_server.AddTool("self.music.stop",

@@ -2,6 +2,14 @@
 
 > Future Codex note: this file documents the Mac-side MCP services that work with the QDTech XiaoZhi firmware. It is intentionally secret-free. Do not commit endpoint token files, logs containing tokens, or local API keys.
 
+## 2026-07-04 Music Playback Stability Notes
+
+- QDTech firmware `v1.7.76` now rejects likely preview-length MP3 URLs before playback. A URL around a few hundred KB is treated as a preview clip, not a real song.
+- The firmware fix prevents the board from crashing/restarting on these URLs, but the Mac/remote NetEase MCP still needs to provide a full direct MP3 URL for the song to actually play.
+- `self.music.play_url` should be called only with a direct playable MP3 URL plus stable `title` and `artist`; do not send a preview URL and then rely on firmware retries.
+- If the device result says the music URL was rejected as short/preview, search another source or return a clear failure instead of starting lyrics or telling the user the song is playing.
+- Lyrics are best-effort: under very low internal SRAM, the firmware may skip scheduled lyric display to preserve playback stability.
+
 ## 2026-06-30 Working Setup
 
 Long-term local service directory on the user's Mac:
@@ -24,8 +32,8 @@ Local directory:
 
 Agents:
 
-- `宇宇`: local music API port `3099`, LaunchAgent `com.tupi.xiaozhi.netease.yuyu`
-- `小苍兰`: local music API port `3100`, LaunchAgent `com.tupi.xiaozhi.netease.xiaocanglan`
+- `瀹囧畤`: local music API port `3099`, LaunchAgent `com.tupi.xiaozhi.netease.yuyu`
+- `灏忚媿鍏癭: local music API port `3100`, LaunchAgent `com.tupi.xiaozhi.netease.xiaocanglan`
 
 Logs:
 
@@ -134,13 +142,13 @@ OpenClaw gateway:
 OpenClaw agent:
 
 - default agent `main`
-- user-facing name `多多`
+- user-facing name `澶氬`
 
 Important implementation note:
 
 - Normal `openclaw.ask_dodo` voice answers use a lightweight direct OpenAI-compatible call to Xiaomi `mimo-v2.5` so XiaoZhi receives short answers fast enough for speech.
 - Full OpenClaw CLI is kept as a fallback, because repeated full CLI calls were too slow and caused XiaoZhi to report that Dodo was offline.
-- "在线吗" style checks can be answered locally and quickly.
+- "鍦ㄧ嚎鍚? style checks can be answered locally and quickly.
 
 Current tools:
 
@@ -174,12 +182,12 @@ File management safety model:
 
 Useful voice tests:
 
-- `宇宇，问多多在线吗？`
-- `宇宇，打开访达。`
-- `宇宇，列出桌面文件。`
-- `宇宇，把桌面上的测试文件移动到文稿。`
-- `宇宇，整理下载文件夹。`
-- `确认执行，确认码 123456。`
+- `瀹囧畤锛岄棶澶氬鍦ㄧ嚎鍚楋紵`
+- `瀹囧畤锛屾墦寮€璁胯揪銆俙
+- `瀹囧畤锛屽垪鍑烘闈㈡枃浠躲€俙
+- `瀹囧畤锛屾妸妗岄潰涓婄殑娴嬭瘯鏂囦欢绉诲姩鍒版枃绋裤€俙
+- `瀹囧畤锛屾暣鐞嗕笅杞芥枃浠跺す銆俙
+- `纭鎵ц锛岀‘璁ょ爜 123456銆俙
 
 Quick status checks:
 
@@ -201,7 +209,7 @@ The OpenClaw LaunchAgent must run with a PATH that includes the user's local Nod
 
 ## XiaoZhi Backend Role Prompt
 
-For `宇宇`, keep these intent-routing rules in the XiaoZhi console role description:
+For `瀹囧畤`, keep these intent-routing rules in the XiaoZhi console role description:
 
 - For music requests, actually call tools. Do not only reply "playing".
 - If an external music tool returns `audio_url` or `url`, call `self.music.play_url`.
@@ -215,9 +223,9 @@ After saving the XiaoZhi backend role/MCP configuration, restart or reconnect th
 
 ## 2026-06-30 Verified Experiences
 
-- Both NetEase services can be run at the same time, one for `宇宇` and one for `小苍兰`; separate boards/agents do not conflict when each has its own MCP endpoint and local music API port.
+- Both NetEase services can be run at the same time, one for `瀹囧畤` and one for `灏忚媿鍏癭; separate boards/agents do not conflict when each has its own MCP endpoint and local music API port.
 - The Mac-side NetEase services can be left as LaunchAgents for reboot persistence.
 - The direct local NetEase API can return a playable MP3 URL even when the board is not playing; this means playback failures must be separated into "Mac did not fetch", "Mac did not call device", and "device did not play".
-- A successful point-song chain was observed for `冉春`: `music.netease_play` returned a URL, then the bridge logged `>> tools/call self.music.play_url` with the direct MP3 URL.
+- A successful point-song chain was observed for `鍐夋槬`: `music.netease_play` returned a URL, then the bridge logged `>> tools/call self.music.play_url` with the direct MP3 URL.
 - For OpenClaw, direct lightweight Dodo answers are more reliable for voice than repeated full CLI calls.
 - File management should be expanded conservatively with prepare/confirm tools rather than broad computer-control access.

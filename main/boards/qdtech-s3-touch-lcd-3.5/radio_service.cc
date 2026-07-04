@@ -35,9 +35,13 @@ static const char* TAG = "RadioService";
 
 static constexpr int kReadBufferSize = 16 * 1024;
 static constexpr int kReadTargetBytes = 8 * 1024;
-static constexpr int kReadChunkBytes = 1024;
+static constexpr int kInitialReadTargetBytes = 2 * 1024;
+static constexpr int kReadChunkBytes = 2048;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
 static constexpr TickType_t kCustomUrlSpeakingGraceTicks = pdMS_TO_TICKS(4000);
+static constexpr int kRadioEmptyReadLimit = 200;
+static constexpr int kCustomUrlEmptyReadLimit = 600;
+static constexpr int kMinimumCustomMusicBytes = 1024 * 1024;
 
 enum class RadioCategory {
     NATIONAL,    // 全国
@@ -76,6 +80,46 @@ static std::string Lower(std::string text) {
 static bool IsNetEaseMusicUrl(const std::string& url) {
     return url.find(".music.126.net/") != std::string::npos ||
            url.find("music.163.com/") != std::string::npos;
+}
+static int ProbeMusicUrlLength(const std::string& url) {
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.timeout_ms = 3000;
+    config.buffer_size = 1024;
+    config.buffer_size_tx = 512;
+    config.disable_auto_redirect = false;
+    config.max_redirection_count = 5;
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (!client) {
+        return -1;
+    }
+    esp_http_client_set_header(client, "User-Agent", "Mozilla/5.0 ESP32 Radio");
+    esp_http_client_set_header(client, "Accept", "audio/mpeg,audio/*;q=0.9,*/*;q=0.8");
+    esp_http_client_set_header(client, "Icy-MetaData", "0");
+    if (IsNetEaseMusicUrl(url)) {
+        esp_http_client_set_header(client, "User-Agent",
+                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
+        esp_http_client_set_header(client, "Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
+        esp_http_client_set_header(client, "Referer", "https://music.163.com/");
+        esp_http_client_set_header(client, "Origin", "https://music.163.com");
+        esp_http_client_set_header(client, "Connection", "close");
+    }
+
+    int content_length = -1;
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err == ESP_OK) {
+        content_length = esp_http_client_fetch_headers(client);
+        const int status = esp_http_client_get_status_code(client);
+        if (status < 200 || status >= 400) {
+            content_length = -1;
+        }
+        esp_http_client_close(client);
+    }
+    esp_http_client_cleanup(client);
+    return content_length;
 }
 
 static RadioCategory ParseCategory(const char* cat) {
@@ -566,6 +610,13 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
         return "Music URL must start with http:// or https://.";
     }
 
+    const int music_length = ProbeMusicUrlLength(url);
+    if (music_length > 0 && music_length < kMinimumCustomMusicBytes) {
+        ESP_LOGW(TAG, "music url rejected as short preview len=%d url=%s", music_length, url.c_str());
+        SetUi("Error", "Short music URL");
+        return "Music URL was NOT started: this direct MP3 is only a short preview clip. Search for another full direct MP3 song URL with Content-Length over 1 MB, then call self.music.play_url again.";
+    }
+
     EnsureStationsLoaded();
     std::string display_name = title.empty() ? "Music URL" : title;
     if (!artist.empty()) {
@@ -660,6 +711,14 @@ void RadioService::Task() {
         PlayCurrentStation(generation);
         if (generation != stream_generation_.load(std::memory_order_relaxed)) {
             reconnect_attempt_ = 0;
+            continue;
+        }
+        if (play_requested_ && playing_custom_url_) {
+            play_requested_ = false;
+            stop_requested_ = true;
+            reconnect_attempt_ = 0;
+            Application::GetInstance().SetExternalAudioActive(false);
+            SetUi("Stopped", "Music ended");
             continue;
         }
         if (play_requested_) {
@@ -821,9 +880,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
 
     esp_http_client_config_t config = {};
     config.url = url.c_str();
-    config.timeout_ms = 1000;
-    config.buffer_size = 2048;
-    config.buffer_size_tx = 512;
+    config.timeout_ms = 2500;
+    config.buffer_size = 4096;
+    config.buffer_size_tx = 1024;
     config.disable_auto_redirect = false;
     config.max_redirection_count = 5;
     config.crt_bundle_attach = esp_crt_bundle_attach;
@@ -898,7 +957,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     int decoded_frames = 0;
     int decode_errors = 0;
     size_t total_bytes = 0;
+    int empty_reads = 0;
     bool stream_failed = false;
+    bool stream_completed = false;
     Application::GetInstance().SetExternalAudioActive(true);
 
     while (play_requested_ && !stop_requested_ && WifiStation::GetInstance().IsConnected() &&
@@ -922,17 +983,43 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             memmove(read_buffer, read_ptr, bytes_left);
             read_ptr = read_buffer;
         }
-        while (bytes_left < kReadTargetBytes && bytes_left < kReadBufferSize &&
+        const int target_bytes = (total_bytes == 0 || playing_custom_url_) ? kInitialReadTargetBytes : kReadTargetBytes;
+        while (bytes_left < target_bytes && bytes_left < kReadBufferSize &&
                play_requested_ && !stop_requested_ &&
                stream_generation == stream_generation_.load(std::memory_order_relaxed)) {
             int room = std::min(kReadChunkBytes, kReadBufferSize - bytes_left);
             int read = esp_http_client_read(client, reinterpret_cast<char*>(read_buffer + bytes_left), room);
             if (read > 0) {
+                empty_reads = 0;
                 bytes_left += read;
                 total_bytes += read;
                 continue;
             }
             if (read == 0) {
+                const bool complete = esp_http_client_is_complete_data_received(client);
+                const int empty_limit = playing_custom_url_ ? kCustomUrlEmptyReadLimit : kRadioEmptyReadLimit;
+                ++empty_reads;
+                if (complete) {
+                    ESP_LOGI(TAG, "stream completed station=%s url_index=%d frames=%d buffered=%d", station_name.c_str(), url_index, decoded_frames, bytes_left);
+                    if (bytes_left <= 0) {
+                        stream_completed = true;
+                    }
+                    break;
+                }
+                if (empty_reads >= empty_limit) {
+                    ESP_LOGW(TAG, "stream stalled station=%s url_index=%d empty_reads=%d buffered=%d", station_name.c_str(), url_index, empty_reads, bytes_left);
+                    if (bytes_left > 0) {
+                        break;
+                    }
+                    if (playing_custom_url_ && decoded_frames > 0) {
+                        play_requested_ = false;
+                        stop_requested_ = true;
+                        SetUi("Stopped", "Music interrupted");
+                    } else {
+                        stream_failed = true;
+                    }
+                    break;
+                }
                 vTaskDelay(pdMS_TO_TICKS(20));
                 break;
             }
@@ -943,8 +1030,20 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         if (stream_generation != stream_generation_.load(std::memory_order_relaxed)) {
             break;
         }
+        if (stream_completed) {
+            if (playing_custom_url_) {
+                play_requested_ = false;
+                stop_requested_ = true;
+                SetUi("Stopped", "Music ended");
+            }
+            break;
+        }
         if (stream_failed) {
-            SetUi("Reconnecting", "Read failed");
+            SetUi(playing_custom_url_ ? "Stopped" : "Reconnecting", playing_custom_url_ ? "Music interrupted" : "Read failed");
+            if (playing_custom_url_) {
+                play_requested_ = false;
+                stop_requested_ = true;
+            }
             break;
         }
 
@@ -973,7 +1072,11 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             ++decode_errors;
             ESP_LOGW(TAG, "mp3 decode failed station=%s url_index=%d err=%d count=%d", station_name.c_str(), url_index, mp3_err, decode_errors);
             if (decode_errors > 20) {
-                SetUi("Reconnecting", "Decode errors");
+                SetUi(playing_custom_url_ ? "Stopped" : "Reconnecting", playing_custom_url_ ? "Music decode error" : "Decode errors");
+                if (playing_custom_url_) {
+                    play_requested_ = false;
+                    stop_requested_ = true;
+                }
                 break;
             }
             if (bytes_left > 0) {
@@ -1012,7 +1115,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     heap_caps_free(pcm_buffer);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
-    return decoded_frames > 0 && play_requested_ && !stop_requested_ && !stream_failed &&
+    return decoded_frames > 0 && play_requested_ && !stop_requested_ && !stream_failed && !stream_completed &&
            stream_generation == stream_generation_.load(std::memory_order_relaxed) &&
            !audio_focus_blocked_.load(std::memory_order_relaxed);
 }

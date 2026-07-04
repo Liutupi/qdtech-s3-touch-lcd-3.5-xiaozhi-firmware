@@ -1,3 +1,17 @@
+# 2026-07-04 v1.7.76 Stability Hotfix Follow-Up
+
+Current state:
+
+- Final Windows ESP-IDF 5.5 build and merge passed in `build-qdtech-v1.7.76`.
+- The fixed app was flashed to the connected QDTech board on `COM3` and verified by esptool.
+- `releases/v1.7.76/` contains regenerated app, full, zip, and `SHA256SUMS.txt` assets.
+- Firmware now rejects likely preview-length MP3 URLs and avoids the low-internal-SRAM lyric task crash seen with `Lai Zi Yun De Feng`.
+
+Next checks:
+
+- Run a longer live music pass on hardware: request 5-10 songs, including `Lai Zi Yun De Feng`, a known full NetEase URL, and a second/third song cutover.
+- If a song is rejected as a short preview, fix the Mac/remote music MCP to return a full URL or alternate source; firmware-side rejection is intentional.
+- If weather still fails, capture serial around `TimeWeatherService` HTTP status, error code, free heap, and retry interval.
 # 2026-07-03 v1.7.76 OTA Safety Follow-Up
 
 Current state:

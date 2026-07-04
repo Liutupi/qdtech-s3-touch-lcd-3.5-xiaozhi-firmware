@@ -1,3 +1,23 @@
+# 2026-07-04 Project Status: v1.7.76 Stability Hotfix
+
+Firmware:
+
+- Version remains `1.7.76` for QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows build directory: `build-qdtech-v1.7.76`.
+- Latest app image: `build-qdtech-v1.7.76\xiaozhi.bin`.
+- Latest app size: `0x6382b0`, leaving `0xc7d50` bytes in the `0x700000` app partition.
+- Latest merged image: `build-qdtech-v1.7.76\merged-binary.bin`, `0x7382b0` bytes.
+- App-only flashed to `COM3` at `0x100000`; esptool hash verification passed.
+- Release assets are in `releases/v1.7.76/`.
+
+Stability status:
+
+- Weather uses HTTPS Open-Meteo with certificate bundle, retry backoff, longer timeout, and memory guard.
+- Wake/listen clears external audio and stale queues before voice interaction.
+- Music URL playback handles initial buffering and stalls more defensively and does not auto-restart custom URLs from the beginning.
+- Short NetEase preview MP3 links are rejected before playback so songs like `来自云的风` do not crash/restart after one or two lines.
+- Lyric scheduling is skipped when internal SRAM is too low, and the low-memory task-create failure path no longer dereferences moved lyric data.
+
 # 2026-07-01 Project Status: v1.7.75
 
 Firmware:
@@ -57,14 +77,14 @@ Firmware:
 
 Music MCP playback status:
 
-- `v1.7.66` fixed the immediate startup grace case, but hardware logs showed a later autonomous server goodbye line, `拜拜啦，下次再聊！`, could still enter `speaking`, pause the custom MP3 URL, and reopen it from the beginning.
+- `v1.7.66` fixed the immediate startup grace case, but hardware logs showed a later autonomous server goodbye line, `鎷滄嫓鍟︼紝涓嬫鍐嶈亰锛乣, could still enter `speaking`, pause the custom MP3 URL, and reopen it from the beginning.
 - `v1.7.67` keeps the startup grace and also ignores/aborts autonomous `speaking` while a custom NetEase MP3 URL is playing, unless the speaking follows a real `listening`/`connecting`/audio-testing user interaction.
 - Real user interruption still pauses music; stray post-tool goodbye/closing speech no longer restarts the song.
 - Build verification passed on macOS with ESP-IDF from `/Users/tupi/esp/esp-idf-v5.5`; app size is `0x62ee20`, leaving `0xd11e0` bytes (12%).
 - Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
 - Boot log confirmed `App version: 1.7.67`, Wi-Fi connected, MQTT connected, and `self.music.play_url` registered.
-- Hardware test verified two consecutive NetEase requests: `道别是一件难事 - 上海彩虹室内合唱团` then `暮色森林 - 欧阳娜娜`; both reached board-side `% self.music.play_url...` and opened fresh direct MP3 URLs with HTTP `200`.
-- Autonomous goodbye lines such as `那先不打扰啦，拜拜！` were ignored for music audio focus (`audio focus speaking ignored during music url playback`) while MP3 frames continued increasing, with no forced song restart.
+- Hardware test verified two consecutive NetEase requests: `閬撳埆鏄竴浠堕毦浜?- 涓婃捣褰╄櫣瀹ゅ唴鍚堝敱鍥 then `鏆壊妫灄 - 娆ч槼濞滃`; both reached board-side `% self.music.play_url...` and opened fresh direct MP3 URLs with HTTP `200`.
+- Autonomous goodbye lines such as `閭ｅ厛涓嶆墦鎵板暒锛屾嫓鎷滐紒` were ignored for music audio focus (`audio focus speaking ignored during music url playback`) while MP3 frames continued increasing, with no forced song restart.
 - Mac NetEase bridge timeout for the device call was widened from 8s to 30s in `/Users/tupi/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`; playback success should be judged from board `self.music.play_url` and `stream open` logs if the cloud does not return the tool result.
 
 # 2026-07-01 Project Status: v1.7.66
@@ -82,7 +102,7 @@ Firmware:
 
 Music MCP playback status:
 
-- Optimized direct NetEase MP3 URL playback so XiaoZhi's immediate post-tool speaking state, such as a short "我先退下了" closing line, does not steal audio focus during the first 4 seconds after `self.music.play_url`.
+- Optimized direct NetEase MP3 URL playback so XiaoZhi's immediate post-tool speaking state, such as a short "鎴戝厛閫€涓嬩簡" closing line, does not steal audio focus during the first 4 seconds after `self.music.play_url`.
 - Real user interruption/listening states still yield audio focus; only the short automatic speaking tail is ignored during this startup grace window.
 - `self.music.play_url` / `self.music.play` tool descriptions now explicitly tell the server not to speak extra confirmation after playback starts.
 - Build verification passed on macOS with ESP-IDF v5.5; hardware OTA verification is still pending.
@@ -205,9 +225,9 @@ Firmware:
 FC/NES status:
 
 - Mapper correction and diagnostics are in place for tested problematic ROMs.
-- `轩辕剑` is improved and now runs through mapper 224.
-- `快打旋风 [Cony Soft]` is identified as mapper 83 but still flower-screens.
-- `吞食天地2` is identified as mapper 198 but still black/solid-color output.
+- `杞╄緯鍓慲 is improved and now runs through mapper 224.
+- `蹇墦鏃嬮 [Cony Soft]` is identified as mapper 83 but still flower-screens.
+- `鍚為澶╁湴2` is identified as mapper 198 but still black/solid-color output.
 - CPU/audio/frame generation continue for the two failing ROMs, so the remaining work is mapper/PPU correctness rather than SD loading or display transport.
 
 # QDTech Project Status
@@ -383,8 +403,8 @@ Always enumerate serial ports first if the board has moved to a new machine.
   - Last hardware verification used `http://192.168.1.111/`.
   - Stores values in NVS so they survive reboot.
   - Uses RAM config caching and a PSRAM-stack HTTP task to fit the current low-internal-RAM runtime.
-  - Hardware POST verification with `city=中山` resolved `22.5231,113.3791`, logged `wifi config synced profile=1 weather=1`, refreshed weather, updated brand labels in place, and did not reboot.
-  - Hardware POST verification with `city=dongguan` resolved to `东莞市 23.0180,113.7487`; Chinese weather text rendered through a Chinese-capable font.
+  - Hardware POST verification with `city=涓北` resolved `22.5231,113.3791`, logged `wifi config synced profile=1 weather=1`, refreshed weather, updated brand labels in place, and did not reboot.
+  - Hardware POST verification with `city=dongguan` resolved to `涓滆帪甯?23.0180,113.7487`; Chinese weather text rendered through a Chinese-capable font.
 - BLE phone configuration:
   - Can advertise as `QDTech-Config` when the low-memory guard allows NimBLE startup.
   - Accepts JSON writes for `logo`, `name`/`owner`, `city`, `latitude`, and `longitude`.

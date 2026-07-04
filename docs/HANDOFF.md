@@ -2,6 +2,35 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.76 QDTech Stability Hotfix
+
+Current target:
+
+- Firmware stays on `v1.7.76`, rebuilt on Windows with ESP-IDF 5.5 in `build-qdtech-v1.7.76`.
+- The same source was flashed to the connected QDTech ESP32-S3 board on `COM3`; esptool verification passed and the board hard-reset cleanly.
+- Release assets were regenerated in `releases/v1.7.76/` from the final build.
+
+What changed:
+
+- Weather now uses the HTTPS Open-Meteo endpoint with the ESP certificate bundle, larger HTTP buffers, longer timeout, retry backoff, and a memory guard so the main screen stops failing silently after transient network problems.
+- XiaoZhi wake/listen now clears external audio focus and pending decode/send queues before entering voice interaction. This prevents leftover music/radio state from blocking wake or causing slow response.
+- Music URL playback now buffers faster, uses larger stream reads, tolerates short empty-read stalls, and avoids restarting custom URLs from the beginning on ordinary status/speech transitions.
+- NetEase-style music requests now send stronger HTTP headers and reject very small custom MP3 URLs as likely preview clips. This protects songs such as `Lai Zi Yun De Feng`, where the service returned short preview links that caused stop/replay loops.
+- `self.music.play_url` and HTTP/UDP music entry points now start lyrics/recent-song state only after `RadioService::PlayUrlFromTool(...)` confirms the URL was accepted.
+- Fixed the observed `LoadProhibited` crash when lyric task creation failed under very low internal SRAM: the fallback lyric line is copied before moving the vector into task args, and lyric display is skipped when internal SRAM is too low.
+- Updated the music tool descriptions to ask the model/MCP side for full direct MP3 URLs instead of trial/preview URLs.
+
+Verification:
+
+- `idf.py -B build-qdtech-v1.7.76 build` passed on Windows ESP-IDF 5.5.
+- Final app image: `build-qdtech-v1.7.76/xiaozhi.bin`, size `0x6382b0`; QDTech 7 MB OTA app slot has `0xc7d50` free.
+- `idf.py -B build-qdtech-v1.7.76 merge-bin` passed and generated `merged-binary.bin`, size `0x7382b0`.
+- App-only flash to `COM3` at `0x100000` completed and hash verification passed.
+- Serial evidence before the last fix showed the crash root cause: short NetEase preview URL rejection followed by lyric task creation failure with `free_internal=695 largest_internal=288`, then `Guru Meditation Error: LoadProhibited`. The code path now avoids that invalid fallback access.
+
+Known limitation:
+
+- Firmware can reject preview/too-short URLs and ask for a full MP3, but it cannot turn a NetEase preview URL into a full song by itself. If the Mac/remote music service only returns preview links for a song, the correct next fix is on the MCP/music-service side: return a full playable URL or a different source.
 ## 2026-07-03 Handoff: v1.7.76 OTA Safety, Apps, Music Recent
 
 Current target:

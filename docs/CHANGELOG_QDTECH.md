@@ -2,6 +2,30 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.76 Weather, Wake, and Music Crash Hotfix
+
+Scope:
+
+- Kept firmware version at `1.7.76` and stabilized the GitHub-main QDTech build after live hardware failures.
+- Hardened weather fetches with HTTPS Open-Meteo, certificate bundle support, longer timeout, larger buffers, retry backoff, and low-memory guard.
+- Added voice-interaction preparation so wake/listen clears external music/audio state and stale queues before XiaoZhi starts listening.
+- Hardened custom music URL playback: faster initial buffering, larger stream reads, stall tolerance, no custom URL auto-restart from normal status transitions, and stronger NetEase request headers.
+- Rejected likely preview-length MP3 URLs before playback; this prevents short links such as the observed `Lai Zi Yun De Feng` preview from causing one-line playback/restart loops.
+- Started lyrics/recent-song state only after RadioService accepts the URL.
+- Fixed the low-internal-SRAM lyric task creation failure path that caused a `LoadProhibited` crash when fallback lyric text was read after moving the lyric vector.
+
+Verification:
+
+- Windows ESP-IDF 5.5 `idf.py -B build-qdtech-v1.7.76 build` passed.
+- `xiaozhi.bin` size is `0x6382b0`; QDTech 7 MB app slot has `0xc7d50` free.
+- `idf.py -B build-qdtech-v1.7.76 merge-bin` generated `merged-binary.bin` size `0x7382b0`.
+- App-only flash to `COM3` passed with esptool hash verification.
+
+Release assets:
+
+- `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-app.bin`: `029dcdcc6e46eb8d905fef8e2f2b91e96e3ad93cc2e28b74ccc70127a0934dc4`
+- `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-full.bin`: `08ea85741fcd3b4708aa905858a3a27b23002497e6778ef7e76bff4f54b317fa`
+- `releases/v1.7.76/qdtech-s3-touch-lcd-3.5-v1.7.76-firmware.zip`: `1f6aabaa197d5360badfc651e7380f0e30274be02d8df26f5d12012395fbe6d7`
 ## 2026-07-03: v1.7.76 OTA Safety, Apps, Music Recent
 
 Scope:
