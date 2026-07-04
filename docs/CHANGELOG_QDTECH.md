@@ -2,6 +2,33 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.79 Music Page UI Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.79`.
+- Reworked the Music page into a clearer two-column layout with a cover-style visual, larger song/artist/lyric panel, compact recent-song list, and right-side `Ask / Again / Stop` actions.
+- Removed the duplicate visible `Face` button; tapping the cover visual now opens the XiaoZhi face page.
+- Changed the default Music prompt line to `Tap Ask and say a song name.`.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_179_build build merge-bin` passed from the clean release worktree `/Users/tupi/qdtech_release_179_src`.
+- CMake reported `App "xiaozhi" version: 1.7.79`.
+- `xiaozhi.bin` size is `0x63b1a0` / `6533536` bytes; QDTech 7 MB app slot has `0xc4e60` free.
+- `merged-binary.bin` size is `0x73b1a0` / `7582112` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.79`, `Ota: Current version: 1.7.79`, WiFi IP `192.168.1.104`, OTA latest, `QdEspMqtt: connect start attempt=1/2`, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, `Application: STATE: idle`, and successful weather/time sync.
+- Known runtime note: BLE config service may skip startup under low internal SRAM, while HTTP config remains available; this did not block WiFi, MQTT, OTA, or weather in the verified boot.
+- Known Music limitation: the cover panel is a firmware-rendered placeholder because the current music/MCP path does not provide album artwork data or URLs.
+
+Release assets:
+
+- `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-app.bin`: `0d89dbd99c1666c6b289610f6e08764a506da2799895d6e4944925ab0f6e694d`
+- `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-full.bin`: `1c3a123b6db490b50c459da8ad5a09ee62855a15d73dc18f88805ac7576da520`
+- `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-firmware.zip`: `7c719f926844faada6b7c47ed8829de410c42de84a90033b43bbec44d57c5fff`
+
 ## 2026-07-04: v1.7.78 MQTT Connect and Music Retry Stability
 
 Scope:

@@ -260,7 +260,7 @@ private:
     std::string music_recent_failed_reason_;
     std::string music_title_ = "No song yet";
     std::string music_artist_ = "Ask XiaoZhi to play NetEase music";
-    std::string music_line_ = "Tap Talk and say a song name.";
+    std::string music_line_ = "Tap Ask and say a song name.";
 
     // Podcast page elements
     lv_obj_t* podcast_list_group_ = nullptr;

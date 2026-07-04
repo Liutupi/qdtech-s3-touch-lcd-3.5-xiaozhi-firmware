@@ -2,6 +2,47 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.79 Music Page UI Polish
+
+Current target:
+
+- Firmware version target is now `v1.7.79`.
+- Built on macOS with ESP-IDF 5.5 from the clean no-space release worktree `/Users/tupi/qdtech_release_179_src`, build directory `/Users/tupi/qdtech_release_179_build`.
+- Release assets were generated in `releases/v1.7.79/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.79` at `0x100000`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.79`.
+- Reworked the Music page from a cramped button strip into a two-column layout.
+- Added a cover-style visual panel on the left with the existing face-page shortcut on tap.
+- Enlarged the song/artist/lyric panel so the active lyric line has more room and wraps cleanly.
+- Moved recent songs into a compact lower-left list and kept the `Clear` action nearby.
+- Replaced the old `Talk / Again / Face / Stop` row with a right-side `Ask / Again / Stop` action column.
+- Removed the duplicate visible `Face` button; the cover visual now opens the XiaoZhi face page.
+- Changed the default Music line to `Tap Ask and say a song name.`.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_179_build build merge-bin` passed from `/Users/tupi/qdtech_release_179_src`.
+- CMake reported `App "xiaozhi" version: 1.7.79`.
+- Final app image: `/Users/tupi/qdtech_release_179_build/xiaozhi.bin`, size `0x63b1a0` / `6533536` bytes; QDTech 7 MB OTA app slot has `0xc4e60` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73b1a0` / `7582112` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.79`, `Ota: Current version: 1.7.79`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, OTA check succeeded as latest, `QdEspMqtt: connect start attempt=1/2`, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, and `Application: STATE: idle`.
+- Weather/time sync also succeeded after boot: `weather ok 26 C 中山 毛毛雨`.
+- Runtime note: low internal SRAM still causes BLE phone-config startup to be skipped (`skip BLE init, not enough internal memory`), while HTTP config remains available. This did not prevent WiFi, OTA check, MQTT, idle state, or weather sync.
+- Release asset SHA256:
+  - `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-app.bin`: `0d89dbd99c1666c6b289610f6e08764a506da2799895d6e4944925ab0f6e694d`
+  - `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-full.bin`: `1c3a123b6db490b50c459da8ad5a09ee62855a15d73dc18f88805ac7576da520`
+  - `releases/v1.7.79/qdtech-s3-touch-lcd-3.5-v1.7.79-firmware.zip`: `7c719f926844faada6b7c47ed8829de410c42de84a90033b43bbec44d57c5fff`
+
+Known limitation:
+
+- The Music cover is a firmware-rendered visual placeholder; the current music/MCP path does not pass real album artwork or related-image URLs into the firmware. Real dynamic covers would require adding image data or an image URL field to the music service/tool contract.
+- This release verifies boot, network, OTA, MQTT, idle state, and weather sync, but does not include a long music playback soak test.
+
 ## 2026-07-04 Handoff: v1.7.78 QDTech MQTT and Music Retry Stability
 
 Current target:
