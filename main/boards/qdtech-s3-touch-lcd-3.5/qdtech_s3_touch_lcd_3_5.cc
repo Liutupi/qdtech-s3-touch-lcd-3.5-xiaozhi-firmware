@@ -1091,6 +1091,31 @@ private:
         ESP_LOGI(TAG, "ShowMusicLyric applied line=%s", line.c_str());
     }
 
+    bool MusicToolStarted(const std::string& result) {
+        return result.rfind("Music URL started", 0) == 0;
+    }
+
+    std::string MusicFailureLine(const std::string& result) {
+        if (result.find("没有拿到") != std::string::npos) {
+            return "没有拿到可播放链接，请换歌名或说清楚版本。";
+        }
+        if (result.find("试听片段") != std::string::npos ||
+            result.find("short preview") != std::string::npos) {
+            return "这个来源只有试听片段，正在等小智换完整版本。";
+        }
+        if (result.find("rejected") != std::string::npos ||
+            result.find("unavailable") != std::string::npos) {
+            return "歌曲链接被版权或源站拒绝，请换一个版本。";
+        }
+        return "这首歌暂时没有拿到可播放源，请换歌名或版本。";
+    }
+
+    void ShowMusicPlayFailure(const std::string& title, const std::string& artist, const std::string& result) {
+        lyric_generation_.fetch_add(1);
+        SetCurrentLyricSong(title, artist, 0);
+        ShowMusicLyric(title.empty() ? "Music" : title, artist, MusicFailureLine(result), true);
+    }
+
     std::vector<ScheduledLyricLine> ParseLyricsJson(const std::string& lyrics_json) {
         std::vector<ScheduledLyricLine> lines;
         if (lyrics_json.empty()) {
@@ -1670,7 +1695,7 @@ private:
         
         // WiFi管理工具
         mcp_server.AddTool("self.music.play_url",
-            "Play a FULL direct HTTP MP3 song URL on this device speaker. Do not use preview, trial, ringtone, web page, playlist, or short clip URLs. Prefer URLs with Content-Length over 1 MB and enough duration for a complete song. Calling this again interrupts the current URL or radio stream. If the tool says the URL is a short preview, search for a different full direct MP3 URL and call this tool again. After this tool succeeds, do not speak any extra confirmation.",
+            "Play a FULL direct HTTP MP3 song URL on this device speaker. Do not use preview, trial, ringtone, web page, playlist, or short clip URLs. Prefer URLs with Content-Length over 1 MB and enough duration for a complete song. Calling this again interrupts the current URL or radio stream. If this tool returns Music URL was NOT started, do not say it already found or played the song; either search for a different complete MP3 URL and call this tool again, or tell the user the song source is unavailable due to copyright or an invalid link. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1685,7 +1710,7 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
-                const bool started = result.rfind("Music URL started", 0) == 0;
+                const bool started = MusicToolStarted(result);
                 if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
                         desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str(), lyrics_json.c_str());
@@ -1694,11 +1719,13 @@ private:
                 }
                 if (started) {
                     StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                } else {
+                    ShowMusicPlayFailure(title, artist, result);
                 }
                 return result;
             });
         mcp_server.AddTool("self.music.play",
-            "Alias for self.music.play_url. Play a FULL direct HTTP MP3 song URL, not a preview or short clip. If rejected as a short preview, search for a different full direct MP3 URL and call this tool again. After this tool succeeds, do not speak any extra confirmation.",
+            "Alias for self.music.play_url. Play a FULL direct HTTP MP3 song URL, not a preview or short clip. If this tool returns Music URL was NOT started, retry with a different complete MP3 URL or tell the user the source is unavailable. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
                 Property("title", kPropertyTypeString, std::string("Music")),
                 Property("artist", kPropertyTypeString, std::string("")),
@@ -1713,7 +1740,7 @@ private:
                          title.c_str(), artist.c_str(), static_cast<unsigned>(url.size()),
                          static_cast<unsigned>(lyrics_json.size()));
                 const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
-                const bool started = result.rfind("Music URL started", 0) == 0;
+                const bool started = MusicToolStarted(result);
                 if (started && display_ && lvgl_port_lock(250)) {
                     if (auto* desktop_ui = GetDesktopUI()) {
                         desktop_ui->RememberMusicTrack(title.c_str(), artist.c_str(), url.c_str(), lyrics_json.c_str());
@@ -1722,6 +1749,8 @@ private:
                 }
                 if (started) {
                     StartLyricsFromPlayUrl(title, artist, lyrics_json);
+                } else {
+                    ShowMusicPlayFailure(title, artist, result);
                 }
                 return result;
             });
@@ -1835,12 +1864,11 @@ private:
                                                   const std::string& url,
                                                   const std::string& lyrics_json) {
             const auto result = radio_service_.PlayUrlFromTool(title, artist, url);
-            const bool started = result.rfind("Music URL started", 0) == 0;
+            const bool started = MusicToolStarted(result);
             if (started) {
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
             } else {
-                lyric_generation_.fetch_add(1);
-                SetCurrentLyricSong(title, artist, 0);
+                ShowMusicPlayFailure(title, artist, result);
             }
         });
         radio_service_.Start(desktop_ui);

@@ -2,6 +2,47 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.84 Music Playback Failure Feedback
+
+Current target:
+
+- Firmware version target is now `v1.7.84`.
+- Built on macOS with ESP-IDF 5.5 from `/tmp/qdfw-release-184`, build directory `/tmp/qdfw-release-184-build`.
+- Release assets were generated in `releases/v1.7.84/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been flashed with `v1.7.84`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.84`.
+- Fixed the most confusing music failure path: when XiaoZhi says it found a song but the music side receives no valid playable URL, a short preview URL, or a rejected/unavailable source, the UI now shows a clear Chinese failure line instead of silently staying idle.
+- `self.music.play_url` and `self.music.play` now return stronger guidance to the model: if `Music URL was NOT started` comes back, it must not claim the song already played. It should retry with a complete direct MP3 URL or tell the user the source is unavailable.
+- The Music page, XiaoZhi lyric overlay, and `Again` replay failure path now use the same failure feedback, so tapping replay on a bad/stale source also explains what happened.
+- Short preview detection still rejects URLs below the full-song threshold, but the status now says `Need full song URL` and the lyric band explains that the current source is only a preview.
+
+Verification:
+
+- Full `idf.py -C /tmp/qdfw-release-184 -B /tmp/qdfw-release-184-build build merge-bin` passed.
+- CMake reported `App "xiaozhi" version: 1.7.84`.
+- Final app image: `/tmp/qdfw-release-184-build/xiaozhi.bin`, size `0x63c390` / `6538128` bytes; QDTech 7 MB OTA app slot has `0xc3c70` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73c390` / `7586704` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.84`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, `Application: STATE: idle`, SNTP time sync, and weather update.
+- Startup OTA HTTP check timed out once and firmware correctly continued to MQTT fallback; this is existing network behavior and did not block XiaoZhi service connection.
+- Before the version bump, the same code path was tested live with `幸福摩天轮`: the provided URL was detected as a short preview (`len=481115`), playback was not started, and the UI displayed `这个来源只有试听片段，正在等小智换完整版本。`
+- Runtime note: BLE phone-config startup still skipped under low internal SRAM, while HTTP config, WiFi, MQTT, weather, and idle state were normal.
+
+Known limitation:
+
+- This firmware does not bypass music copyright/source availability. Songs from popular artists may still return preview clips, empty URLs, 403/404 links, or web pages instead of direct MP3 files; the improvement is that the user now sees why playback did not start.
+- Real album artwork is still not available until the music/MCP contract provides a reliable `cover_url` or image payload.
+- `lyrics_json` is still kept in RAM only. Songs freshly played during the current boot can restart synced lyrics through `Again`; older persisted recents or post-reboot recents can replay audio but cannot restart exact lyric sync.
+
+Release asset SHA256:
+
+- `releases/v1.7.84/qdtech-s3-touch-lcd-3.5-v1.7.84-app.bin`: `8bb44159139880ae97e43b0418244f58b8794682d58d454eb3cb385210f3e399`
+- `releases/v1.7.84/qdtech-s3-touch-lcd-3.5-v1.7.84-full.bin`: `af12f81dd96aeefb1e591f35f5e6883bcd87b8b8416eafd08ff1d2dc5db65232`
+- `releases/v1.7.84/qdtech-s3-touch-lcd-3.5-v1.7.84-firmware.zip`: `697e9c6f2c42e366ef3d8028eea7a5fc9fd05e7071c3a3194894cdadbc130439`
+
 ## 2026-07-04 Handoff: v1.7.83 Music Page Premium Subtitle Layout
 
 Current target:

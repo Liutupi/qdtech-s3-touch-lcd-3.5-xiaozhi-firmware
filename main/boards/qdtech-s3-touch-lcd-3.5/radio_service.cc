@@ -608,7 +608,8 @@ std::string RadioService::SelectStation(const std::string& station) {
 
 std::string RadioService::PlayUrlFromTool(const std::string& title, const std::string& artist, const std::string& url) {
     if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
-        return "Music URL must start with http:// or https://.";
+        SetUi("Error", "No music URL");
+        return "Music URL was NOT started: 没有拿到可直接播放的歌曲链接。请重新搜索完整 MP3 直链，不要只返回歌名、网页、歌单或空链接。";
     }
 
     Application::GetInstance().PrepareExternalAudioPlayback();
@@ -616,9 +617,9 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
     const int music_length = ProbeMusicUrlLength(url);
     if (music_length > 0 && music_length < kMinimumCustomMusicBytes) {
         ESP_LOGW(TAG, "music url rejected as short preview len=%d url=%s", music_length, url.c_str());
-        SetUi("Error", "Short music URL");
+        SetUi("Error", "Need full song URL");
         Application::GetInstance().SetExternalAudioActive(false);
-        return "Music URL was NOT started: this direct MP3 is only a short preview clip. Search for another full direct MP3 song URL with Content-Length over 1 MB, then call self.music.play_url again.";
+        return "Music URL was NOT started: 这个链接只有试听片段，不能当作完整歌曲播放。请换一个来源，重新搜索 Content-Length 超过 1 MB 的完整 MP3 直链，然后再次调用 self.music.play_url。";
     }
 
     EnsureStationsLoaded();
