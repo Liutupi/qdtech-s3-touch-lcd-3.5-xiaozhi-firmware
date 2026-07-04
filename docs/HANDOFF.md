@@ -2,6 +2,46 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-04 Handoff: v1.7.80 Music Player Interaction Polish
+
+Current target:
+
+- Firmware version target is now `v1.7.80`.
+- Built on macOS with ESP-IDF 5.5 from the clean no-space release worktree `/Users/tupi/qdtech_release_180_src`, build directory `/Users/tupi/qdtech_release_180_build`.
+- Release assets were generated in `releases/v1.7.80/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been app-only flashed with `v1.7.80` at `0x100000`; esptool hash verification passed.
+
+What changed:
+
+- Bumped `PROJECT_VER` to `1.7.80`.
+- Music page now has a dedicated right-side lyric panel, so the active lyric/status line is visible outside the center song-info card.
+- The center Music card is now focused on title, artist, and current status; right side is for lyrics.
+- The left music visual now has lightweight animation: a small disc wobble and bouncing level bars.
+- `Ask` no longer forces navigation to the XiaoZhi page. It stays on the Music page, updates the UI to `Listening... say a song name.`, prepares voice interaction, and starts listening from the player page.
+- Recent-song clear/remove/replay status updates now also refresh the right-side lyric panel.
+
+Verification:
+
+- Quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_180_build build merge-bin` passed from `/Users/tupi/qdtech_release_180_src`.
+- CMake reported `App "xiaozhi" version: 1.7.80`.
+- Final app image: `/Users/tupi/qdtech_release_180_build/xiaozhi.bin`, size `0x63bc60` / `6536288` bytes; QDTech 7 MB OTA app slot has `0xc43a0` free.
+- `merge-bin` generated `merged-binary.bin`, size `0x73bc60` / `7584864` bytes.
+- Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.80`, `Ota: Current version: 1.7.80`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, and `Application: STATE: idle`.
+- Runtime note: the first OTA check timed out and MQTT attempt 1 timed out, but the firmware continued with MQTT fallback and attempt 2 connected successfully. Weather fetch later succeeded: `weather ok 26 C 中山 毛毛雨`.
+- Runtime note: low internal SRAM still causes BLE phone-config startup to be skipped (`skip BLE init, not enough internal memory`), while HTTP config remains available.
+- Release asset SHA256:
+  - `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-app.bin`: `52b9c90a125903826c32169c6534d3a3dfb4d0a69b2e0adeac5a60b729c02183`
+  - `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-full.bin`: `52d511b1f360d96e9f1c0b00c5a79a5d208a821beb53acf0d6b39c7717ae8d7a`
+  - `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-firmware.zip`: `c446e3d90e5bc5ad6ce798f365deee485e2a254b705453ca88e8745ac6858092`
+
+Known limitation:
+
+- The animated left music visual is still firmware-rendered, not real album artwork. The current music/MCP contract only provides `title`, `artist`, `url`, and `lyrics_json`; reliable real cover display needs the music service to pass a `cover_url` or decoded image data to the firmware.
+- ESP32-side direct cover scraping by song title is technically possible but risky under the current memory budget because it would add network search, image download, JPEG decode, and cache eviction while music/network/MQTT are already active.
+- `Ask` now stays on the Music page, but a full end-to-end song request from touch to playback was not soak-tested after the final flash; boot, network, MQTT, weather, and idle state were verified.
+
 ## 2026-07-04 Handoff: v1.7.79 Music Page UI Polish
 
 Current target:

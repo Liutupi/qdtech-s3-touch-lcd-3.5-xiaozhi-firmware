@@ -2,6 +2,35 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-04: v1.7.80 Music Player Interaction Polish
+
+Scope:
+
+- Bumped firmware version to `1.7.80`.
+- Added a dedicated right-side lyric panel to the Music page.
+- Changed the center Music card to focus on title, artist, and current status.
+- Added lightweight left-side music visual animation with a small disc wobble and bouncing level bars.
+- Changed `Ask` so it stays on the Music page, prepares voice interaction, and starts listening instead of forcing navigation to the XiaoZhi page.
+- Kept recent-song clear/remove/replay status synchronized with both the center status line and the right-side lyric panel.
+
+Verification:
+
+- macOS ESP-IDF 5.5 quick `esp-idf/main/libmain.a` build passed from the main workspace.
+- Full `idf.py -B /Users/tupi/qdtech_release_180_build build merge-bin` passed from the clean release worktree `/Users/tupi/qdtech_release_180_src`.
+- CMake reported `App "xiaozhi" version: 1.7.80`.
+- `xiaozhi.bin` size is `0x63bc60` / `6536288` bytes; QDTech 7 MB app slot has `0xc43a0` free.
+- `merged-binary.bin` size is `0x73bc60` / `7584864` bytes.
+- App-only flash to `/dev/cu.usbmodem212401` at `0x100000` completed and esptool hash verification passed.
+- Boot log confirmed `App version: 1.7.80`, WiFi IP `192.168.1.104`, MCP music tools registered, MQTT connected on startup attempt 2, `Application: STATE: idle`, and successful weather sync.
+- Runtime note: the initial OTA check and MQTT attempt 1 timed out, but firmware fallback/retry recovered and connected.
+- Known Music limitation: real album artwork is not available yet because the current music/MCP path does not provide cover image data or URLs. ESP32-side cover scraping is possible but should be added carefully with memory guards and cache limits.
+
+Release assets:
+
+- `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-app.bin`: `52b9c90a125903826c32169c6534d3a3dfb4d0a69b2e0adeac5a60b729c02183`
+- `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-full.bin`: `52d511b1f360d96e9f1c0b00c5a79a5d208a821beb53acf0d6b39c7717ae8d7a`
+- `releases/v1.7.80/qdtech-s3-touch-lcd-3.5-v1.7.80-firmware.zip`: `c446e3d90e5bc5ad6ce798f365deee485e2a254b705453ca88e8745ac6858092`
+
 ## 2026-07-04: v1.7.79 Music Page UI Polish
 
 Scope:

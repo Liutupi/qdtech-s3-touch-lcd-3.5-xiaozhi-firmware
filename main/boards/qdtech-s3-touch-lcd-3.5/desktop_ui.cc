@@ -957,8 +957,8 @@ static void music_gesture_cb(lv_event_t* event) {
 }
 
 static void music_talk_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        open_xiaozhi_with_message("Music", "Tell me a song name.", true);
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->StartMusicAsk();
     }
 }
 
@@ -2861,16 +2861,33 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_add_event_cb(cover, music_face_cb, LV_EVENT_CLICKED, NULL);
     add_gesture_bubble(cover);
 
-    lv_obj_t* disc = circle(cover, 82,
-                            is_tupi_warm_theme() ? COLOR_SURFACE_2 :
-                            themed_color(LV_COLOR_MAKE(0x1b, 0x24, 0x32), COLOR_CREAM),
-                            LV_OPA_COVER);
-    lv_obj_set_style_border_color(disc, COLOR_GOLD, 0);
-    lv_obj_set_style_border_width(disc, 2, 0);
-    lv_obj_align(disc, LV_ALIGN_TOP_MID, 0, 14);
-    lv_obj_t* note = label_en(disc, "♪", &style_gold);
-    lv_obj_set_style_text_font(note, &lv_font_montserrat_48, 0);
-    lv_obj_center(note);
+    music_cover_disc_ = circle(cover, 82,
+                               is_tupi_warm_theme() ? COLOR_SURFACE_2 :
+                               themed_color(LV_COLOR_MAKE(0x1b, 0x24, 0x32), COLOR_CREAM),
+                               LV_OPA_COVER);
+    lv_obj_set_style_border_color(music_cover_disc_, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(music_cover_disc_, 2, 0);
+    lv_obj_align(music_cover_disc_, LV_ALIGN_TOP_MID, 0, 14);
+    lv_obj_t* disc_hole = circle(music_cover_disc_, 18,
+                                 is_tupi_warm_theme() ? COLOR_BG :
+                                 themed_color(LV_COLOR_MAKE(0x09, 0x0c, 0x13), COLOR_BG),
+                                 LV_OPA_COVER);
+    lv_obj_center(disc_hole);
+    music_cover_note_ = label_en(music_cover_disc_, "♪", &style_gold);
+    lv_obj_set_style_text_font(music_cover_note_, &lv_font_montserrat_20, 0);
+    lv_obj_align(music_cover_note_, LV_ALIGN_CENTER, 0, -2);
+
+    static constexpr int16_t kBarX[] = {22, 38, 54, 70};
+    for (size_t i = 0; i < sizeof(music_cover_bars_) / sizeof(music_cover_bars_[0]); ++i) {
+        lv_obj_t* bar = lv_obj_create(cover);
+        lv_obj_remove_style_all(bar);
+        lv_obj_set_size(bar, 7, 16 + static_cast<int16_t>(i) * 4);
+        lv_obj_set_style_radius(bar, 4, 0);
+        lv_obj_set_style_bg_color(bar, i % 2 == 0 ? COLOR_GOLD : COLOR_GREEN, 0);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_70, 0);
+        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -32);
+        music_cover_bars_[i] = bar;
+    }
 
     lv_obj_t* source = label_en(cover, "NetEase", &style_muted);
     lv_obj_set_style_text_font(source, &lv_font_montserrat_12, 0);
@@ -2878,7 +2895,7 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_style_text_align(source, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(source, LV_ALIGN_BOTTOM_MID, 0, -12);
 
-    lv_obj_t* panel = CreatePanel(music_page_, 300, 136, 156, 80);
+    lv_obj_t* panel = CreatePanel(music_page_, 176, 136, 156, 80);
     lv_obj_set_style_bg_color(panel,
                               is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x12, 0x16, 0x22), COLOR_SURFACE), 0);
@@ -2889,23 +2906,43 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
 
     music_title_label_ = label_en(panel, music_title_.c_str(), &style_en);
     lv_obj_set_style_text_font(music_title_label_, qd_cn_font_20(), 0);
-    lv_obj_set_width(music_title_label_, 266);
+    lv_obj_set_width(music_title_label_, 144);
     lv_label_set_long_mode(music_title_label_, LV_LABEL_LONG_DOT);
     lv_obj_align(music_title_label_, LV_ALIGN_TOP_LEFT, 16, 14);
 
     music_artist_label_ = label_en(panel, music_artist_.c_str(), &style_muted);
     lv_obj_set_style_text_font(music_artist_label_, qd_cn_font_16(), 0);
-    lv_obj_set_width(music_artist_label_, 266);
+    lv_obj_set_width(music_artist_label_, 144);
     lv_label_set_long_mode(music_artist_label_, LV_LABEL_LONG_DOT);
     lv_obj_align(music_artist_label_, LV_ALIGN_TOP_LEFT, 16, 42);
 
     music_line_label_ = label_en(panel, music_line_.c_str(), &style_gold);
-    lv_obj_set_style_text_font(music_line_label_, qd_cn_font_20(), 0);
-    lv_obj_set_width(music_line_label_, 266);
+    lv_obj_set_style_text_font(music_line_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(music_line_label_, 144);
     lv_obj_set_height(music_line_label_, 58);
     lv_obj_set_style_text_align(music_line_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(music_line_label_, LV_LABEL_LONG_WRAP);
     lv_obj_align(music_line_label_, LV_ALIGN_BOTTOM_MID, 0, -14);
+
+    lv_obj_t* lyric_panel = CreatePanel(music_page_, 112, 136, 344, 80);
+    lv_obj_set_style_bg_color(lyric_panel,
+                              is_tupi_warm_theme() ? COLOR_SURFACE_2 :
+                              themed_color(LV_COLOR_MAKE(0x0f, 0x17, 0x24), COLOR_SURFACE_2), 0);
+    lv_obj_set_style_border_color(lyric_panel, COLOR_GOLD, 0);
+    lv_obj_set_style_border_opa(lyric_panel, LV_OPA_40, 0);
+    lv_obj_set_style_radius(lyric_panel, 8, 0);
+
+    lv_obj_t* lyric_title = label_en(lyric_panel, "LYRIC", &style_muted);
+    lv_obj_set_style_text_font(lyric_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(lyric_title, LV_ALIGN_TOP_MID, 0, 10);
+
+    music_side_lyric_label_ = label_en(lyric_panel, music_line_.c_str(), &style_en);
+    lv_obj_set_style_text_font(music_side_lyric_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(music_side_lyric_label_, 88);
+    lv_obj_set_height(music_side_lyric_label_, 86);
+    lv_obj_set_style_text_align(music_side_lyric_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(music_side_lyric_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_align(music_side_lyric_label_, LV_ALIGN_BOTTOM_MID, 0, -12);
 
     lv_obj_t* recent_title = label_en(music_page_, "Recent", &style_muted);
     lv_obj_set_style_text_font(recent_title, &lv_font_montserrat_12, 0);
@@ -2956,6 +2993,8 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_size(stop, 100, 24);
     lv_obj_set_style_border_color(stop, lv_color_make(0xff, 0x88, 0x68), 0);
     lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 352, 290);
+
+    music_cover_timer_ = lv_timer_create(MusicCoverTimerCb, 180, this);
 }
 
 void DesktopUI::CreateMediaPage(lv_obj_t* root) {
@@ -4989,6 +5028,11 @@ void DesktopUI::ReloadUserProfile() {
     music_title_label_ = nullptr;
     music_artist_label_ = nullptr;
     music_line_label_ = nullptr;
+    music_side_lyric_label_ = nullptr;
+    music_cover_disc_ = nullptr;
+    music_cover_note_ = nullptr;
+    memset(music_cover_bars_, 0, sizeof(music_cover_bars_));
+    music_cover_timer_ = nullptr;
     music_hint_label_ = nullptr;
     music_recent_clear_button_ = nullptr;
     memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
@@ -5033,6 +5077,11 @@ void DesktopUI::CycleTheme() {
     music_title_label_ = nullptr;
     music_artist_label_ = nullptr;
     music_line_label_ = nullptr;
+    music_side_lyric_label_ = nullptr;
+    music_cover_disc_ = nullptr;
+    music_cover_note_ = nullptr;
+    memset(music_cover_bars_, 0, sizeof(music_cover_bars_));
+    music_cover_timer_ = nullptr;
     music_hint_label_ = nullptr;
     music_recent_clear_button_ = nullptr;
     memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
@@ -5464,9 +5513,28 @@ void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<
 }
 
 void DesktopUI::SetMusicReplayCallback(std::function<void(const std::string& title,
-                                                          const std::string& artist,
-                                                          const std::string& url)> callback) {
+                                                           const std::string& artist,
+                                                           const std::string& url)> callback) {
     music_replay_cb_ = std::move(callback);
+}
+
+void DesktopUI::StartMusicAsk() {
+    music_line_ = "Listening... say a song name.";
+    if (music_line_label_) {
+        lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+    }
+    SetXiaozhiState("Music", "Tell me a song name.", "thinking");
+
+    auto& app = Application::GetInstance();
+    app.PrepareVoiceInteraction();
+    if (app.GetDeviceState() == kDeviceStateIdle) {
+        app.StartListening();
+    } else if (app.GetDeviceState() == kDeviceStateSpeaking) {
+        app.ToggleChatState();
+    }
 }
 
 void DesktopUI::SetRadioState(const char* station, const char* state, const char* meta) {
@@ -5764,6 +5832,9 @@ void DesktopUI::ClearMusicRecent() {
     if (music_line_label_) {
         lv_label_set_text(music_line_label_, music_line_.c_str());
     }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+    }
 }
 
 void DesktopUI::RemoveMusicRecent(size_t index) {
@@ -5784,6 +5855,9 @@ void DesktopUI::RemoveMusicRecent(size_t index) {
     music_line_ = removed_title.empty() ? "Recent song removed." : "Removed from recent.";
     if (music_line_label_) {
         lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
     }
 }
 
@@ -5827,6 +5901,9 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
         if (music_line_label_) {
             lv_label_set_text(music_line_label_, music_line_.c_str());
         }
+        if (music_side_lyric_label_) {
+            lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        }
         return;
     }
     const auto track = music_recent_[index];
@@ -5846,6 +5923,9 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
     }
     if (music_line_label_) {
         lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
     }
     RefreshMusicRecent();
     SetAppTileStatus(8, music_title_.c_str(), COLOR_GREEN);
@@ -5880,6 +5960,9 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
     }
     if (music_line_label_) {
         lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
     }
     SetAppTileStatus(8, music_title_.c_str(), COLOR_GREEN);
 
@@ -5922,6 +6005,9 @@ void DesktopUI::ClearMusicLyric() {
     }
     if (music_line_label_) {
         lv_label_set_text(music_line_label_, music_line_.c_str());
+    }
+    if (music_side_lyric_label_) {
+        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
     }
     if (music_lyric_label_) {
         lv_label_set_text(music_lyric_label_, "");
@@ -6064,4 +6150,39 @@ void DesktopUI::WeatherParticleCb(lv_timer_t* timer) {
     lv_anim_set_time(&fade, storm_flash ? 360 : ((is_rain || is_storm) ? 760 : 1500));
     lv_anim_set_exec_cb(&fade, ObjOpaCb);
     lv_anim_start(&fade);
+}
+
+void DesktopUI::MusicCoverTimerCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->music_page_) {
+        return;
+    }
+
+    self->music_cover_phase_ = static_cast<uint8_t>(self->music_cover_phase_ + 1);
+    const bool active = self->music_title_ != "No song yet" ||
+                        self->music_line_.find("Listening") != std::string::npos ||
+                        self->music_line_.find("Playing") != std::string::npos ||
+                        self->music_line_.find("Replaying") != std::string::npos;
+    const uint8_t phase = self->music_cover_phase_;
+    if (self->music_cover_disc_) {
+        const int16_t wobble = active ? static_cast<int16_t>((phase % 4) < 2 ? -1 : 1) : 0;
+        lv_obj_align(self->music_cover_disc_, LV_ALIGN_TOP_MID, wobble, 14);
+        lv_obj_set_style_border_opa(self->music_cover_disc_, active ? LV_OPA_90 : LV_OPA_50, 0);
+    }
+    if (self->music_cover_note_) {
+        lv_obj_set_style_opa(self->music_cover_note_, active ? LV_OPA_COVER : LV_OPA_60, 0);
+    }
+
+    static constexpr int16_t kBarX[] = {22, 38, 54, 70};
+    static constexpr uint8_t kWave[] = {12, 24, 34, 20, 28, 16, 30, 22};
+    for (size_t i = 0; i < sizeof(self->music_cover_bars_) / sizeof(self->music_cover_bars_[0]); ++i) {
+        lv_obj_t* bar = self->music_cover_bars_[i];
+        if (!bar) {
+            continue;
+        }
+        const int16_t height = active ? kWave[(phase + i * 2) % (sizeof(kWave) / sizeof(kWave[0]))] : 12;
+        lv_obj_set_size(bar, 7, height);
+        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -32);
+        lv_obj_set_style_bg_opa(bar, active ? LV_OPA_80 : LV_OPA_30, 0);
+    }
 }

@@ -63,6 +63,7 @@ public:
     void SetMusicLyric(const char* title, const char* artist, const char* line);
     void RememberMusicTrack(const char* title, const char* artist, const char* url);
     void ClearMusicLyric();
+    void StartMusicAsk();
     void SetXiaozhiEmotion(const char* emotion);
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
@@ -243,6 +244,12 @@ private:
     lv_obj_t* music_title_label_ = nullptr;
     lv_obj_t* music_artist_label_ = nullptr;
     lv_obj_t* music_line_label_ = nullptr;
+    lv_obj_t* music_side_lyric_label_ = nullptr;
+    lv_obj_t* music_cover_disc_ = nullptr;
+    lv_obj_t* music_cover_note_ = nullptr;
+    lv_obj_t* music_cover_bars_[4] = {};
+    lv_timer_t* music_cover_timer_ = nullptr;
+    uint8_t music_cover_phase_ = 0;
     lv_obj_t* music_hint_label_ = nullptr;
     lv_obj_t* music_recent_clear_button_ = nullptr;
     static constexpr size_t kMusicRecentCount = 3;
@@ -419,4 +426,5 @@ private:
     static void DailyCardBreathCb(lv_timer_t* timer);
     static void ClockShadowCb(lv_timer_t* timer);
     static void WeatherParticleCb(lv_timer_t* timer);
+    static void MusicCoverTimerCb(lv_timer_t* timer);
 };
