@@ -1657,6 +1657,37 @@ private:
                 }
                 return std::string("Weather location updated to ") + city + " (" + latitude + ", " + longitude + ").";
             });
+        mcp_server.AddTool("self.display.qrcode",
+            "Show a QR code on the device screen. Use this for login URLs such as NetEase Music QR login. Pass the raw QR text or URL in content, not a base64 image.",
+            PropertyList({
+                Property("content", kPropertyTypeString),
+                Property("title", kPropertyTypeString, std::string("扫码登录")),
+                Property("hint", kPropertyTypeString, std::string("用手机扫码；点屏幕关闭")),
+            }), [this](const PropertyList& properties) -> ReturnValue {
+                const auto content = properties["content"].value<std::string>();
+                const auto title = properties["title"].value<std::string>();
+                const auto hint = properties["hint"].value<std::string>();
+                if (content.empty()) {
+                    return std::string("QR code was NOT shown: content is empty.");
+                }
+                if (content.size() > 700) {
+                    return std::string("QR code was NOT shown: content is too long.");
+                }
+                if (!display_ || !lvgl_port_lock(250)) {
+                    return std::string("QR code was NOT shown: display is busy.");
+                }
+                bool shown = false;
+                if (auto* desktop_ui = GetDesktopUI()) {
+                    shown = desktop_ui->ShowQrCode(content.c_str(), title.c_str(), hint.c_str());
+                }
+                lvgl_port_unlock();
+                if (!shown) {
+                    return std::string("QR code was NOT shown: QR encoder rejected the content.");
+                }
+                ESP_LOGI(TAG, "self.display.qrcode title=%s content_len=%u",
+                         title.c_str(), static_cast<unsigned>(content.size()));
+                return std::string("QR code shown on the device screen.");
+            });
         mcp_server.AddTool("self.radio.get_status",
             "Get radio status.",
             PropertyList(), [this](const PropertyList& properties) -> ReturnValue {

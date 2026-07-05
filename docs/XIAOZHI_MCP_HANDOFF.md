@@ -2,6 +2,20 @@
 
 > Future Codex note: this file documents the Mac-side MCP services that work with the QDTech XiaoZhi firmware. It is intentionally secret-free. Do not commit endpoint token files, logs containing tokens, or local API keys.
 
+## 2026-07-05 NetEase NAS QR Login Bridge
+
+- Repository copy: `tools/nas/xiaozhi-ws-mcp.js`.
+- Local working copy: `/Users/tupi/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`.
+- The bridge extracts NetEase login QR data from `music.netease_login_qr` and login-required play results.
+- When QR data is available, it calls device tool `self.display.qrcode` with title `网易云扫码登录` and a short hint so the board can show the QR code directly.
+- QDTech firmware `v1.7.85` adds the matching `self.display.qrcode` display tool and LVGL QR support.
+
+UGREEN NAS warning:
+
+- The Docker container copy `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes and failed `node -c`.
+- The complete local/repository bridge is `24683` bytes.
+- Repair the NAS shared mount file before restarting `xiaozhi-netease-xiaocanglan` or `xiaozhi-netease-yuyu`.
+
 ## 2026-07-04 Music Playback Stability Notes
 
 - QDTech firmware `v1.7.76` now rejects likely preview-length MP3 URLs before playback. A URL around a few hundred KB is treated as a preview clip, not a real song.

@@ -2,6 +2,44 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-05 Handoff: v1.7.85 Music Vinyl UI and NetEase QR Login Prep
+
+Current target:
+
+- Firmware version target is now `v1.7.85`.
+- Built on macOS with ESP-IDF 5.5 from `/Users/tupi/qdtech_current_build_src`, build directory `/Users/tupi/qdtech_current_build`.
+- Release assets were generated in `releases/v1.7.85/`.
+- The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been flashed with `v1.7.85`; esptool hash verification passed.
+
+What changed:
+
+- Removed the `NetEase` wordmark from the Music page left visual panel.
+- Replaced the small coin/source icon with a black rotating vinyl GIF asset (`qd_music_vinyl.gif` / `qd_music_vinyl.c`).
+- Enlarged the vinyl visual and waveform bars so the left panel reads as a music animation instead of a source badge.
+- Added LVGL QR code support and a `self.display.qrcode` MCP tool so login URLs can be shown directly on the board.
+- Added a repository copy of the NAS NetEase bridge script at `tools/nas/xiaozhi-ws-mcp.js`. It includes QR-login extraction and calls `self.display.qrcode` when NetEase login QR data is returned.
+
+Verification so far:
+
+- Local bridge syntax check passed with `node -c /Users/tupi/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`.
+- `idf.py -B /Users/tupi/qdtech_current_build build` passed and CMake reported `App "xiaozhi" version: 1.7.85`.
+- App image size: `0x641270`; QDTech 7 MB OTA app slot has `0xbed90` bytes free.
+- Flash to `/dev/cu.usbmodem212401` completed with esptool hash verification.
+- Boot monitor confirmed `App version: 1.7.85`, `self.display.qrcode` MCP tool registration, touch init, audio codec startup, WiFi connection to `MERCURY_A59F`, and IP `192.168.1.104`.
+
+Release asset SHA256:
+
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `492ac57c39e4bb1c752dc513eceb0ff1e5c6d6373f238db2780dd4e490a773c2`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `436736aeb9dee6eac985be1adf542e27b02fd097eb81de4b51c2a62dd830cc28`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `aa46396c723de22bf7b17ad960c7c1e1776ccce273e127d1478c8238c43d1bfd`
+
+Important NAS status:
+
+- The UGREEN Docker container file `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes and `node -c /app/xiaozhi-ws-mcp.js` reported `SyntaxError: Unexpected string`.
+- The local complete bridge script is `24683` bytes.
+- Do not restart the NetEase Docker containers until `/app/xiaozhi-ws-mcp.js` is repaired and `node -c /app/xiaozhi-ws-mcp.js` passes inside the container.
+- Preferred repair path: copy `tools/nas/xiaozhi-ws-mcp.js` into the NAS shared mount `docker/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`, then restart both NetEase containers.
+
 ## 2026-07-04 Handoff: v1.7.84 Music Playback Failure Feedback
 
 Current target:

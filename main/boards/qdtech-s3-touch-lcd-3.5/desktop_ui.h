@@ -60,6 +60,8 @@ public:
     void SetPodcastProgress(int percent);
     void HandlePodcastSeekEvent(lv_event_t* event);
     void SetXiaozhiState(const char* state, const char* message, const char* emotion);
+    bool ShowQrCode(const char* content, const char* title, const char* hint);
+    void HideQrCode();
     void SetMusicLyric(const char* title, const char* artist, const char* line);
     void RememberMusicTrack(const char* title, const char* artist, const char* url,
                             const char* lyrics_json = nullptr);
@@ -365,6 +367,10 @@ private:
     lv_obj_t* xiaozhi_hint_label_ = nullptr;
     lv_obj_t* music_lyric_panel_ = nullptr;
     lv_obj_t* music_lyric_label_ = nullptr;
+    lv_obj_t* qr_overlay_ = nullptr;
+    lv_obj_t* qr_title_label_ = nullptr;
+    lv_obj_t* qr_hint_label_ = nullptr;
+    lv_obj_t* qr_code_ = nullptr;
 
     // Animation state
     std::string emotion_ = "neutral";
@@ -397,6 +403,7 @@ private:
     void CreateQuotePanel(lv_obj_t* parent);
     lv_obj_t* CreateAppTile(lv_obj_t* parent, uint8_t index, const char* cn, const char* en, const char* status, lv_color_t color);
     void CreateFaceUI(lv_obj_t* parent);
+    void CreateQrOverlay(lv_obj_t* root);
     void EnsureThemedFaceGif();
     void ReleaseThemedFaceGif();
     lv_obj_t* CreateButton(lv_obj_t* parent, const char* text, lv_event_cb_t cb);

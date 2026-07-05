@@ -26,6 +26,7 @@
 #include <ssid_manager.h>
 #include <wifi_station.h>
 #include <libs/gif/lv_gif.h>
+#include <libs/qrcode/lv_qrcode.h>
 
 #define TAG "DesktopUI"
 
@@ -47,6 +48,7 @@ LV_IMAGE_DECLARE(qd_weather_snow_scene);
 LV_IMAGE_DECLARE(qd_weather_fog_scene);
 LV_IMAGE_DECLARE(qd_weather_storm_scene);
 LV_IMAGE_DECLARE(qd_brand_earth);
+LV_IMAGE_DECLARE(qd_music_vinyl);
 LV_IMAGE_DECLARE(qd_podcast_avatar);
 LV_IMAGE_DECLARE(qd_cat_daily);
 LV_IMAGE_DECLARE(qd_classic_daily);
@@ -734,6 +736,12 @@ static void navigate_back_cb(lv_event_t* event) {
     }
 }
 
+static void qr_overlay_close_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->HideQrCode();
+    }
+}
+
 static void show_apps_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
         g_desktop_ui->ShowPage(DesktopPage::APPS);
@@ -1398,6 +1406,7 @@ void DesktopUI::Create() {
     CreateNetworkPage(root);
     CreateSettingsPage(root);
     CreateDiagnosticsPage(root);
+    CreateQrOverlay(root);
 
     // Start with main page
     ShowPage(DesktopPage::MAIN);
@@ -2850,39 +2859,24 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_add_event_cb(cover, music_face_cb, LV_EVENT_CLICKED, NULL);
     add_gesture_bubble(cover);
 
-    music_cover_disc_ = circle(cover, 64,
-                               is_tupi_warm_theme() ? COLOR_SURFACE_2 :
-                               themed_color(LV_COLOR_MAKE(0x1b, 0x24, 0x32), COLOR_CREAM),
-                               LV_OPA_COVER);
-    lv_obj_set_style_border_color(music_cover_disc_, COLOR_GOLD, 0);
-    lv_obj_set_style_border_width(music_cover_disc_, 2, 0);
-    lv_obj_align(music_cover_disc_, LV_ALIGN_TOP_MID, 0, 12);
-    lv_obj_t* disc_hole = circle(music_cover_disc_, 16,
-                                 is_tupi_warm_theme() ? COLOR_BG :
-                                 themed_color(LV_COLOR_MAKE(0x09, 0x0c, 0x13), COLOR_BG),
-                                 LV_OPA_COVER);
-    lv_obj_center(disc_hole);
-    music_cover_note_ = label_en(music_cover_disc_, "♪", &style_gold);
-    lv_obj_set_style_text_font(music_cover_note_, &lv_font_montserrat_20, 0);
-    lv_obj_align(music_cover_note_, LV_ALIGN_CENTER, 0, -2);
+    music_cover_disc_ = lv_gif_create(cover);
+    lv_gif_set_src(music_cover_disc_, &qd_music_vinyl);
+    lv_obj_set_size(music_cover_disc_, 84, 84);
+    lv_obj_set_style_bg_opa(music_cover_disc_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(music_cover_disc_, 0, 0);
+    lv_obj_align(music_cover_disc_, LV_ALIGN_TOP_MID, 0, 2);
 
-    static constexpr int16_t kBarX[] = {18, 32, 46, 60};
+    static constexpr int16_t kBarX[] = {20, 40, 60, 80};
     for (size_t i = 0; i < sizeof(music_cover_bars_) / sizeof(music_cover_bars_[0]); ++i) {
         lv_obj_t* bar = lv_obj_create(cover);
         lv_obj_remove_style_all(bar);
-        lv_obj_set_size(bar, 6, 13 + static_cast<int16_t>(i) * 3);
-        lv_obj_set_style_radius(bar, 4, 0);
+        lv_obj_set_size(bar, 9, 18 + static_cast<int16_t>(i) * 4);
+        lv_obj_set_style_radius(bar, 5, 0);
         lv_obj_set_style_bg_color(bar, i % 2 == 0 ? COLOR_GOLD : COLOR_GREEN, 0);
         lv_obj_set_style_bg_opa(bar, LV_OPA_70, 0);
-        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -16);
+        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -10);
         music_cover_bars_[i] = bar;
     }
-
-    lv_obj_t* source = label_en(cover, "NetEase", &style_muted);
-    lv_obj_set_style_text_font(source, &lv_font_montserrat_12, 0);
-    lv_obj_set_width(source, 74);
-    lv_obj_set_style_text_align(source, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(source, LV_ALIGN_BOTTOM_RIGHT, -12, -12);
 
     lv_obj_t* panel = CreatePanel(music_page_, 220, 112, 158, 18);
     lv_obj_set_style_bg_color(panel,
@@ -3354,6 +3348,93 @@ void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
     lv_obj_center(music_lyric_label_);
     lv_obj_clear_flag(music_lyric_label_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_move_foreground(music_lyric_panel_);
+}
+
+void DesktopUI::CreateQrOverlay(lv_obj_t* root) {
+    qr_overlay_ = lv_obj_create(root);
+    lv_obj_remove_style_all(qr_overlay_);
+    lv_obj_set_size(qr_overlay_, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(qr_overlay_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(qr_overlay_, LV_OPA_90, 0);
+    lv_obj_clear_flag(qr_overlay_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(qr_overlay_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(qr_overlay_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(qr_overlay_, qr_overlay_close_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t* card = lv_obj_create(qr_overlay_);
+    lv_obj_remove_style_all(card);
+    lv_obj_set_size(card, 328, 304);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_radius(card, 12, 0);
+    lv_obj_set_style_bg_color(card, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, 0);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_CLICKABLE);
+
+    qr_title_label_ = label_en(card, "Scan to login", &style_en);
+    lv_obj_set_width(qr_title_label_, 300);
+    lv_obj_set_style_text_font(qr_title_label_, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(qr_title_label_, LV_COLOR_MAKE(0x20, 0x24, 0x28), 0);
+    lv_obj_set_style_text_align(qr_title_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(qr_title_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(qr_title_label_, LV_ALIGN_TOP_MID, 0, 2);
+
+    qr_code_ = lv_qrcode_create(card);
+    lv_qrcode_set_size(qr_code_, 214);
+    lv_qrcode_set_dark_color(qr_code_, lv_color_black());
+    lv_qrcode_set_light_color(qr_code_, lv_color_white());
+    lv_obj_align(qr_code_, LV_ALIGN_TOP_MID, 0, 38);
+
+    qr_hint_label_ = label_en(card, "Tap anywhere to close", &style_en);
+    lv_obj_set_width(qr_hint_label_, 292);
+    lv_obj_set_style_text_font(qr_hint_label_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(qr_hint_label_, LV_COLOR_MAKE(0x4b, 0x55, 0x63), 0);
+    lv_obj_set_style_text_align(qr_hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(qr_hint_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(qr_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -2);
+}
+
+bool DesktopUI::ShowQrCode(const char* content, const char* title, const char* hint) {
+    if (!qr_overlay_ || !qr_code_ || !content || !content[0]) {
+        return false;
+    }
+
+    const size_t content_len = std::strlen(content);
+    if (content_len > 700) {
+        ESP_LOGW(TAG, "ShowQrCode rejected: content too long len=%u",
+                 static_cast<unsigned>(content_len));
+        return false;
+    }
+
+    const lv_result_t result = lv_qrcode_update(qr_code_, content, content_len);
+    if (result != LV_RESULT_OK) {
+        ESP_LOGW(TAG, "ShowQrCode failed len=%u", static_cast<unsigned>(content_len));
+        return false;
+    }
+
+    if (qr_title_label_) {
+        lv_label_set_text(qr_title_label_, (title && title[0]) ? title : "扫码登录");
+    }
+    if (qr_hint_label_) {
+        lv_label_set_text(qr_hint_label_,
+                          (hint && hint[0]) ? hint : "用手机扫码；点屏幕关闭");
+    }
+
+    ShowPage(DesktopPage::XIAOZHI);
+    lv_obj_clear_flag(qr_overlay_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(qr_overlay_);
+    lv_obj_invalidate(qr_overlay_);
+    ESP_LOGI(TAG, "ShowQrCode len=%u", static_cast<unsigned>(content_len));
+    return true;
+}
+
+void DesktopUI::HideQrCode() {
+    if (!qr_overlay_) {
+        return;
+    }
+    lv_obj_add_flag(qr_overlay_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(qr_overlay_);
 }
 
 // ===== Network page =====
@@ -5037,6 +5118,10 @@ void DesktopUI::ReloadUserProfile() {
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
+    qr_overlay_ = nullptr;
+    qr_title_label_ = nullptr;
+    qr_hint_label_ = nullptr;
+    qr_code_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
     diagnostics_page_ = nullptr;
@@ -5086,6 +5171,10 @@ void DesktopUI::CycleTheme() {
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
+    qr_overlay_ = nullptr;
+    qr_title_label_ = nullptr;
+    qr_hint_label_ = nullptr;
+    qr_code_ = nullptr;
     network_page_ = nullptr;
     settings_page_ = nullptr;
     diagnostics_page_ = nullptr;
@@ -6165,24 +6254,20 @@ void DesktopUI::MusicCoverTimerCb(lv_timer_t* timer) {
                         self->music_line_.find("Replaying") != std::string::npos;
     const uint8_t phase = self->music_cover_phase_;
     if (self->music_cover_disc_) {
-        const int16_t wobble = active ? static_cast<int16_t>((phase % 4) < 2 ? -1 : 1) : 0;
-        lv_obj_align(self->music_cover_disc_, LV_ALIGN_TOP_MID, wobble, 14);
-        lv_obj_set_style_border_opa(self->music_cover_disc_, active ? LV_OPA_90 : LV_OPA_50, 0);
-    }
-    if (self->music_cover_note_) {
-        lv_obj_set_style_opa(self->music_cover_note_, active ? LV_OPA_COVER : LV_OPA_60, 0);
+        lv_obj_align(self->music_cover_disc_, LV_ALIGN_TOP_MID, 0, 2);
+        lv_obj_set_style_opa(self->music_cover_disc_, active ? LV_OPA_COVER : LV_OPA_70, 0);
     }
 
-    static constexpr int16_t kBarX[] = {22, 38, 54, 70};
-    static constexpr uint8_t kWave[] = {12, 24, 34, 20, 28, 16, 30, 22};
+    static constexpr int16_t kBarX[] = {20, 40, 60, 80};
+    static constexpr uint8_t kWave[] = {18, 32, 44, 26, 38, 22, 40, 28};
     for (size_t i = 0; i < sizeof(self->music_cover_bars_) / sizeof(self->music_cover_bars_[0]); ++i) {
         lv_obj_t* bar = self->music_cover_bars_[i];
         if (!bar) {
             continue;
         }
-        const int16_t height = active ? kWave[(phase + i * 2) % (sizeof(kWave) / sizeof(kWave[0]))] : 12;
-        lv_obj_set_size(bar, 7, height);
-        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -32);
+        const int16_t height = active ? kWave[(phase + i * 2) % (sizeof(kWave) / sizeof(kWave[0]))] : 18;
+        lv_obj_set_size(bar, 9, height);
+        lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -10);
         lv_obj_set_style_bg_opa(bar, active ? LV_OPA_80 : LV_OPA_30, 0);
     }
 }

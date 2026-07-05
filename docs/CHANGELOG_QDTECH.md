@@ -2,6 +2,32 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-05: v1.7.85 Music Vinyl UI and QR Login Prep
+
+Scope:
+
+- Bumped firmware version to `1.7.85`.
+- Removed the `NetEase` label from the Music page.
+- Added a black rotating vinyl GIF asset and made the Music page left-side visual/waveform area larger.
+- Added LVGL QR code support plus `self.display.qrcode` so MCP services can display login QR URLs on the board.
+- Added `tools/nas/xiaozhi-ws-mcp.js` as the repository copy of the NetEase NAS bridge script with QR-login forwarding.
+
+Verification:
+
+- Local NetEase bridge syntax check passed with `node -c`.
+- `idf.py -B /Users/tupi/qdtech_current_build build` passed from `/Users/tupi/qdtech_current_build_src`.
+- CMake reported `App "xiaozhi" version: 1.7.85`.
+- `xiaozhi.bin` size is `0x641270`; QDTech 7 MB app slot has `0xbed90` bytes free.
+- Full flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
+- Boot monitor confirmed `App version: 1.7.85`, `self.display.qrcode` MCP tool registration, WiFi IP `192.168.1.104`, and normal early audio/WiFi startup.
+- NAS Docker copy still needs repair/verification because `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes.
+
+Release assets:
+
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `492ac57c39e4bb1c752dc513eceb0ff1e5c6d6373f238db2780dd4e490a773c2`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `436736aeb9dee6eac985be1adf542e27b02fd097eb81de4b51c2a62dd830cc28`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `aa46396c723de22bf7b17ad960c7c1e1776ccce273e127d1478c8238c43d1bfd`
+
 ## 2026-07-04: v1.7.83 Music Page Premium Subtitle Layout
 
 Scope:
