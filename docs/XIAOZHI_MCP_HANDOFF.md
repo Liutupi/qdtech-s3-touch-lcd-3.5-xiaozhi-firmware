@@ -10,11 +10,58 @@
 - When QR data is available, it calls device tool `self.display.qrcode` with title `网易云扫码登录` and a short hint so the board can show the QR code directly.
 - QDTech firmware `v1.7.85` adds the matching `self.display.qrcode` display tool and LVGL QR support.
 
-UGREEN NAS warning:
+## 2026-07-07 NetEase NAS Private FM and Music Controls
 
-- The Docker container copy `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes and failed `node -c`.
-- The complete local/repository bridge is `24683` bytes.
-- Repair the NAS shared mount file before restarting `xiaozhi-netease-xiaocanglan` or `xiaozhi-netease-yuyu`.
+Repository-safe deployment copies:
+
+- `tools/nas/xiaozhi-ws-mcp.js`
+- `tools/nas/netease-mcp.js`
+- `tools/nas/README-小智网易云MCP.md`
+
+NAS runtime path:
+
+- `/volume1/docker/xiaozhi-mcp-services/netease-music`
+
+NAS Docker containers:
+
+- `xiaozhi-netease-yuyu`
+- `xiaozhi-netease-xiaocanglan`
+
+Successful deployment pattern:
+
+1. Copy the three repository files above into the NAS runtime path.
+2. Run `node --check netease-mcp.js` and `node --check xiaozhi-ws-mcp.js` inside a Node container mounted at that path.
+3. Restart both NetEase containers.
+4. Check logs for `music api listening`, `connected to xiaozhi mcp`, and `<< tools/list`.
+
+Private FM behavior:
+
+- Exposed MCP tool: `music.netease_private_fm`.
+- Stop tool: `music.netease_private_fm_stop`.
+- Default behavior is continuous autoplay.
+- When already playing and the model repeats `music.netease_private_fm`, the bridge returns `private_fm_already_playing` and does not send a new `self.music.play_url`; this prevents the current song from being cut off.
+- To force a fresh random song, pass `restart:true`.
+- Private FM uses `NETEASE_PRIVATE_FM_LEVELS=standard,higher,exhigh` by default for steadier ESP32 playback.
+- Normal point-singing still uses `NETEASE_MUSIC_LEVELS`.
+
+Expected private FM log sequence:
+
+```text
+private fm song selected ...
+>> tools/call self.music.play_url {"title":"...","artist":"...","has_url":true,"has_lyrics":true,...}
+<< self.music.play_url sent
+private fm autoplay scheduled ...
+private fm autoplay next fetching
+private fm autoplay next selected ...
+>> tools/call self.music.play_url {"title":"下一首","artist":"...","has_url":true,...}
+```
+
+Firmware note:
+
+- QDTech firmware `v1.7.85` adds Music page `Pause`, `Play`, and `Next` buttons below `Back`.
+- `Pause` stops the current music stream and keeps the current URL context.
+- `Play` reopens the current stream.
+- `Next` advances the current radio/music playlist path.
 
 ## 2026-07-04 Music Playback Stability Notes
 

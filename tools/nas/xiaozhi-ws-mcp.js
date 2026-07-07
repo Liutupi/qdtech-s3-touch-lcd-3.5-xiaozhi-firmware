@@ -8,6 +8,7 @@ const os = require('os');
 const WebSocket = require('ws');
 const {
   searchPlayable,
+  playPrivateFm,
   searchSongs,
   artistsOf,
   createNeteaseLoginQr,
@@ -25,6 +26,11 @@ const deviceMusicHost = process.env.DEVICE_MUSIC_HOST || lyricDeviceHost || '';
 const deviceMusicPort = Number(process.env.DEVICE_MUSIC_PORT || lyricUdpPort);
 const lyricUdpSocket = dgram.createSocket('udp4');
 let lyricTimers = [];
+let privateFmAutoplay = false;
+let privateFmTimer = null;
+let privateFmGeneration = 0;
+let privateFmCurrent = null;
+let privateFmStartedAtMs = 0;
 let activeWebSocket = null;
 let connectionStartedAt = 0;
 let lastInboundAt = Date.now();
@@ -80,6 +86,32 @@ const tools = [
         keyword: { type: 'string', description: '搜索关键词，例如 晴天 周杰伦' },
       },
       required: ['keyword'],
+    },
+  },
+  {
+    name: 'music.netease_private_fm',
+    description:
+      '从网易云账号的私人漫游/私人 FM 自动推荐歌曲并连续播放。适合用户说“不知道听什么”“随便放点歌”“私人漫游”。成功后必须调用设备端 self.music.play_url(title, artist, url, lyrics_json)，并在歌曲结束后自动播放下一首。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        continuous: {
+          type: 'boolean',
+          description: '是否连续播放；默认 true。设为 false 时只播放一首私人 FM。',
+        },
+        restart: {
+          type: 'boolean',
+          description: '是否强制重新随机一首；默认 false，连续播放中重复调用不会切歌。',
+        },
+      },
+    },
+  },
+  {
+    name: 'music.netease_private_fm_stop',
+    description: '停止网易云私人漫游连续播放，取消自动播放下一首。',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
   {
@@ -329,6 +361,7 @@ function formatToolResult(result) {
     title: result.title,
     artist: result.artist,
     source: result.source,
+    mode: result.mode,
     song_id: result.song_id,
     audio_url: result.audio_url || result.url,
     url: result.url,
@@ -442,6 +475,166 @@ function stopLyricSync() {
   lyricTimers = [];
 }
 
+function stopPrivateFmAutoplay(reason = '') {
+  privateFmAutoplay = false;
+  privateFmGeneration += 1;
+  privateFmCurrent = null;
+  privateFmStartedAtMs = 0;
+  if (privateFmTimer) {
+    clearTimeout(privateFmTimer);
+    privateFmTimer = null;
+  }
+  if (reason) {
+    console.log('private fm autoplay stopped', JSON.stringify({ reason }));
+  }
+}
+
+function setPrivateFmCurrent(playResult) {
+  if (!playResult?.success) {
+    return;
+  }
+  privateFmCurrent = playResult;
+  privateFmStartedAtMs = Date.now();
+}
+
+function privateFmAlreadyPlayingResult() {
+  return {
+    success: true,
+    source: 'netease',
+    status: 'private_fm_already_playing',
+    mode: 'private_fm',
+    title: privateFmCurrent?.title || '',
+    artist: privateFmCurrent?.artist || '',
+    song_id: privateFmCurrent?.song_id || '',
+    started_at_ms: privateFmStartedAtMs,
+    message: '网易云私人漫游已经在连续播放中，不重复切歌。',
+  };
+}
+
+function privateFmDelayMs(playResult) {
+  const durationMs = Number(playResult?.duration_ms || 0);
+  if (durationMs > 30000) {
+    return Math.max(30000, durationMs + 2500);
+  }
+  return 240000;
+}
+
+function toolResultFromPlayResult(playResult) {
+  return {
+    content: [{ type: 'text', text: formatToolResult(playResult) }],
+    isError: !playResult?.success,
+    playResult,
+  };
+}
+
+function logPrivateFmResult(result, prefix = 'private fm song selected') {
+  if (!result?.success) {
+    console.log('private fm unavailable', JSON.stringify({
+      code: result?.code || '',
+      message: result?.message || '',
+    }));
+    return;
+  }
+  const lyricBytes = lyricsJsonBytes(result.play_url_arguments?.lyrics_json);
+  const hasLyrics = hasUsableLyrics(result.play_url_arguments?.lyrics_json, result.lyric_count);
+  console.log(prefix, JSON.stringify({
+    song_id: result.song_id,
+    title: result.title,
+    artist: result.artist,
+    duration_ms: result.duration_ms || 0,
+    lyric_count: result.lyric_count || 0,
+    has_lyrics: hasLyrics,
+    lyrics_json_bytes: lyricBytes,
+    lyrics_status: result.lyrics_status,
+    lyrics_source_song_id: result.lyrics_source_song_id,
+    lyrics_source_title: result.lyrics_source_title,
+  }));
+  if (!hasLyrics) {
+    console.log('lyrics unavailable', JSON.stringify({
+      song_id: result.song_id,
+      title: result.title,
+      reason: result.lyrics_reason || '网易云无歌词/取歌词失败/解析失败',
+      lyrics_json_bytes: lyricBytes,
+    }));
+  }
+}
+
+function schedulePrivateFmNext(ws, playResult) {
+  if (!privateFmAutoplay || !playResult?.success) {
+    return;
+  }
+  const generation = privateFmGeneration;
+  const delayMs = privateFmDelayMs(playResult);
+  if (privateFmTimer) {
+    clearTimeout(privateFmTimer);
+  }
+  privateFmTimer = setTimeout(async () => {
+    privateFmTimer = null;
+    if (!privateFmAutoplay || generation !== privateFmGeneration || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    try {
+      console.log('private fm autoplay next fetching');
+      stopLyricSync();
+      const next = await playPrivateFm();
+      logPrivateFmResult(next, 'private fm autoplay next selected');
+      if (!next.success) {
+        schedulePrivateFmRetry(ws, next);
+        return;
+      }
+      setPrivateFmCurrent(next);
+      const toolResult = toolResultFromPlayResult(next);
+      await callDevicePlayUrl(ws, toolResult);
+      setTimeout(() => startLyricSync(ws, next), 1000);
+      schedulePrivateFmNext(ws, next);
+    } catch (error) {
+      console.error('private fm autoplay next failed', error.message || String(error));
+      schedulePrivateFmRetry(ws, { message: error.message || String(error) });
+    }
+  }, delayMs);
+  console.log('private fm autoplay scheduled', JSON.stringify({
+    title: playResult.title,
+    artist: playResult.artist,
+    delay_ms: delayMs,
+  }));
+}
+
+function schedulePrivateFmRetry(ws, result) {
+  if (!privateFmAutoplay) {
+    return;
+  }
+  const generation = privateFmGeneration;
+  if (privateFmTimer) {
+    clearTimeout(privateFmTimer);
+  }
+  privateFmTimer = setTimeout(async () => {
+    privateFmTimer = null;
+    if (!privateFmAutoplay || generation !== privateFmGeneration || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    try {
+      const next = await playPrivateFm();
+      logPrivateFmResult(next, 'private fm autoplay retry selected');
+      if (!next.success) {
+        schedulePrivateFmRetry(ws, next);
+        return;
+      }
+      setPrivateFmCurrent(next);
+      const toolResult = toolResultFromPlayResult(next);
+      await callDevicePlayUrl(ws, toolResult);
+      setTimeout(() => startLyricSync(ws, next), 1000);
+      schedulePrivateFmNext(ws, next);
+    } catch (error) {
+      console.error('private fm autoplay retry failed', error.message || String(error));
+      schedulePrivateFmRetry(ws, { message: error.message || String(error) });
+    }
+  }, 30000);
+  console.log('private fm autoplay retry scheduled', JSON.stringify({
+    reason: result?.message || result?.code || 'unknown',
+    delay_ms: 30000,
+  }));
+}
+
 function safeLyricLine(line) {
   return String(line || '')
     .replace(/\s+/g, ' ')
@@ -523,6 +716,7 @@ function startLyricSync(ws, playResult) {
 
 async function handleTool(name, args) {
   if (name === 'music.netease_play') {
+    stopPrivateFmAutoplay('manual_netease_play');
     stopLyricSync();
     const result = await searchPlayable(String(args.song || args.title || ''), String(args.artist || ''));
     if (result.success) {
@@ -552,6 +746,51 @@ async function handleTool(name, args) {
       content: result.login_qr ? withLoginQrContent(result) : [{ type: 'text', text: formatToolResult(result) }],
       isError: !result.success,
       playResult: result,
+    };
+  }
+
+  if (name === 'music.netease_private_fm') {
+    if (privateFmAutoplay && privateFmCurrent?.success && args.restart !== true) {
+      const result = privateFmAlreadyPlayingResult();
+      console.log('private fm duplicate request ignored', JSON.stringify({
+        title: result.title,
+        artist: result.artist,
+        song_id: result.song_id,
+        started_at_ms: result.started_at_ms,
+      }));
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        isError: false,
+      };
+    }
+
+    stopLyricSync();
+    privateFmAutoplay = args.continuous !== false;
+    privateFmGeneration += 1;
+    const result = await playPrivateFm();
+    logPrivateFmResult(result);
+    if (result.success) {
+      setPrivateFmCurrent(result);
+    }
+    return {
+      content: result.login_qr ? withLoginQrContent(result) : [{ type: 'text', text: formatToolResult(result) }],
+      isError: !result.success,
+      playResult: result,
+    };
+  }
+
+  if (name === 'music.netease_private_fm_stop') {
+    stopPrivateFmAutoplay('tool_call');
+    stopLyricSync();
+    const result = {
+      success: true,
+      source: 'netease',
+      status: 'private_fm_stopped',
+      message: '已停止网易云私人漫游连续播放。',
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      isError: false,
     };
   }
 
@@ -669,12 +908,15 @@ function connect() {
           console.log('tool result text', text.slice(0, 200));
         }
         send(ws, message.id, toMcpResult(result));
-        if (message.params?.name === 'music.netease_play') {
+        if (message.params?.name === 'music.netease_play' || message.params?.name === 'music.netease_private_fm') {
           setTimeout(() => {
             callDevicePlayUrl(ws, result);
             callDeviceQrCode(ws, result);
             if (result.playResult?.success) {
               setTimeout(() => startLyricSync(ws, result.playResult), 1000);
+              if (message.params?.name === 'music.netease_private_fm') {
+                schedulePrivateFmNext(ws, result.playResult);
+              }
             }
           }, 100);
         } else if (message.params?.name === 'music.netease_login_qr') {
@@ -715,6 +957,7 @@ function restartByWatchdog(reason, details) {
   }
   restartingForWatchdog = true;
   console.error('mcp watchdog restart', JSON.stringify({ reason, ...details }));
+  stopPrivateFmAutoplay(`watchdog:${reason}`);
   stopLyricSync();
 
   if (watchdogExitOnStale) {

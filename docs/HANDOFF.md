@@ -2,43 +2,52 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
-## 2026-07-05 Handoff: v1.7.85 Music Vinyl UI and NetEase QR Login Prep
+## 2026-07-07 Handoff: v1.7.85 Music Controls and NAS Private FM
 
 Current target:
 
 - Firmware version target is now `v1.7.85`.
-- Built on macOS with ESP-IDF 5.5 from `/Users/tupi/qdtech_current_build_src`, build directory `/Users/tupi/qdtech_current_build`.
+- Built on macOS with ESP-IDF 5.5 from `/tmp/qdtech-xiaozhi-buildcheck`, build directory `/tmp/qdtech-xiaozhi-buildcheck/build`.
 - Release assets were generated in `releases/v1.7.85/`.
 - The connected QDTech ESP32-S3 board on `/dev/cu.usbmodem212401` has been flashed with `v1.7.85`; esptool hash verification passed.
 
 What changed:
 
+- Kept the 2026-07-05 Music vinyl UI and `self.display.qrcode` NetEase QR-login prep.
 - Removed the `NetEase` wordmark from the Music page left visual panel.
 - Replaced the small coin/source icon with a black rotating vinyl GIF asset (`qd_music_vinyl.gif` / `qd_music_vinyl.c`).
 - Enlarged the vinyl visual and waveform bars so the left panel reads as a music animation instead of a source badge.
 - Added LVGL QR code support and a `self.display.qrcode` MCP tool so login URLs can be shown directly on the board.
-- Added a repository copy of the NAS NetEase bridge script at `tools/nas/xiaozhi-ws-mcp.js`. It includes QR-login extraction and calls `self.display.qrcode` when NetEase login QR data is returned.
+- Added Music page `Pause`, `Play`, and `Next` buttons below `Back`.
+- Added `RadioService::Pause()` so the Music page can pause the current custom URL stream without clearing the current song context; `Play` reopens/resumes the current stream and `Next` advances the URL playlist/NetEase private FM flow.
+- Updated repository NAS NetEase copies in `tools/nas/`: `xiaozhi-ws-mcp.js`, `netease-mcp.js`, and `README-小智网易云MCP.md`.
+- NetEase private FM now supports continuous autoplay. Repeated `music.netease_private_fm` calls while already playing return `private_fm_already_playing` and do not push another `self.music.play_url`, preventing the current song from being cut off.
+- Private FM prefers `NETEASE_PRIVATE_FM_LEVELS=standard,higher,exhigh` by default for steadier ESP32 playback, while normal song search can still use `NETEASE_MUSIC_LEVELS`.
 
 Verification so far:
 
-- Local bridge syntax check passed with `node -c /Users/tupi/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`.
-- `idf.py -B /Users/tupi/qdtech_current_build build` passed and CMake reported `App "xiaozhi" version: 1.7.85`.
-- App image size: `0x641270`; QDTech 7 MB OTA app slot has `0xbed90` bytes free.
+- Local bridge syntax checks passed with `node --check tools/nas/xiaozhi-ws-mcp.js` and `node --check tools/nas/netease-mcp.js`.
+- `idf.py build` and `idf.py merge-bin` passed from `/tmp/qdtech-xiaozhi-buildcheck`.
+- CMake reported `App "xiaozhi" version: 1.7.85`.
+- App image size: `0x642180`; QDTech 7 MB OTA app slot has `0xbde80` bytes free.
+- `merge-bin` generated `merged-binary.bin`, size `0x742180`.
 - Flash to `/dev/cu.usbmodem212401` completed with esptool hash verification.
-- Boot monitor confirmed `App version: 1.7.85`, `self.display.qrcode` MCP tool registration, touch init, audio codec startup, WiFi connection to `MERCURY_A59F`, and IP `192.168.1.104`.
+- Boot monitor confirmed the flashed firmware was running, weather updated, battery was reported, the user could open Apps and the Music page, and the new Music page was live.
+- NAS deployment succeeded through UGREEN Docker API using a temporary sync container. The temp container printed `NETEASE_PRIVATE_FM_STABLE_DEPLOY_OK`, then both `xiaozhi-netease-yuyu` and `xiaozhi-netease-xiaocanglan` were restarted successfully.
+- NAS logs confirmed both NetEase containers were running and connected to XiaoZhi MCP. Yuyu logs showed private FM autoplay fetching the next song, `>> tools/call self.music.play_url`, `has_lyrics:true`, and local UDP lyric display.
 
 Release asset SHA256:
 
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `492ac57c39e4bb1c752dc513eceb0ff1e5c6d6373f238db2780dd4e490a773c2`
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `436736aeb9dee6eac985be1adf542e27b02fd097eb81de4b51c2a62dd830cc28`
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `aa46396c723de22bf7b17ad960c7c1e1776ccce273e127d1478c8238c43d1bfd`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `03739449055d875cb55052c42fa5fbab87eeeb38c9eefa2567d3e7facabbbbb1`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `7a63a39cae9833610b515f3f90985d363ff74447de1f225bdfbef882fddb2af4`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `66a9ad96555caa6c67b98603dd0c6539d41461a5f45374fa98398afe81e8f8fc`
 
 Important NAS status:
 
-- The UGREEN Docker container file `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes and `node -c /app/xiaozhi-ws-mcp.js` reported `SyntaxError: Unexpected string`.
-- The local complete bridge script is `24683` bytes.
-- Do not restart the NetEase Docker containers until `/app/xiaozhi-ws-mcp.js` is repaired and `node -c /app/xiaozhi-ws-mcp.js` passes inside the container.
-- Preferred repair path: copy `tools/nas/xiaozhi-ws-mcp.js` into the NAS shared mount `docker/xiaozhi-mcp-services/netease-music/xiaozhi-ws-mcp.js`, then restart both NetEase containers.
+- NAS shared path is `/volume1/docker/xiaozhi-mcp-services/netease-music`.
+- Running containers are `xiaozhi-netease-yuyu` and `xiaozhi-netease-xiaocanglan`.
+- Safe deployment path: copy the three repo files from `tools/nas/` into that NAS shared path, run `node --check netease-mcp.js` and `node --check xiaozhi-ws-mcp.js`, then restart both containers.
+- Expected private FM logs: `private fm song selected`, `private fm autoplay scheduled`, `private fm autoplay next selected`, `>> tools/call self.music.play_url`, and lyric UDP lines.
 
 ## 2026-07-04 Handoff: v1.7.84 Music Playback Failure Feedback
 

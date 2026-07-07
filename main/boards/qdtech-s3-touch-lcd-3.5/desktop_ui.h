@@ -48,6 +48,8 @@ public:
     void CycleTheme();
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
+    void SetMusicActions(std::function<void()> play, std::function<void()> pause,
+                         std::function<void()> next);
     void SetRadioState(const char* station, const char* state, const char* meta);
     void SetPodcastActions(std::function<void()> play_pause, std::function<void()> stop,
                            std::function<void()> next, std::function<void()> prev,
@@ -108,6 +110,9 @@ public:
     std::function<void()> radio_stop_;
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
+    std::function<void()> music_play_;
+    std::function<void()> music_pause_;
+    std::function<void()> music_next_;
     std::function<void()> podcast_play_pause_;
     std::function<void()> podcast_stop_;
     std::function<void()> podcast_next_;

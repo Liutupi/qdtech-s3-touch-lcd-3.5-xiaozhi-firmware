@@ -991,6 +991,24 @@ static void music_stop_cb(lv_event_t* event) {
     }
 }
 
+static void music_pause_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_pause_) {
+        g_desktop_ui->music_pause_();
+    }
+}
+
+static void music_play_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_play_) {
+        g_desktop_ui->music_play_();
+    }
+}
+
+static void music_next_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_next_) {
+        g_desktop_ui->music_next_();
+    }
+}
+
 static void music_recent_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
         const auto index = reinterpret_cast<uintptr_t>(lv_event_get_user_data(event));
@@ -2847,6 +2865,27 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_size(back, 52, 22);
     lv_obj_set_style_text_font(lv_obj_get_child(back, 0), &lv_font_montserrat_12, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -14, 8);
+
+    lv_obj_t* pause = CreateButton(music_page_, "Pause", music_pause_cb);
+    lv_obj_set_size(pause, 52, 22);
+    lv_obj_set_style_radius(pause, 8, 0);
+    lv_obj_set_style_border_color(pause, COLOR_GOLD, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(pause, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(pause, LV_ALIGN_TOP_RIGHT, -14, 36);
+
+    lv_obj_t* play = CreateButton(music_page_, "Play", music_play_cb);
+    lv_obj_set_size(play, 52, 22);
+    lv_obj_set_style_radius(play, 8, 0);
+    lv_obj_set_style_border_color(play, COLOR_GREEN, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(play, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(play, LV_ALIGN_TOP_RIGHT, -14, 64);
+
+    lv_obj_t* next = CreateButton(music_page_, "Next", music_next_cb);
+    lv_obj_set_size(next, 52, 22);
+    lv_obj_set_style_radius(next, 8, 0);
+    lv_obj_set_style_border_color(next, COLOR_PURPLE, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(next, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(next, LV_ALIGN_TOP_RIGHT, -14, 92);
 
     lv_obj_t* cover = CreatePanel(music_page_, 128, 112, 18, 18);
     lv_obj_set_style_bg_color(cover,
@@ -5597,9 +5636,16 @@ void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<
     radio_prev_ = std::move(prev);
 }
 
+void DesktopUI::SetMusicActions(std::function<void()> play, std::function<void()> pause,
+                                std::function<void()> next) {
+    music_play_ = std::move(play);
+    music_pause_ = std::move(pause);
+    music_next_ = std::move(next);
+}
+
 void DesktopUI::SetMusicReplayCallback(std::function<void(const std::string& title,
-                                                           const std::string& artist,
-                                                           const std::string& url,
+                                                          const std::string& artist,
+                                                          const std::string& url,
                                                            const std::string& lyrics_json)> callback) {
     music_replay_cb_ = std::move(callback);
 }

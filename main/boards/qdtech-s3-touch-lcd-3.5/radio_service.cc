@@ -564,6 +564,21 @@ void RadioService::Play() {
     }
 }
 
+void RadioService::Pause() {
+    if (!play_requested_) {
+        ESP_LOGI(TAG, "Pause requested (already paused)");
+        SetUi("Paused", "Music paused");
+        return;
+    }
+    ESP_LOGI(TAG, "Pause requested");
+    play_requested_ = false;
+    stop_requested_ = true;
+    reconnect_attempt_ = 0;
+    stream_generation_.fetch_add(1, std::memory_order_relaxed);
+    Application::GetInstance().SetExternalAudioActive(false);
+    SetUi("Paused", "Music paused");
+}
+
 void RadioService::Stop() {
     ESP_LOGI(TAG, "Stop requested");
     stop_requested_ = true;

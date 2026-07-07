@@ -1890,6 +1890,10 @@ private:
             [this]() { radio_service_.Stop(); },
             [this]() { radio_service_.Next(); },
             [this]() { radio_service_.Prev(); });
+        desktop_ui->SetMusicActions(
+            [this]() { radio_service_.Play(); },
+            [this]() { radio_service_.Pause(); },
+            [this]() { radio_service_.Next(); });
         desktop_ui->SetMusicReplayCallback([this](const std::string& title,
                                                   const std::string& artist,
                                                   const std::string& url,

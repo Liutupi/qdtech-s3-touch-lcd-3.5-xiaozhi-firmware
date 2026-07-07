@@ -2,7 +2,7 @@
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
 
-## 2026-07-05: v1.7.85 Music Vinyl UI and QR Login Prep
+## 2026-07-07: v1.7.85 Music Controls, NAS Private FM, and QR Login Prep
 
 Scope:
 
@@ -10,23 +10,31 @@ Scope:
 - Removed the `NetEase` label from the Music page.
 - Added a black rotating vinyl GIF asset and made the Music page left-side visual/waveform area larger.
 - Added LVGL QR code support plus `self.display.qrcode` so MCP services can display login QR URLs on the board.
-- Added `tools/nas/xiaozhi-ws-mcp.js` as the repository copy of the NetEase NAS bridge script with QR-login forwarding.
+- Added Music page `Pause`, `Play`, and `Next` buttons below `Back`.
+- Added `RadioService::Pause()` so Music pause stops the stream but keeps the current custom URL context for `Play`.
+- Updated `tools/nas/xiaozhi-ws-mcp.js` and added `tools/nas/netease-mcp.js` plus `tools/nas/README-小智网易云MCP.md` as repo-safe NAS NetEase MCP deployment copies.
+- Added NetEase private FM continuous autoplay and duplicate-call protection. Repeated `music.netease_private_fm` while already playing returns `private_fm_already_playing` instead of pushing a fresh `self.music.play_url` that would cut off the current song.
+- Private FM now defaults to `standard,higher,exhigh` quality order for steadier ESP32 playback.
 
 Verification:
 
-- Local NetEase bridge syntax check passed with `node -c`.
-- `idf.py -B /Users/tupi/qdtech_current_build build` passed from `/Users/tupi/qdtech_current_build_src`.
+- Local NetEase bridge syntax checks passed with `node --check tools/nas/xiaozhi-ws-mcp.js` and `node --check tools/nas/netease-mcp.js`.
+- `idf.py build` and `idf.py merge-bin` passed from `/tmp/qdtech-xiaozhi-buildcheck`.
 - CMake reported `App "xiaozhi" version: 1.7.85`.
-- `xiaozhi.bin` size is `0x641270`; QDTech 7 MB app slot has `0xbed90` bytes free.
+- `xiaozhi.bin` size is `0x642180`; QDTech 7 MB app slot has `0xbde80` bytes free.
+- `merged-binary.bin` size is `0x742180`.
 - Full flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
-- Boot monitor confirmed `App version: 1.7.85`, `self.display.qrcode` MCP tool registration, WiFi IP `192.168.1.104`, and normal early audio/WiFi startup.
-- NAS Docker copy still needs repair/verification because `/app/xiaozhi-ws-mcp.js` was observed truncated at `23515` bytes.
+- Boot monitor confirmed the flashed firmware was running; the user opened Apps and the Music page after flash.
+- NAS deployment through UGREEN Docker API succeeded using a temporary sync container. The temp container printed `NETEASE_PRIVATE_FM_STABLE_DEPLOY_OK`.
+- `xiaozhi-netease-yuyu` and `xiaozhi-netease-xiaocanglan` were restarted successfully and both reconnected to XiaoZhi MCP.
+- Yuyu logs confirmed private FM autoplay next-song selection, `>> tools/call self.music.play_url`, `has_lyrics:true`, and lyric UDP updates.
 
 Release assets:
 
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `492ac57c39e4bb1c752dc513eceb0ff1e5c6d6373f238db2780dd4e490a773c2`
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `436736aeb9dee6eac985be1adf542e27b02fd097eb81de4b51c2a62dd830cc28`
-- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `aa46396c723de22bf7b17ad960c7c1e1776ccce273e127d1478c8238c43d1bfd`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-app.bin`: `03739449055d875cb55052c42fa5fbab87eeeb38c9eefa2567d3e7facabbbbb1`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-full.bin`: `7a63a39cae9833610b515f3f90985d363ff74447de1f225bdfbef882fddb2af4`
+- `releases/v1.7.85/qdtech-s3-touch-lcd-3.5-v1.7.85-firmware.zip`: `66a9ad96555caa6c67b98603dd0c6539d41461a5f45374fa98398afe81e8f8fc`
+- `releases/v1.7.85/SHA256SUMS.txt` records the same hashes.
 
 ## 2026-07-04: v1.7.83 Music Page Premium Subtitle Layout
 

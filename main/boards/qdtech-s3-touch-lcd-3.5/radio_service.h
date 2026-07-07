@@ -14,6 +14,7 @@ class RadioService {
 public:
     void Start(DesktopUI* desktop_ui);
     void Play();
+    void Pause();
     void PlayPause();
     void Stop();
     void Next();
