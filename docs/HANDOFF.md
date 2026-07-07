@@ -2,6 +2,35 @@
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
 
+## 2026-07-07 Handoff: v1.7.86 OTA Version Correction
+
+Current target:
+
+- Firmware version target is now `v1.7.86`.
+- This release is a version correction for remote OTA detection after the `v1.7.85` music controls and NAS private FM work.
+- Built on macOS with ESP-IDF 5.5 from `/tmp/qdfw-release-186`, build directory `/tmp/qdfw-release-186-build`.
+- Release assets were generated in `releases/v1.7.86/`.
+- The connected board was not reflashed for this correction pass; the priority was publishing a newer GitHub Release so other boards can detect the remote upgrade.
+
+What changed:
+
+- Bumped `PROJECT_VER` from `1.7.85` to `1.7.86`.
+- Kept the v1.7.85 firmware code path unchanged: Music page `Pause`, `Play`, and `Next` controls remain, NAS NetEase private FM continuous autoplay remains, and `self.music.play_url` behavior is unchanged.
+
+Verification:
+
+- Full `idf.py -C /tmp/qdfw-release-186 -B /tmp/qdfw-release-186-build -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" set-target esp32s3 build merge-bin` passed.
+- CMake reported `App "xiaozhi" version: 1.7.86`.
+- Final app image: `/tmp/qdfw-release-186-build/xiaozhi.bin`, size `0x642180`; QDTech 7 MB OTA app slot has `0xbde80` bytes free.
+- `merge-bin` generated `merged-binary.bin`, size `0x742180`.
+- The app image was checked and contains version string `1.7.86`.
+
+Release asset SHA256:
+
+- `releases/v1.7.86/qdtech-s3-touch-lcd-3.5-v1.7.86-app.bin`: `88c7292bdd97d6d9700ad10fa0310b6dad1b711842bad3699e8dae9b768aedbb`
+- `releases/v1.7.86/qdtech-s3-touch-lcd-3.5-v1.7.86-full.bin`: `af446e333fac9090d1b0b65c0306c2ca227c2aadac6790a5d46e8444606a30a0`
+- `releases/v1.7.86/qdtech-s3-touch-lcd-3.5-v1.7.86-firmware.zip`: `8ef3c262e9a0b7e1ef3b1a6c9e5c51368e4f72e5210c52bdc572c6e2e8a4b275`
+
 ## 2026-07-07 Handoff: v1.7.85 Music Controls and NAS Private FM
 
 Current target:
