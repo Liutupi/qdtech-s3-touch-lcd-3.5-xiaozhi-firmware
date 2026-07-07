@@ -6,6 +6,14 @@
 
 - 宇宇：`current-endpoint.txt`，本地音乐 API 端口 `3099`
 - 小苍兰：`current-endpoint-xiaocanglan.txt`，本地音乐 API 端口 `3100`
+- 多多（NAS 容器）：小智后台智能体 ID `1818522`，NAS 容器名 `xiaozhi-netease-duoduo`，音乐 API 端口 `3101`
+
+多智能体注意：
+
+- 每个智能体必须使用自己的小智 MCP 接入点，不能复用别的角色 endpoint。
+- 2026-07-07 排查到 `xiaozhi-netease-duoduo` 曾误读 `current-endpoint-xiaocanglan.txt`，导致多多容器实际连到小苍兰。
+- 临时修复方式：在 NAS Docker 编辑容器，把多多启动命令改为使用多多自己的 `MCP_ENDPOINT`，并设置 `MUSIC_API_PORT=3101`。
+- 推荐长期方式：NAS 目录 `/volume1/docker/xiaozhi-mcp-services/netease-music` 中单独保存 `current-endpoint-duoduo.txt`，启动命令读取该文件，避免把 endpoint 写进容器命令。
 
 ## 开机自启动
 
@@ -20,12 +28,21 @@ macOS 用户级启动项：
 
 - 宇宇：`netease-mcp-yuyu.log`
 - 小苍兰：`netease-mcp-xiaocanglan.log`
+- 多多 NAS：在绿联 Docker 里查看容器 `xiaozhi-netease-duoduo` 的状态和日志。
 
 正常日志会出现：
 
 - `music api listening`
 - `connected to xiaozhi mcp`
 - `tools/list`
+
+NAS 容器验证要点：
+
+- 容器列表显示 `xiaozhi-netease-duoduo 运行中`。
+- 容器内存不应长期为 `0B`，正常 Node 进程通常会占用几十 MB。
+- 绿联 Docker 系统日志出现 `Successfully edited container xiaozhi-netease-duoduo`，表示编辑重建完成。
+- 启动命令里不能再出现 `current-endpoint-xiaocanglan.txt`。
+- 如果能查看容器 stdout，继续确认 `music api listening`、`connected to xiaozhi mcp`、`tools/list`。
 
 ## 播放链路要求
 
