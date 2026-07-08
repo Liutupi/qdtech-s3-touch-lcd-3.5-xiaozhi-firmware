@@ -55,6 +55,7 @@ static constexpr int kLyricUdpPort = 45678;
 static constexpr int kMusicCommandHttpPort = 45679;
 static constexpr size_t kLyricUdpPacketMax = 2048;
 static constexpr size_t kMusicCommandBodyMax = 4096;
+static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
 extern "C" {
 extern const uint8_t bmi270_context_config_file[];
 extern const int bmi270_context_config_file_size;
@@ -431,12 +432,6 @@ public:
     void Init(i2c_master_bus_handle_t bus) {
         bus_ = bus;
         initialized_ = false;
-        i2c_device_config_t dev_cfg = {
-            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-            .device_address = TOUCH_I2C_ADDR,
-            .scl_speed_hz = 400000,
-        };
-        ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &dev_cfg, &dev_));
 
         gpio_config_t rst_cfg = {
             .pin_bit_mask = 1ULL << TOUCH_RST_PIN,
@@ -459,14 +454,12 @@ public:
         gpio_set_level(TOUCH_RST_PIN, 0);
         vTaskDelay(pdMS_TO_TICKS(10));
         gpio_set_level(TOUCH_RST_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
 
-        uint8_t max_touches = 0;
-        if (ReadReg(kMaxTouches, &max_touches, 1) == ESP_OK && max_touches > 0 && max_touches <= kMaxTouchPoints) {
-            max_points_ = max_touches;
-        } else {
-            max_points_ = 1;
-        }
+        ESP_ERROR_CHECK(AddDevice(TOUCH_I2C_ADDR));
+        protocol_ = Protocol::kLegacy;
+        max_points_ = 1;
+        ESP_LOGI(TAG, "Touch controller legacy addr=0x%02x single-point short read", active_addr_);
         ESP_LOGI(TAG, "Touch max points: %u", max_points_);
         initialized_ = true;
     }
@@ -480,6 +473,13 @@ public:
         ESP_LOGW(TAG, "touch controller reset");
     }
 
+    void ClearTouchState() {
+        esp_err_t err = WriteReg(kTouchInfo, 0x00);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "touch clear state failed err=%s", esp_err_to_name(err));
+        }
+    }
+
     size_t ReadPoints(TouchPoint* points, size_t max_points) {
         if (!points || max_points == 0) {
             return 0;
@@ -487,16 +487,99 @@ public:
         if (esp_timer_get_time() < read_backoff_until_us_) {
             return 0;
         }
+        if (protocol_ == Protocol::kCst9217) {
+            return ReadCst9217Points(points, max_points, 0);
+        }
         uint8_t touch_info = 0;
         if (ReadReg(kTouchInfo, &touch_info, 1) != ESP_OK || !(touch_info & 0x08)) {
             return 0;
         }
+        return ReadLegacyPoints(points, max_points, touch_info);
+    }
 
+    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
+        TouchPoint point = {};
+        if (ReadPoints(&point, 1) == 0) {
+            return false;
+        }
+        x = point.x;
+        y = point.y;
+        return true;
+    }
+
+private:
+    enum class Protocol {
+        kLegacy,
+        kCst9217,
+    };
+
+    static constexpr uint8_t kMaxTouchPoints = 10;
+    static constexpr uint8_t kCst9217Ack = 0xAB;
+    static constexpr uint16_t kCst9217Data = 0xD000;
+    static constexpr uint16_t kTouchInfo = 0x0010;
+    static constexpr uint16_t kTouchPoint0 = 0x0014;
+
+    size_t ReadCst9217Points(TouchPoint* points, size_t max_points, uint8_t touch_info) {
+        uint8_t data[10] = {};
+        if (ReadReg(kCst9217Data, data, sizeof(data)) != ESP_OK) {
+            return 0;
+        }
+        const int64_t now_us = esp_timer_get_time();
+        if (now_us - last_touch_poll_log_us_ > 1000000) {
+            last_touch_poll_log_us_ = now_us;
+            ESP_LOGI(TAG, "touch cst poll int=%d info=0x%02x data=%02x %02x %02x %02x %02x %02x %02x",
+                     gpio_get_level(TOUCH_INT_PIN), touch_info,
+                     data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+        }
+        if (data[6] != kCst9217Ack || (data[5] & 0x7F) == 0 || max_points == 0) {
+            return 0;
+        }
+        if ((data[0] & 0x0F) != 0x06) {
+            return 0;
+        }
+        const uint16_t raw_x = (static_cast<uint16_t>(data[1]) << 4) | (data[3] >> 4);
+        const uint16_t raw_y = (static_cast<uint16_t>(data[2]) << 4) | (data[3] & 0x0F);
+        uint16_t x = raw_y;
+        uint16_t y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
+        if (x >= DISPLAY_WIDTH) {
+            x = DISPLAY_WIDTH - 1;
+        }
+        if (y >= DISPLAY_HEIGHT) {
+            y = DISPLAY_HEIGHT - 1;
+        }
+        points[0] = {
+            .x = x,
+            .y = y,
+        };
+        if (now_us - last_touch_raw_log_us_ > 120000) {
+            last_touch_raw_log_us_ = now_us;
+            ESP_LOGI(TAG, "touch cst raw=%u,%u mapped=%u,%u data=%02x %02x %02x %02x %02x %02x %02x",
+                     raw_x, raw_y, x, y,
+                     data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+        }
+        return 1;
+    }
+
+    size_t ReadLegacyPoints(TouchPoint* points, size_t max_points, uint8_t touch_info) {
         uint8_t point_data[7 * kMaxTouchPoints] = {};
         if (ReadReg(kTouchPoint0, point_data, 7 * max_points_) != ESP_OK) {
             return 0;
         }
         read_failures_ = 0;
+
+        const int64_t now_us = esp_timer_get_time();
+        const bool raw_valid = (touch_info & 0x08) != 0;
+        const bool raw_changed = !last_touch_raw_valid_ || last_touch_raw_info_ != touch_info ||
+                                 std::memcmp(last_touch_raw_point_, point_data, 4) != 0;
+        if (raw_changed || now_us - last_touch_raw_log_us_ > 1000000) {
+            last_touch_raw_log_us_ = now_us;
+            last_touch_raw_valid_ = true;
+            last_touch_raw_info_ = touch_info;
+            std::memcpy(last_touch_raw_point_, point_data, 4);
+            ESP_LOGI(TAG, "touch raw int=%d info=0x%02x p0=%02x %02x %02x %02x",
+                     gpio_get_level(TOUCH_INT_PIN), touch_info,
+                     point_data[0], point_data[1], point_data[2], point_data[3]);
+        }
 
         size_t count = 0;
         for (uint8_t i = 0; i < max_points_; i++) {
@@ -504,12 +587,15 @@ public:
                 break;
             }
             const uint8_t base = i * 7;
-            if (!(point_data[base] & 0x80)) {
+            if (!raw_valid || !(point_data[base] & 0x80)) {
                 continue;
             }
 
             const uint16_t raw_x = ((point_data[base] & 0x3F) << 8) | point_data[base + 1];
             const uint16_t raw_y = ((point_data[base + 2] & 0x3F) << 8) | point_data[base + 3];
+            if (raw_x == 0 && raw_y == 0) {
+                continue;
+            }
 
             uint16_t x = raw_y;
             uint16_t y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
@@ -527,29 +613,55 @@ public:
         return count;
     }
 
-    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
-        TouchPoint point = {};
-        if (ReadPoints(&point, 1) == 0) {
-            return false;
+    esp_err_t AddDevice(uint8_t addr) {
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = addr,
+            .scl_speed_hz = 400000,
+        };
+        esp_err_t err = i2c_master_bus_add_device(bus_, &dev_cfg, &dev_);
+        if (err == ESP_OK) {
+            active_addr_ = addr;
         }
-        x = point.x;
-        y = point.y;
-        return true;
+        return err;
     }
-
-private:
-    static constexpr uint8_t kMaxTouchPoints = 10;
-    static constexpr uint16_t kMaxTouches = 0x0009;
-    static constexpr uint16_t kTouchInfo = 0x0010;
-    static constexpr uint16_t kTouchPoint0 = 0x0014;
 
     esp_err_t ReadReg(uint16_t reg, uint8_t* data, size_t len) {
         uint8_t addr[2] = {static_cast<uint8_t>(reg >> 8), static_cast<uint8_t>(reg & 0xFF)};
+        bool locked = false;
         if (bus_mutex_) {
-            xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(200));
+            locked = xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(30)) == pdTRUE;
+            if (!locked) {
+                NoteReadFailure();
+                return ESP_ERR_TIMEOUT;
+            }
         }
         esp_err_t err = i2c_master_transmit_receive(dev_, addr, sizeof(addr), data, len, pdMS_TO_TICKS(100));
+        if (bus_mutex_ && locked) {
+            xSemaphoreGive(bus_mutex_);
+        }
+        if (err != ESP_OK) {
+            NoteReadFailure();
+        }
+        return err;
+    }
+
+    esp_err_t WriteReg(uint16_t reg, uint8_t value) {
+        uint8_t buf[3] = {
+            static_cast<uint8_t>(reg >> 8),
+            static_cast<uint8_t>(reg & 0xFF),
+            value,
+        };
+        bool locked = false;
         if (bus_mutex_) {
+            locked = xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(30)) == pdTRUE;
+            if (!locked) {
+                NoteReadFailure();
+                return ESP_ERR_TIMEOUT;
+            }
+        }
+        esp_err_t err = i2c_master_transmit(dev_, buf, sizeof(buf), pdMS_TO_TICKS(100));
+        if (bus_mutex_ && locked) {
             xSemaphoreGive(bus_mutex_);
         }
         if (err != ESP_OK) {
@@ -562,9 +674,9 @@ private:
         if (!initialized_) {
             return;
         }
-        ++read_failures_;
         const int64_t now_us = esp_timer_get_time();
-        read_backoff_until_us_ = now_us + 750000;
+        ++read_failures_;
+        read_backoff_until_us_ = now_us + (read_failures_ >= 3 ? 60000 : 5000);
         if (read_failures_ >= 3 && bus_ && now_us - last_bus_reset_us_ > 3000000) {
             last_bus_reset_us_ = now_us;
             ESP_LOGW(TAG, "touch i2c reset after repeated failures");
@@ -575,18 +687,25 @@ private:
             if (bus_mutex_) {
                 xSemaphoreGive(bus_mutex_);
             }
-            read_backoff_until_us_ = now_us + 1000000;
+            read_backoff_until_us_ = now_us + 150000;
         }
     }
 
     i2c_master_bus_handle_t bus_ = nullptr;
     i2c_master_dev_handle_t dev_ = nullptr;
     SemaphoreHandle_t bus_mutex_ = nullptr;
+    Protocol protocol_ = Protocol::kLegacy;
+    uint8_t active_addr_ = 0;
     uint8_t max_points_ = 1;
     uint8_t read_failures_ = 0;
     bool initialized_ = false;
     int64_t read_backoff_until_us_ = 0;
     int64_t last_bus_reset_us_ = 0;
+    int64_t last_touch_raw_log_us_ = 0;
+    int64_t last_touch_poll_log_us_ = 0;
+    bool last_touch_raw_valid_ = false;
+    uint8_t last_touch_raw_info_ = 0;
+    uint8_t last_touch_raw_point_[4] = {};
 };
 
 class QdtechBatteryMonitor {
@@ -1058,10 +1177,11 @@ private:
         ESP_ERROR_CHECK(i2c_mutex_ ? ESP_OK : ESP_ERR_NO_MEM);
     }
 
-    void LockSharedI2c(TickType_t timeout = pdMS_TO_TICKS(200)) {
+    bool LockSharedI2c(TickType_t timeout = pdMS_TO_TICKS(200)) {
         if (i2c_mutex_) {
-            xSemaphoreTake(i2c_mutex_, timeout);
+            return xSemaphoreTake(i2c_mutex_, timeout) == pdTRUE;
         }
+        return true;
     }
 
     void UnlockSharedI2c() {
@@ -1073,7 +1193,9 @@ private:
         if (!bmi270_dev_ || !data || len == 0) {
             return false;
         }
-        LockSharedI2c();
+        if (!LockSharedI2c(0)) {
+            return false;
+        }
         esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &reg, 1, data, len, pdMS_TO_TICKS(100));
         UnlockSharedI2c();
         if (err != ESP_OK) {
@@ -1088,7 +1210,9 @@ private:
             return false;
         }
         const uint8_t data[] = {reg, value};
-        LockSharedI2c();
+        if (!LockSharedI2c()) {
+            return false;
+        }
         esp_err_t err = i2c_master_transmit(bmi270_dev_, data, sizeof(data), pdMS_TO_TICKS(100));
         UnlockSharedI2c();
         if (err != ESP_OK) {
@@ -1105,7 +1229,9 @@ private:
         std::vector<uint8_t> buffer(len + 1);
         buffer[0] = reg;
         std::memcpy(buffer.data() + 1, data, len);
-        LockSharedI2c(pdMS_TO_TICKS(1200));
+        if (!LockSharedI2c(pdMS_TO_TICKS(1200))) {
+            return false;
+        }
         esp_err_t err = i2c_master_transmit(bmi270_dev_, buffer.data(), buffer.size(), pdMS_TO_TICKS(1000));
         UnlockSharedI2c();
         if (err != ESP_OK) {
@@ -1218,7 +1344,7 @@ private:
             return false;
         }
         bmi270_present_ = true;
-        ESP_LOGI(TAG, "BMI270 detected addr=0x%02x; flip-to-focus enabled", bmi270_addr_);
+        ESP_LOGI(TAG, "BMI270 detected addr=0x%02x; hourglass rotation enabled", bmi270_addr_);
         return true;
     }
 
@@ -1238,46 +1364,48 @@ private:
         }
     }
 
-    void TriggerFocusFromBmi270() {
+    bool EnterHourglassFromBmi270() {
         if (!display_) {
-            return;
+            return false;
         }
         auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
         if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
             if (auto* desktop_ui = qd_display->GetDesktopUI()) {
-                desktop_ui->StartFocusTimer(true);
+                desktop_ui->EnterHourglassMode();
+                lvgl_port_unlock();
+                return true;
             }
             lvgl_port_unlock();
         }
+        ESP_LOGW(TAG, "BMI270 hourglass enter deferred, LVGL busy");
+        return false;
     }
 
-    void ExitFocusFromBmi270() {
+    bool ExitHourglassFromBmi270() {
         if (!display_) {
-            return;
+            return false;
         }
         auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
         if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
             if (auto* desktop_ui = qd_display->GetDesktopUI()) {
-                desktop_ui->NavigateBack();
+                desktop_ui->ExitHourglassMode();
+                lvgl_port_unlock();
+                return true;
             }
             lvgl_port_unlock();
         }
+        ESP_LOGW(TAG, "BMI270 hourglass exit deferred, LVGL busy");
+        return false;
     }
 
     void Bmi270Task() {
         int stable_baseline_count = 0;
-        int stable_inverted_count = 0;
-        int stable_rearm_count = 0;
+        int stable_portrait_count = 0;
+        int stable_landscape_count = 0;
         int64_t last_log_ms = 0;
-        int64_t last_trigger_ms = 0;
+        bool hourglass_active = false;
 
         while (true) {
-            const int64_t loop_now_ms = esp_timer_get_time() / 1000;
-            if (loop_now_ms < touch_quiet_until_ms_) {
-                vTaskDelay(pdMS_TO_TICKS(80));
-                continue;
-            }
-
             int16_t x = 0;
             int16_t y = 0;
             int16_t z = 0;
@@ -1294,70 +1422,91 @@ private:
             const int gyro_peak = std::max({std::abs(static_cast<int>(gx)), std::abs(static_cast<int>(gy)), std::abs(static_cast<int>(gz))});
 
             if (now_ms - last_log_ms > 3000) {
-                int dot_log = 0;
-                if (bmi270_baseline_mag_sq_ != 0) {
-                    dot_log = static_cast<int>(static_cast<int64_t>(x) * bmi270_baseline_x_ +
-                                               static_cast<int64_t>(y) * bmi270_baseline_y_ +
-                                               static_cast<int64_t>(z) * bmi270_baseline_z_);
-                }
-                ESP_LOGI(TAG, "BMI270 level-180 x=%d y=%d z=%d gyro=%d dot=%d armed=%d",
-                         x, y, z, gyro_peak, dot_log, bmi270_flip_armed_);
+                ESP_LOGI(TAG, "BMI270 hourglass x=%d y=%d z=%d gyro=%d active=%d",
+                         x, y, z, gyro_peak, hourglass_active);
                 last_log_ms = now_ms;
             }
 
             if (bmi270_baseline_mag_sq_ == 0) {
-                if (mag_sq > 1000000 && gyro_peak < 30) {
+                const bool landscape_candidate = mag_sq > 1000000 &&
+                    gyro_peak < 45 &&
+                    std::abs(static_cast<int>(x)) > 1500 &&
+                    std::abs(static_cast<int>(y)) < 900;
+                if (landscape_candidate) {
                     stable_baseline_count++;
-                    if (stable_baseline_count >= 10) {
+                    if (stable_baseline_count >= 5) {
                         bmi270_baseline_x_ = x;
                         bmi270_baseline_y_ = y;
                         bmi270_baseline_z_ = z;
                         bmi270_baseline_mag_sq_ = mag_sq;
-                        bmi270_flip_armed_ = true;
-                        ESP_LOGI(TAG, "BMI270 level baseline x=%d y=%d z=%d mag=%d",
+                        ESP_LOGI(TAG, "BMI270 landscape baseline x=%d y=%d z=%d mag=%d",
                                  x, y, z, static_cast<int>(mag_sq));
                     }
                 } else {
+                    if (stable_baseline_count > 0 || (now_ms - last_log_ms < 250)) {
+                        ESP_LOGI(TAG, "BMI270 wait landscape baseline x=%d y=%d z=%d gyro=%d",
+                                 x, y, z, gyro_peak);
+                    }
                     stable_baseline_count = 0;
                 }
-                vTaskDelay(pdMS_TO_TICKS(50));
+                vTaskDelay(pdMS_TO_TICKS(200));
                 continue;
             }
 
             const int64_t dot = static_cast<int64_t>(x) * bmi270_baseline_x_ +
                                 static_cast<int64_t>(y) * bmi270_baseline_y_ +
                                 static_cast<int64_t>(z) * bmi270_baseline_z_;
-            const int64_t reference = bmi270_baseline_mag_sq_ * 7 / 10;
-            const bool rotated_180 = mag_sq > 1000000 && dot < -reference;
-            const bool normal_level = mag_sq > 1000000 && dot > reference;
+            const int64_t xy_dot = static_cast<int64_t>(x) * bmi270_baseline_x_ +
+                                   static_cast<int64_t>(y) * bmi270_baseline_y_;
+            const int64_t baseline_xy_mag_sq = static_cast<int64_t>(bmi270_baseline_x_) * bmi270_baseline_x_ +
+                                               static_cast<int64_t>(bmi270_baseline_y_) * bmi270_baseline_y_;
+            const int64_t current_xy_mag_sq = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y;
+            const bool good_gravity = mag_sq > 1000000;
+            const bool portrait_90 = good_gravity &&
+                baseline_xy_mag_sq > 250000 &&
+                current_xy_mag_sq > baseline_xy_mag_sq / 3 &&
+                std::llabs(xy_dot) < baseline_xy_mag_sq * 35 / 100 &&
+                std::llabs(dot) < bmi270_baseline_mag_sq_ * 65 / 100;
+            const bool landscape_normal = good_gravity &&
+                dot > bmi270_baseline_mag_sq_ * 65 / 100;
 
-            if (bmi270_flip_armed_ && rotated_180 && gyro_peak < 80) {
-                stable_inverted_count++;
-                if (stable_inverted_count >= 20 && now_ms - last_trigger_ms > 15000) {
-                    bmi270_flip_armed_ = false;
-                    stable_inverted_count = 0;
-                    last_trigger_ms = now_ms;
-                    ESP_LOGI(TAG, "BMI270 horizontal 180 stable; starting focus timer x=%d y=%d z=%d dot=%d",
-                             x, y, z, static_cast<int>(dot));
-                    TriggerFocusFromBmi270();
+            if (!hourglass_active && portrait_90 && gyro_peak < 150) {
+                if (now_ms < kHourglassStartupHoldoffMs) {
+                    stable_portrait_count = 0;
+                    stable_landscape_count = 0;
+                    ESP_LOGI(TAG, "BMI270 portrait deferred during startup ms=%d",
+                             static_cast<int>(now_ms));
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                    continue;
                 }
-            } else {
-                stable_inverted_count = 0;
+                stable_portrait_count++;
+                stable_landscape_count = 0;
+                if (stable_portrait_count >= 5) {
+                    ESP_LOGI(TAG, "BMI270 90 portrait stable; enter hourglass");
+                    if (EnterHourglassFromBmi270()) {
+                        hourglass_active = true;
+                        stable_portrait_count = 0;
+                    }
+                }
+            } else if (!hourglass_active) {
+                stable_portrait_count = 0;
             }
 
-            if (!bmi270_flip_armed_ && normal_level && gyro_peak < 30 && now_ms - last_trigger_ms > 5000) {
-                stable_rearm_count++;
-                if (stable_rearm_count >= 25) {
-                    bmi270_flip_armed_ = true;
-                    stable_rearm_count = 0;
-                    ESP_LOGI(TAG, "BMI270 horizontal normal stable; exiting focus timer");
-                    ExitFocusFromBmi270();
+            if (hourglass_active && landscape_normal && gyro_peak < 100) {
+                stable_landscape_count++;
+                stable_portrait_count = 0;
+                if (stable_landscape_count >= 5) {
+                    ESP_LOGI(TAG, "BMI270 landscape stable; exit hourglass");
+                    if (ExitHourglassFromBmi270()) {
+                        hourglass_active = false;
+                        stable_landscape_count = 0;
+                    }
                 }
-            } else if (gyro_peak >= 30 || !normal_level) {
-                stable_rearm_count = 0;
+            } else if (hourglass_active) {
+                stable_landscape_count = 0;
             }
 
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(200));
         }
     }
     void InitializeSdCard() {
@@ -1437,7 +1586,6 @@ private:
         ESP_LOGI(TAG, "focus touch reset for inverted=%d", inverted);
     }
     void InitializeTouch() {
-        touch_.SetBusMutex(i2c_mutex_);
         touch_.Init(i2c_bus_);
 
         // Create LVGL input device
@@ -1902,27 +2050,24 @@ private:
     void PollTouch() {
         QdtechTouch::TouchPoint points[10] = {};
         const size_t point_count = touch_.ReadPoints(points, 10);
-        const bool touched = point_count > 0;
+        bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
         auto* desktop_ui = GetDesktopUI();
-        if (touch_ignore_until_ms_ > now_ms) {
-            touch_cached_down_ = false;
-            touch_down_ = false;
-            return;
-        }
-        if (touch_suppressed_until_release_) {
-            if (!touched) {
-                touch_suppressed_until_release_ = false;
-                ESP_LOGI(TAG, "touch suppression cleared");
-            } else {
+
+        if (touched && !touch_down_ && touch_suppress_active_) {
+            const int16_t dx = static_cast<int16_t>(points[0].x) - static_cast<int16_t>(touch_suppress_x_);
+            const int16_t dy = static_cast<int16_t>(points[0].y) - static_cast<int16_t>(touch_suppress_y_);
+            if (LV_ABS(dx) < 18 && LV_ABS(dy) < 18) {
                 touch_cached_down_ = false;
-                touch_down_ = false;
                 return;
             }
+            touch_suppress_active_ = false;
+        } else if (!touched) {
+            touch_suppress_active_ = false;
         }
 
         if (touched || touch_down_) {
-            touch_quiet_until_ms_ = now_ms + 600;
+            touch_quiet_until_ms_ = now_ms + 2500;
         }
 
         touch_cached_down_ = touched;
@@ -1962,20 +2107,21 @@ private:
         } else if (touched && touch_down_) {
             touch_last_x_ = x;
             touch_last_y_ = y;
-            if (now_ms - touch_start_ms_ > 450) {
+            HandleTouchState(x, y, true);
+            const int64_t duration = now_ms - touch_start_ms_;
+            if (duration >= 45) {
                 touch_down_ = false;
                 touch_cached_down_ = false;
-                touch_ignore_until_ms_ = now_ms + 250;
-                touch_suppressed_until_release_ = true;
-                touch_.ResetController();
+                touch_suppress_active_ = true;
+                touch_suppress_x_ = touch_last_x_;
+                touch_suppress_y_ = touch_last_y_;
                 const int16_t dx = static_cast<int16_t>(touch_last_x_) - static_cast<int16_t>(touch_start_x_);
                 const int16_t dy = static_cast<int16_t>(touch_last_y_) - static_cast<int16_t>(touch_start_y_);
-                ESP_LOGW(TAG, "touch forced release x=%u y=%u dx=%d dy=%d held=%dms",
-                         touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(now_ms - touch_start_ms_));
+                ESP_LOGI(TAG, "touch synthetic release x=%u y=%u dx=%d dy=%d duration=%dms",
+                         touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
                 HandleTouchState(touch_last_x_, touch_last_y_, false);
-                HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, 120);
-            } else {
-                HandleTouchState(x, y, true);
+                HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
+                ResetLatchedTouchController();
             }
         } else if (!touched && touch_down_) {
             touch_down_ = false;
@@ -1987,7 +2133,15 @@ private:
                      touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
             HandleTouchState(touch_last_x_, touch_last_y_, false);
             HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
+            ResetLatchedTouchController();
         }
+    }
+
+    void ResetLatchedTouchController() {
+        touch_cached_down_ = false;
+        touch_down_ = false;
+        touch_suppress_active_ = false;
+        touch_.ResetController();
     }
 
     void HandleTouchState(uint16_t x, uint16_t y, bool pressed) {
@@ -2576,6 +2730,11 @@ private:
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
     bool touch_cached_down_ = false;
+    bool touch_swipe_dispatched_ = false;
+    bool touch_tap_dispatched_ = false;
+    bool touch_stale_active_ = false;
+    uint16_t touch_stale_x_ = 0;
+    uint16_t touch_stale_y_ = 0;
     uint16_t touch_cached_x_ = 0;
     uint16_t touch_cached_y_ = 0;
     int64_t touch_start_ms_ = 0;
@@ -2584,7 +2743,11 @@ private:
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
     int64_t touch_ignore_until_ms_ = 0;
+    int64_t touch_cache_hold_until_ms_ = 0;
     int64_t touch_quiet_until_ms_ = 0;
+    bool touch_suppress_active_ = false;
+    uint16_t touch_suppress_x_ = 0;
+    uint16_t touch_suppress_y_ = 0;
     bool touch_suppressed_until_release_ = false;
     QdtechBatteryMonitor battery_monitor_;
     TimeWeatherService time_weather_service_;

@@ -17,6 +17,7 @@ enum class DesktopPage {
     MEDIA,
     PODCAST,
     FOCUS,
+    HOURGLASS,
     XIAOZHI,
     NETWORK,
     SETTINGS,
@@ -76,6 +77,9 @@ public:
     void StartFocusTimer(bool rotate_180 = false);
     void ResetFocusTimer();
     void SetFocusMode(bool work_mode);
+    void EnterHourglassMode();
+    void ExitHourglassMode();
+    bool IsHourglassPage() const { return current_page_ == DesktopPage::HOURGLASS; }
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
     void SetWifiConfigStatus(const char* status);
@@ -99,6 +103,7 @@ public:
     void SetFcFrame(const lv_img_dsc_t* image);
     void SetFcControllerCallback(std::function<void(uint8_t)> callback);
     bool IsFcPlayingView() const { return fc_playing_view_; }
+    bool IsPhotoPage() const { return current_page_ == DesktopPage::PHOTO; }
     void SetMusicReplayCallback(std::function<void(const std::string& title,
                                                    const std::string& artist,
                                                    const std::string& url,
@@ -217,6 +222,12 @@ private:
     lv_color_t photo_app_color_ = {};
     std::function<void(bool)> photo_active_callback_;
     std::function<void()> photo_refresh_callback_;
+    bool photo_segment_swipe_active_ = false;
+    uint16_t photo_segment_start_x_ = 0;
+    uint16_t photo_segment_start_y_ = 0;
+    uint16_t photo_segment_min_x_ = 0;
+    uint16_t photo_segment_max_x_ = 0;
+    int64_t photo_segment_last_ms_ = 0;
 
     // FC emulator page elements
     lv_obj_t* fc_list_group_ = nullptr;
@@ -318,6 +329,29 @@ private:
     bool focus_auto_rotated_ = false;
     std::function<void(bool)> focus_rotation_callback_;
 
+    // Hourglass timer page elements
+    lv_obj_t* hourglass_page_ = nullptr;
+    lv_obj_t* hourglass_portrait_ = nullptr;
+    lv_obj_t* hourglass_time_label_ = nullptr;
+    lv_obj_t* hourglass_status_label_ = nullptr;
+    lv_obj_t* hourglass_top_sand_ = nullptr;
+    lv_obj_t* hourglass_bottom_sand_ = nullptr;
+    lv_obj_t* hourglass_top_sand_strips_[16] = {};
+    lv_obj_t* hourglass_bottom_sand_strips_[22] = {};
+    lv_obj_t* hourglass_falling_dots_[12] = {};
+    lv_obj_t* hourglass_preset_buttons_[4] = {};
+    lv_obj_t* hourglass_preset_labels_[4] = {};
+    lv_timer_t* hourglass_tick_timer_ = nullptr;
+    lv_timer_t* hourglass_anim_timer_ = nullptr;
+    DesktopPage hourglass_return_page_ = DesktopPage::MAIN;
+    bool hourglass_running_ = false;
+    bool hourglass_done_ = false;
+    bool hourglass_motion_active_ = false;
+    uint8_t hourglass_selected_index_ = 2;
+    uint8_t hourglass_anim_tick_ = 0;
+    uint32_t hourglass_total_sec_ = 15 * 60;
+    uint32_t hourglass_remaining_sec_ = 15 * 60;
+
     // Settings page elements
     lv_obj_t* settings_brightness_slider_ = nullptr;
     lv_obj_t* settings_brightness_value_ = nullptr;
@@ -405,6 +439,7 @@ private:
     void CreateMediaPage(lv_obj_t* root);
     void CreatePodcastPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
+    void CreateHourglassPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
@@ -430,6 +465,11 @@ private:
     bool HandleSettingsSliderRelease(uint16_t start_x, uint16_t start_y, uint16_t end_x);
     void RenderCalendar();
     void ApplyWeatherVisual(int weather_code);
+    void SelectHourglassPreset(uint8_t index);
+    void ResetHourglassToDefault();
+    void UpdateHourglassUI();
+    void UpdateHourglassButtons();
+    bool HandleHourglassTap(uint16_t x, uint16_t y);
     void UpdateFocusUI();
     uint32_t CurrentFocusDateKey() const;
     void ReconcileFocusDate(bool persist);
@@ -445,6 +485,8 @@ private:
     static void ColonTimerCb(lv_timer_t* timer);
     static void FaceTimerCb(lv_timer_t* timer);
     static void FocusTimerCb(lv_timer_t* timer);
+    static void HourglassTickCb(lv_timer_t* timer);
+    static void HourglassAnimCb(lv_timer_t* timer);
     static void DailyCardBreathCb(lv_timer_t* timer);
     static void ClockShadowCb(lv_timer_t* timer);
     static void WeatherParticleCb(lv_timer_t* timer);

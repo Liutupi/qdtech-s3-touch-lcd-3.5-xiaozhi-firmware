@@ -1,3 +1,378 @@
+## 2026-07-08 Handoff: v1.8.18 Hourglass + Startup Sync Memory Fix
+
+Summary:
+- Firmware version target is now `v1.8.18`.
+- Added independent `DesktopPage::HOURGLASS` with the cleaned hourglass bitmap body plus lightweight LVGL sand strips/dots for animated falling sand and second-by-second sand volume changes.
+- Re-enabled BMI270 and replaced the old 180-degree Focus Timer motion trigger with stable 90-degree portrait detection for Hourglass entry, plus landscape recovery to exit the page.
+- Hourglass page is created lazily and deleted on motion exit so the large UI does not stay resident after returning to the normal horizontal desktop.
+- Weather startup sync now defers while the app is still starting/activating/connecting, lowers the weather fetch internal memory floor to 6 KB, and retries low-memory/deferred weather every 20 seconds.
+- Preserved the current v1.8.17 touch/photo recovery path while adding the hourglass behavior.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/time_weather_service.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qd_hourglass_body.c`
+- `releases/v1.8.18/`
+
+Validation:
+- Built successfully from `/private/tmp/qdtech-v1818-build-src` to avoid the local path-with-spaces linker issue.
+- Flashed successfully to `/dev/cu.usbmodem212401`; boot log reports app version `1.8.18`.
+- Monitor confirmed BMI270 initializes at `0x68`, establishes a landscape baseline, and stays inactive while the board remains horizontal.
+- Monitor confirmed startup time/daily card/weather recovered: daily card updated for `2026-07-08`, time synchronized, and weather fetched `中山 多云 27 C`.
+- Monitor did not capture a physical 90-degree flip during this run, so hourglass entry still needs one real flip check after the user rotates the board.
+
+## 2026-07-08 Handoff: v1.8.08 Touch Coordinate Parser Fix
+
+Summary:
+- Firmware version target is now `v1.8.08`.
+- v1.8.07 confirmed real touch data appears when pressing: `0x0010=0x08`, `0x0014=01 1c 01 a4`, and INT goes low.
+- Fixed the legacy parser to treat `0x0014` as `raw_x_hi raw_x_lo raw_y_hi raw_y_lo` instead of expecting a `0x80` valid flag.
+- Removed the heavy diagnostic register dump/probe path.
+- Clears the touch status only after a forced stale release, so repeated taps at the same position can recover.
+- BMI270 remains disabled until touch is verified fixed.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.07 Touch Register Map Scan
+
+Summary:
+- Firmware version target is now `v1.8.07`.
+- User confirmed v1.8.06 still cannot tap.
+- Delayed scan confirmed shared I2C is alive and devices respond at `0x18`, `0x55`, and `0x68`, but the current `0x55 / 0x0014` point read still returns zeros.
+- Added once-per-second touch register dumps after startup using both 16-bit and 8-bit register address reads, so holding the panel should reveal which register map actually changes.
+- BMI270 remains disabled while touch is isolated.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.06 Delayed Locked Address Probe
+
+Summary:
+- Firmware version target is now `v1.8.06`.
+- v1.8.05 startup probing timed out on all scanned addresses, likely because the probe ran too early or without the shared bus mutex.
+- Restored the shorter touch reset timing and moved the I2C address scan to a delayed, mutex-protected pass after the system is running.
+- Added audio codec address `0x18` to the delayed scan as a sanity check for the shared I2C bus.
+- Touch remains forced to legacy `0x55`, single-point short reads, with BMI270 disabled for isolation.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.05 Long Touch Reset + Address Probe
+
+Summary:
+- Firmware version target is now `v1.8.05`.
+- v1.8.04 confirmed single-point short reads and 100 kHz I2C, but touch data remained all zero and INT stayed high.
+- Extended the touch-controller reset sequence to hold release/reset longer before first reads.
+- Added startup logging for common touch/BMI270 I2C addresses so the next monitor run shows which devices are actually responding after reset.
+- BMI270 remains temporarily disabled while touch is isolated.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.04 Legacy Single-Point Short Read
+
+Summary:
+- Firmware version target is now `v1.8.04`.
+- v1.8.03 still returned all-zero CST9217/legacy touch data and introduced I2C timeouts during the split-read experiment.
+- Removed CST auto-detection from the boot path for this board and returned to the known ACKing `0x55` legacy route.
+- Forced legacy touch to single-point short reads, matching the earlier version that produced real coordinates.
+- Lowered the touch I2C device speed to 100 kHz to reduce bus sensitivity while BMI270 remains disabled for isolation.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.03 CST9217 Split Read
+
+Summary:
+- Firmware version target is now `v1.8.03`.
+- User still reported no tap response on v1.8.02, while logs showed the touch controller ACKing on I2C but returning all-zero legacy data.
+- Switched CST9217 probing and CST9217 point reads to the controller-driver style split transaction: write register address, wait 2 ms, then read data.
+- Kept legacy `0x55 / 0x0014` parsing as fallback if CST9217 packet ACK is not present.
+- BMI270 remains temporarily disabled while touch protocol is being isolated.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.02 CST9217-on-0x55 Probe
+
+Summary:
+- Firmware version target is now `v1.8.02`.
+- v1.8.01 showed this board does not ACK CST9217 at `0x5A`; it still ACKs touch at `0x55`.
+- Added CST9217 data-packet probing on `0x55` before falling back to the old legacy `0x0014` register path.
+- BMI270 remains temporarily disabled while touch protocol is being isolated.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.01 CST9217 Touch Protocol
+
+Summary:
+- Firmware version target is now `v1.8.01`.
+- v1.8.00 proved touch polling was running, but the legacy `0x55 / 0x0014` register path always returned zero data even with BMI270 disabled.
+- Added CST9217 detection at I2C address `0x5A` and CST9217 data parsing from register `0xD000`.
+- Kept the legacy touch protocol as a fallback if `0x5A` is not present.
+- BMI270 remains temporarily disabled in this isolation build until touch is confirmed recovered.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.8.00 Touch Isolation Test
+
+Summary:
+- Firmware version target is now `v1.8.00`.
+- User still reported no tap response on v1.7.99, and monitor showed no `touch raw` / `touch down` during the test window.
+- Temporarily disabled BMI270 initialization/task to isolate whether the six-axis sensor is interfering with the shared I2C touch path.
+- Added once-per-second touch polling diagnostics logging INT, touch info, and first point bytes even when no touch is detected.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.7.99 Touch Hold + Raw Diagnostics
+
+Summary:
+- Firmware version target is now `v1.7.99`.
+- v1.7.98 still allowed user-visible no-response taps, likely because the touch-state ack could clear a short touch before the UI consumed it.
+- Removed the immediate touch-state clear after valid point reads.
+- Added a short cached press hold window so one-frame touch samples still reach LVGL/card click handling.
+- Added throttled raw touch diagnostics logging the INT pin, touch info byte, and first point bytes whenever the controller reports potential touch data.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.7.98 Touch State Ack
+
+Summary:
+- Firmware version target is now `v1.7.98`.
+- v1.7.97 confirmed the first menu tap could enter the apps page, but the touch controller kept reporting the same coordinate afterward until the firmware forced a release.
+- Added an explicit touch-state clear after valid point reads so stale controller data is acknowledged before the next real tap or swipe.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+- `docs/HANDOFF.md`
+
+Validation:
+- Built and merged successfully from the `/tmp/qdtech-touch-fix-src` staging path.
+- `xiaozhi.bin` size was `0x646b90`; merged image size was `0x746b90`.
+- Flashed successfully to `/dev/cu.usbmodem212401`.
+- Serial monitor confirmed `App version: 1.7.98`, `Touch max points: 1`, LVGL touch input creation, and BMI270 detection.
+- No touch event was observed during the short post-flash monitor window, so physical tap/card/right-swipe behavior still needs on-device confirmation.
+
+## 2026-07-08 Handoff: v1.7.97 Stale Coordinate Filter
+
+Summary:
+- Firmware version target is now `v1.7.97`.
+- v1.7.96 shortened stale-touch release, but old point data could be accepted again immediately and swallow real card taps.
+- Added a stale-coordinate filter: after forced release, the same near-identical coordinate is ignored until the touch point moves significantly.
+- A new valid press clears the stale marker.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Built and flashed from the `/tmp/qdtech-touch-fix-src` staging path.
+- Serial monitor confirmed `App version: 1.7.97`, `Touch max points: 1`, LVGL touch input creation, and BMI270 detection.
+- Runtime logs showed a menu tap entering the apps page, followed by a forced release at the same coordinate, confirming stale point data was still being held by the controller.
+
+## 2026-07-08 Handoff: v1.7.96 Fast Stale Touch Release
+
+Summary:
+- Firmware version target is now `v1.7.96`.
+- After v1.7.95 restored touch point reads, logs showed valid `touch down` events but stale point data held the press until the old 1.8 s forced-release timeout.
+- Stationary stale touches now release after about 280 ms instead of 1.8 s.
+- Forced stale release no longer resets the touch controller every time, avoiding repeated 250 ms suppression windows.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Build passed from `/tmp/qdtech-touch-fix-src`, build directory `/tmp/qdtech-touch-fix-build`.
+- CMake reported `App "xiaozhi" version: 1.7.96`.
+- App image size after build: `0x646a70`; smallest app partition: `0x700000`; free: `0xb9590`.
+- `merge-bin` generated `merged-binary.bin`, size `0x746a70`.
+- Flashed successfully to `/dev/cu.usbmodem212401`; all flashed sections passed hash verification.
+- Serial monitor confirmed `App version: 1.7.96`, `Touch max points: 1`, LVGL touch input created, and BMI270 detected at `0x68`.
+
+## 2026-07-08 Handoff: v1.7.95 Touch Point Data Fallback
+
+Summary:
+- Firmware version target is now `v1.7.95`.
+- Touch reads no longer require the touch status bit or INT pin to report pressed before reading point data.
+- The driver now reads the point block directly and treats a valid point flag as the source of truth.
+- This targets the observed hardware behavior where no `touch down` log appeared even after the panel was tapped.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.7.94 Touch I2C Recovery Hotfix
+
+Summary:
+- Firmware version target is now `v1.7.94`.
+- Fixed a regression where touch could stop responding because the touch read path abandoned the shared I2C mutex after only 5 ms.
+- Touch mutex wait is now 30 ms, and mutex timeout participates in the touch recovery counter instead of silently returning no points.
+- Touch detection now falls back to the touch INT pin when the controller status bit is unreliable.
+- Touch I2C reset backoff is shorter after repeated failures, so the panel recovers faster.
+- BMI270 periodic reads are now non-blocking and much slower, with a longer quiet window after any touch activity, so the six-axis sensor yields to touch input.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.7.93 Photo Swipe Exit Hotfix
+
+Summary:
+- Firmware version target is now `v1.7.93`.
+- Fixed Photo page right-swipe exit being blocked by the v1.7.92 early-tap path.
+- Photo page now skips early tap dispatch and uses a dedicated horizontal-drag exit path.
+- Photo page swipe back is more tolerant: 35 px horizontal movement, horizontal-dominant, no 900 ms release-duration limit.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Build passed from `/tmp/qdtech-touch-fix-src`, build directory `/tmp/qdtech-touch-fix-build`.
+- CMake reported `App "xiaozhi" version: 1.7.93`.
+- App image size after build: `0x6469a0`; smallest app partition: `0x700000`; free: `0xb9660`.
+- `merge-bin` generated `merged-binary.bin`, size `0x7469a0`.
+- Flashed successfully to `/dev/cu.usbmodem212401`; all flashed sections passed hash verification.
+- Serial monitor confirmed `App version: 1.7.93`, `Touch max points: 1`, LVGL touch input created, and BMI270 detected at `0x68`.
+
+## 2026-07-08 Handoff: v1.7.92 Touch Priority Hotfix
+
+Summary:
+- Firmware version target is now `v1.7.92`.
+- Short taps now trigger after a stable 90 ms press instead of waiting for the touch controller's delayed release report.
+- Horizontal swipes now trigger earlier with a 45 px threshold and a stronger horizontal-dominance check, improving right-swipe back detection.
+- Apps page now treats either horizontal direction as back/home, avoiding direction-sign problems on the rotated touch panel.
+- Touch I2C mutex wait is limited to 5 ms so BMI270 activity cannot stall touch reads for hundreds of milliseconds.
+- Touch read retry backoff is shortened again to recover faster from transient shared-I2C contention.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Build passed from `/tmp/qdtech-touch-fix-src`, build directory `/tmp/qdtech-touch-fix-build`.
+- CMake reported `App "xiaozhi" version: 1.7.92`.
+- App image size after build: `0x646870`; smallest app partition: `0x700000`; free: `0xb9790`.
+- `merge-bin` generated `merged-binary.bin`, size `0x746870`.
+- Flashed successfully to `/dev/cu.usbmodem212401`; all flashed sections passed hash verification.
+- Serial monitor confirmed `App version: 1.7.92`, `Touch max points: 1`, LVGL touch input created, and BMI270 detected at `0x68`.
+
+## 2026-07-08 Handoff: v1.7.91 Touch Latency Hotfix
+
+Summary:
+- Firmware version target is now `v1.7.91` for the touch-latency hotfix after `v1.7.90`.
+- Fixed slow tap response caused by touch I2C read failures backing off for 750 ms. Touch now uses a short 30 ms retry backoff, with 200 ms only after repeated failures.
+- Made BMI270 reads non-blocking on the shared I2C mutex, so motion sensing skips a sample instead of delaying touch.
+- Extended BMI270 quiet time after touch activity to 1000 ms so touch interaction has priority over flip sensing.
+- Added early horizontal-swipe dispatch while the finger is still moving, so right-swipe back no longer waits for a release event that may arrive late.
+- Made detail pages tolerant of horizontal sign reversal: non-main/non-Apps pages navigate back on either strong horizontal swipe; Apps still keeps left-swipe-to-Media and right-swipe-to-Home behavior.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Pending build/flash in the current repair pass.
+
+## 2026-07-08 Handoff: v1.7.90 Touch Gesture + BMI270 Flip Tuning
+
+Summary:
+- Firmware version target is now `v1.7.90` so OTA clients can see the touch/flip fix after `v1.7.89`.
+- Fixed the post-BMI270 touch regression where taps still worked but right-swipe back and slower vertical/horizontal swipes were unreliable.
+- Relaxed manual gesture timing: taps now allow up to 350 ms and swipes up to 900 ms.
+- Removed the aggressive 450 ms forced touch-controller reset from moving touches. The controller reset now only runs for long, almost-stationary stuck touches, so normal swipes are not cut off.
+- Shortened the BMI270 quiet period after touch activity so the motion detector recovers sooner.
+- Made flip-to-Focus Timer more sensitive by detecting 180-degree rotation in the X/Y plane first, with the old full 3D face-down flip kept as a fallback.
+- Reduced BMI270 stable-count and cooldown thresholds so the Focus Timer enters/exits faster while still checking gyro stability.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- Full no-space-path build passed from `/tmp/qdtech-touch-fix-src`, build directory `/tmp/qdtech-touch-fix-build`.
+- CMake reported `App "xiaozhi" version: 1.7.90`.
+- `idf.py -C /tmp/qdtech-touch-fix-src -B /tmp/qdtech-touch-fix-build -D SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults" set-target esp32s3 build merge-bin` passed.
+- App image size after build: `0x6466f0`; smallest app partition: `0x700000`; free: `0xb9910`.
+- `merge-bin` generated `merged-binary.bin`, size `0x7466f0`.
+- `releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-app.bin`: `4b3ff4fc9b4e4bd3377ebb238f1fbed548eddd3f06e85e478d6fc286aad5b571`
+- `releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-full.bin`: `aff7ee1be349567ec3d729036bb2698d543818f7518c86de0ec14cfc237d9b31`
+- `releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-firmware.zip`: `62ae0a88d68e1735848a9d8ebbb0215850182f1091914340cadcc366bd5b79fd`
+
+Follow-up test request:
+- On hardware, verify: tap Menu, right-swipe back; open a page with vertical scrolling and do a slow up/down swipe; rotate 180 degrees into Focus Timer; tap Focus Timer controls; rotate back and confirm home touch still works.
+
 ## 2026-07-08 Handoff: v1.7.89 BMI270 Flip Focus + Touch Recovery
 
 Summary:
@@ -2492,6 +2867,59 @@ Short version:
 ## Touch Architecture Note
 
 The current touch system uses a hybrid approach:
+
+### 2026-07-08 v1.8.17 Photo Segmented Swipe Recovery
+
+- v1.8.16 monitor confirmed second-level taps are now alive: Menu opened Apps, Apps tiles opened FC/Photos, and each tap produced fresh touch packets after reset.
+- Photo right-swipe still did not exit because the post-tap reset split a drag into short zero-delta releases.
+- Added photo-page segmented swipe recovery: consecutive short touch segments within a small time window are accumulated into a horizontal swipe and routed through `HandleSwipe`.
+
+### 2026-07-08 v1.8.16 Reset Latched Touch After Tap
+
+- Monitor on v1.8.15 showed the touch controller kept replaying the first Menu tap (`p0=81 1a 01 a5`) after Apps opened, so second-level taps never produced new coordinates.
+- Reset the touch controller immediately after a completed synthetic or natural tap release to clear the latched point and allow the next tap to report fresh coordinates.
+- Reduced raw touch log spam by logging repeated legacy point packets once per second unless the packet changes.
+
+### 2026-07-08 v1.8.15 Top Button Hit Zone Widening
+
+- Widened manual hit zones for the main Menu and top-right Back buttons after monitor showed Menu landing at `x=416 y=43`, just outside the old `y < 42` range.
+- Keeps v1.8.14 latched-coordinate suppression unchanged.
+
+### 2026-07-08 v1.8.14 Latched Coordinate Suppression
+
+- Changed synthetic-release suppression from a short timer to same-coordinate suppression until the touch controller reports a different point or no touch.
+- Monitor on v1.8.13 showed the controller repeatedly replaying the first Menu point (`x=406 y=35`) for many seconds, causing endless Apps-page taps.
+
+### 2026-07-08 v1.8.13 Touch Soft Release
+
+- Removed the `WriteReg(0x0010, 0x00)` clear after reading a touch point; monitor showed the first tap worked but subsequent taps stopped reporting.
+- Added a software synthetic release after a short stable press so manual page buttons receive a tap even when the controller keeps the same status latched.
+- Added a short same-coordinate suppress window to avoid replaying a latched point as many repeated taps.
+
+### 2026-07-08 v1.8.12 Manual Secondary Button Fallback
+
+- Added manual tap fallback hit zones for secondary-page buttons because QDTech touch is manually polled and LVGL click callbacks are not reliable on this board.
+- Covers Apps tiles/back plus Radio, Music, Media, Podcast, Calendar, Network, and Diagnostics primary buttons.
+- This is intentionally scoped to `DesktopUI::HandleTap`; touch parsing from v1.8.11 is unchanged.
+
+### 2026-07-08 v1.8.11 Touch Coordinate Flag Fix
+
+- Fixed legacy touch coordinate parsing for hardware data like `p0=81 29 01 aa`: byte 0 bit `0x80` is the valid-touch flag and must be masked out before calculating X.
+- Restored the old valid-point guard (`point_data[0] & 0x80`) while keeping the observed status-bit check at `0x0010`.
+- Clears touch status after consuming a point so stale coordinates are not replayed as a permanent press.
+
+### 2026-07-08 v1.8.10 Touch Idle Read Fix
+
+- Matched pre-BMI270 touch idle behavior more closely: if `0x0010` does not report touch bit `0x08`, the poller now returns immediately instead of also reading the point block.
+- Removed the once-per-second idle touch log/read path to reduce UI stalls while no finger is touching the panel.
+- Touch point parsing remains the hardware-observed raw high-low format from `0x0014`.
+
+### 2026-07-08 v1.8.09 Touch Restore Attempt
+
+- Restored touch polling behavior closer to pre-BMI270 firmware `v1.7.87`: direct press/move/release flow, no synthetic early tap, no cached hold, no forced release, no stale-touch filter.
+- Restored touch I2C device speed to 400 kHz and stopped sharing the board I2C mutex with the touch reader while BMI270 is temporarily disabled.
+- Kept the corrected legacy point parser observed on hardware (`0x0010 = 0x08`, point bytes at `0x0014` as raw x/y high-low pairs).
+- BMI270 remains disabled in this build so touch can be validated independently before re-enabling flip-to-focus.
 
 - **LVGL input device** (`lv_indev_t`): Handles button clicks and slider interactions automatically.
 - **Manual touch polling** (20ms timer): Handles gesture detection (swipe navigation) because LVGL 9.x does not expose gesture sensitivity tuning APIs.

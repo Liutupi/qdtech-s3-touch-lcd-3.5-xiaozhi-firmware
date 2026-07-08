@@ -25,7 +25,7 @@
 
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 2048;
-static constexpr size_t kWeatherMinInternalFree = 8 * 1024;
+static constexpr size_t kWeatherMinInternalFree = 6 * 1024;
 static constexpr size_t kWeatherMinLargestInternalBlock = 4 * 1024;
 
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
@@ -452,7 +452,7 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 
 void TimeWeatherService::Task() {
     static constexpr int kWeatherRefreshSeconds = 3600;
-    static constexpr int kWeatherLowMemoryRetrySeconds = 60;
+    static constexpr int kWeatherLowMemoryRetrySeconds = 20;
     static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
     int retry_ticks = WeatherRetrySeconds();
@@ -662,6 +662,15 @@ bool TimeWeatherService::FetchWeather() {
     weather_low_memory_deferred_ = false;
     if (Application::GetInstance().IsExternalAudioActive()) {
         ESP_LOGW(TAG, "Skip weather fetch while external audio is active");
+        return false;
+    }
+    const DeviceState state = Application::GetInstance().GetDeviceState();
+    if (state == kDeviceStateStarting ||
+        state == kDeviceStateActivating ||
+        state == kDeviceStateConnecting) {
+        ESP_LOGW(TAG, "defer weather fetch, application state=%d", state);
+        weather_low_memory_deferred_ = true;
+        ShowCachedWeather("Weather wait");
         return false;
     }
 

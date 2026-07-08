@@ -74,6 +74,7 @@ LV_IMAGE_DECLARE(qd_tupi_bot_surprised);
 LV_IMAGE_DECLARE(qd_tupi_bot_sad);
 LV_IMAGE_DECLARE(qd_tupi_bot_angry);
 LV_IMAGE_DECLARE(qd_tupi_bot_sleepy);
+LV_IMAGE_DECLARE(qd_hourglass_body);
 
 static const lv_font_t* qd_cn_font_16() {
     return &font_puhui_16_4;
@@ -726,6 +727,65 @@ void DesktopUI::FocusTimerCb(lv_timer_t* timer) {
         }
     }
     self->UpdateFocusUI();
+}
+
+void DesktopUI::HourglassTickCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->hourglass_running_) {
+        return;
+    }
+    if (self->hourglass_remaining_sec_ > 0) {
+        self->hourglass_remaining_sec_--;
+    }
+    if (self->hourglass_remaining_sec_ == 0) {
+        self->hourglass_running_ = false;
+        self->hourglass_done_ = true;
+        if (self->hourglass_tick_timer_) {
+            lv_timer_pause(self->hourglass_tick_timer_);
+        }
+        if (self->hourglass_anim_timer_) {
+            lv_timer_pause(self->hourglass_anim_timer_);
+        }
+        ESP_LOGI(TAG, "Hourglass timer done");
+    }
+    self->UpdateHourglassUI();
+}
+
+void DesktopUI::HourglassAnimCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->hourglass_running_) {
+        return;
+    }
+    self->hourglass_anim_tick_++;
+    static constexpr int16_t kStreamX[7] = {159, 156, 161, 158, 162, 157, 160};
+    for (int i = 0; i < 7; ++i) {
+        lv_obj_t* dot = self->hourglass_falling_dots_[i];
+        if (!dot) {
+            continue;
+        }
+        const int phase = (self->hourglass_anim_tick_ * 8 + i * 17) % 96;
+        const lv_opa_t opa = phase < 78 ? static_cast<lv_opa_t>(LV_OPA_70 + ((i % 3) * 10))
+                                        : static_cast<lv_opa_t>(LV_OPA_TRANSP);
+        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, kStreamX[i], 191 + phase);
+        lv_obj_set_style_bg_opa(dot, opa, 0);
+        lv_obj_set_style_shadow_opa(dot, opa > LV_OPA_50 ? LV_OPA_30 : LV_OPA_TRANSP, 0);
+    }
+
+    static constexpr int16_t kSparkleX[5] = {126, 141, 175, 191, 207};
+    static constexpr int16_t kSparkleY[5] = {307, 295, 284, 301, 311};
+    for (int i = 7; i < 12; ++i) {
+        lv_obj_t* dot = self->hourglass_falling_dots_[i];
+        if (!dot) {
+            continue;
+        }
+        const int j = i - 7;
+        const int pulse = (self->hourglass_anim_tick_ * 9 + j * 31) % 120;
+        const lv_opa_t opa = pulse < 60 ? static_cast<lv_opa_t>(LV_OPA_30 + pulse / 2)
+                                        : static_cast<lv_opa_t>(LV_OPA_60 - (pulse - 60) / 2);
+        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, kSparkleX[j] + ((pulse / 30) & 1), kSparkleY[j]);
+        lv_obj_set_style_bg_opa(dot, opa, 0);
+        lv_obj_set_style_shadow_opa(dot, LV_OPA_20, 0);
+    }
 }
 
 // ===== Page navigation =====
@@ -1462,6 +1522,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (focus_page_) {
         lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
     }
+    if (hourglass_page_) {
+        lv_obj_add_flag(hourglass_page_, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     if (music_page_) {
         lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
@@ -1540,6 +1603,16 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show focus page");
             break;
+        case DesktopPage::HOURGLASS:
+            if (!hourglass_page_) {
+                CreateHourglassPage(lv_scr_act());
+            }
+            if (hourglass_page_) {
+                lv_obj_clear_flag(hourglass_page_, LV_OBJ_FLAG_HIDDEN);
+                UpdateHourglassUI();
+            }
+            ESP_LOGI(TAG, "Show hourglass page");
+            break;
         case DesktopPage::XIAOZHI:
             EnsureThemedFaceGif();
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -1592,17 +1665,20 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
     const int16_t min_dx = 70;
     const int16_t max_dy = 90;
 
+    if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > 35 && LV_ABS(dx) > LV_ABS(dy)) {
+        NavigateBack();
+        return;
+    }
+
     if (LV_ABS(dy) >= max_dy) {
         return;
     }
 
-    if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > min_dx) {
-        NavigateBack();
-    } else if (current_page_ == DesktopPage::MAIN && dx < -min_dx) {
+    if (current_page_ == DesktopPage::MAIN && dx < -min_dx) {
         ShowPage(DesktopPage::APPS);
-    } else if (current_page_ == DesktopPage::APPS && dx < -min_dx) {
-        ShowPage(DesktopPage::MEDIA);
-    } else if (current_page_ != DesktopPage::MAIN && dx > min_dx) {
+    } else if (current_page_ == DesktopPage::APPS && LV_ABS(dx) > min_dx) {
+        NavigateBack();
+    } else if (current_page_ != DesktopPage::MAIN && current_page_ != DesktopPage::APPS && LV_ABS(dx) > min_dx) {
         NavigateBack();
     }
 }
@@ -1636,6 +1712,8 @@ void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t 
                                    int64_t duration_ms) {
     const int16_t dx = static_cast<int16_t>(end_x) - static_cast<int16_t>(start_x);
     const int16_t dy = static_cast<int16_t>(end_y) - static_cast<int16_t>(start_y);
+    constexpr int64_t kTapMaxDurationMs = 350;
+    constexpr int64_t kSwipeMaxDurationMs = 900;
 
     if (current_page_ == DesktopPage::SETTINGS) {
         // Settings page scrolling and sliders are now handled by LVGL
@@ -1651,9 +1729,42 @@ void DesktopUI::HandleTouchRelease(uint16_t start_x, uint16_t start_y, uint16_t 
         return;
     }
 
-    if (duration_ms < 300 && LV_ABS(dx) < 30 && LV_ABS(dy) < 30) {
+    if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > 35 && LV_ABS(dx) > LV_ABS(dy)) {
+        photo_segment_swipe_active_ = false;
+        HandleSwipe(dx, dy);
+        return;
+    }
+
+    if (current_page_ == DesktopPage::PHOTO) {
+        const int64_t now_ms = esp_timer_get_time() / 1000;
+        if (!photo_segment_swipe_active_ || now_ms - photo_segment_last_ms_ > 850) {
+            photo_segment_swipe_active_ = true;
+            photo_segment_start_x_ = end_x;
+            photo_segment_start_y_ = end_y;
+            photo_segment_min_x_ = end_x;
+            photo_segment_max_x_ = end_x;
+        } else {
+            photo_segment_min_x_ = std::min<uint16_t>(photo_segment_min_x_, end_x);
+            photo_segment_max_x_ = std::max<uint16_t>(photo_segment_max_x_, end_x);
+            const int16_t segment_dx = static_cast<int16_t>(end_x) - static_cast<int16_t>(photo_segment_start_x_);
+            const int16_t segment_dy = static_cast<int16_t>(end_y) - static_cast<int16_t>(photo_segment_start_y_);
+            const uint16_t span_x = photo_segment_max_x_ - photo_segment_min_x_;
+            if (span_x > 110 && LV_ABS(segment_dx) > 70 && LV_ABS(segment_dy) < 90) {
+                ESP_LOGI(TAG, "Photo segmented swipe dx=%d dy=%d span=%u",
+                         segment_dx, segment_dy, span_x);
+                photo_segment_swipe_active_ = false;
+                HandleSwipe(segment_dx, segment_dy);
+                return;
+            }
+        }
+        photo_segment_last_ms_ = now_ms;
+        return;
+    }
+    photo_segment_swipe_active_ = false;
+
+    if (duration_ms < kTapMaxDurationMs && LV_ABS(dx) < 30 && LV_ABS(dy) < 30) {
         HandleTap(end_x, end_y);
-    } else if (duration_ms < 500) {
+    } else if (duration_ms < kSwipeMaxDurationMs) {
         HandleSwipe(dx, dy);
     } else {
         ESP_LOGI(TAG, "Touch release ignored dx=%d dy=%d duration=%dms",
@@ -1698,9 +1809,17 @@ void DesktopUI::HandleTouchPoints(const uint16_t* xs, const uint16_t* ys, size_t
 
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
+    auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
+        return x >= left && x < left + width && y >= top && y < top + height;
+    };
+
+    if (current_page_ == DesktopPage::HOURGLASS) {
+        HandleHourglassTap(x, y);
+        return;
+    }
 
     if (current_page_ == DesktopPage::MAIN) {
-        if (x >= 386 && x < 462 && y >= 10 && y < 42) {
+        if (x >= 376 && x < 470 && y >= 8 && y < 62) {
             ShowPage(DesktopPage::APPS);
         }
         return;
@@ -1719,11 +1838,84 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::RADIO) {
-        // Radio page buttons are now handled by LVGL click events
+        if (hit(372, 28, 96, 56)) {
+            NavigateBack();
+        } else if (hit(24, 180, 76, 32) && radio_prev_) {
+            radio_prev_();
+        } else if (hit(124, 180, 76, 32) && radio_play_pause_) {
+            radio_play_pause_();
+        } else if (hit(224, 180, 76, 32) && radio_stop_) {
+            radio_stop_();
+        } else if (hit(324, 180, 76, 32) && radio_next_) {
+            radio_next_();
+        }
         return;
     }
 
-    if (current_page_ == DesktopPage::MEDIA || current_page_ == DesktopPage::PODCAST) {
+    if (current_page_ == DesktopPage::MUSIC) {
+        if (hit(404, 4, 70, 32)) {
+            NavigateBack();
+        } else if (hit(414, 36, 52, 22) && music_pause_) {
+            music_pause_();
+        } else if (hit(414, 64, 52, 22) && music_play_) {
+            music_play_();
+        } else if (hit(414, 92, 52, 22) && music_next_) {
+            music_next_();
+        } else if (hit(18, 18, 128, 112)) {
+            StartMusicAsk();
+        } else if (hit(252, 224, 58, 22)) {
+            ClearMusicRecent();
+        } else if (hit(330, 226, 134, 24)) {
+            StartMusicAsk();
+        } else if (hit(330, 258, 134, 24)) {
+            ReplayNextMusicRecent();
+        } else if (hit(330, 290, 134, 24)) {
+            ClearMusicLyric();
+            if (music_pause_) {
+                music_pause_();
+            }
+        } else if (x >= 18 && x < 308 && y >= 248 && y < 248 + kMusicRecentCount * 22) {
+            const size_t index = (y - 248) / 22;
+            if (index < kMusicRecentCount) {
+                ReplayMusicRecent(index);
+            }
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::MEDIA) {
+        if (hit(372, 28, 96, 56)) {
+            NavigateBack();
+        } else if (hit(24, 92, 432, 160)) {
+            open_app_card(9);
+        }
+        return;
+    }
+
+    if (current_page_ == DesktopPage::PODCAST) {
+        if (!podcast_detail_view_) {
+            if (hit(12, 276, 76, 32)) {
+                NavigateBack();
+            } else if (hit(138, 276, 76, 32) && podcast_up_) {
+                podcast_up_();
+            } else if (hit(264, 276, 76, 32)) {
+                ShowPodcastDetail(true);
+            } else if (hit(392, 276, 76, 32) && podcast_down_) {
+                podcast_down_();
+            }
+        } else {
+            if (hit(12, 276, 76, 32)) {
+                ShowPodcastDetail(false);
+            } else if (hit(88, 276, 76, 32) && podcast_prev_) {
+                podcast_prev_();
+            } else if (hit(166, 276, 76, 32) && podcast_play_pause_) {
+                podcast_play_pause_();
+            } else if (hit(244, 276, 76, 32) && podcast_stop_) {
+                podcast_stop_();
+            } else if (hit(392, 276, 76, 32) && podcast_next_) {
+                podcast_next_();
+            }
+        }
         return;
     }
 
@@ -1736,7 +1928,13 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::CALENDAR) {
-        // Calendar page buttons are now handled by LVGL click events
+        if (hit(376, 36, 76, 28) || hit(192, 278, 96, 34)) {
+            ShowTodayCalendar();
+        } else if (hit(18, 278, 96, 34)) {
+            AdjustCalendarMonth(-1);
+        } else if (hit(366, 278, 96, 34)) {
+            AdjustCalendarMonth(1);
+        }
         return;
     }
 
@@ -1784,12 +1982,32 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         return;
     }
 
+    if (current_page_ == DesktopPage::NETWORK || current_page_ == DesktopPage::DIAGNOSTICS) {
+        if (hit(372, 28, 96, 56)) {
+            NavigateBack();
+        }
+        return;
+    }
+
     if (current_page_ != DesktopPage::APPS) {
         return;
     }
 
-    // Apps page buttons are now handled by LVGL click events
-    // Only keep gesture detection for swipe navigation
+    if (hit(372, 28, 96, 56)) {
+        NavigateBack();
+        return;
+    }
+    if (x >= 24 && x < 446 && y >= 76 && y < 76 + 5 * 45) {
+        const uint8_t col = x >= 242 ? 1 : 0;
+        const uint8_t row = (y - 76) / 45;
+        const uint8_t index = row * 2 + col;
+        const uint16_t tile_x = 24 + col * 218;
+        const uint16_t tile_y = 76 + row * 45;
+        if (index < 10 && hit(tile_x, tile_y, 204, 42)) {
+            ESP_LOGI(TAG, "Apps tap fallback index=%u", index);
+            open_app_card(index);
+        }
+    }
     return;
 }
 
@@ -3396,6 +3614,113 @@ void DesktopUI::CreateFocusPage(lv_obj_t* root) {
     focus_completed_count_ = LoadFocusStats(&focus_count_date_);
     ReconcileFocusDate(true);
     UpdateFocusUI();
+}
+
+void DesktopUI::CreateHourglassPage(lv_obj_t* root) {
+    hourglass_page_ = lv_obj_create(root);
+    lv_obj_remove_style_all(hourglass_page_);
+    lv_obj_set_size(hourglass_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(hourglass_page_, LV_COLOR_MAKE(0xff, 0xf7, 0xe8), 0);
+    lv_obj_set_style_bg_opa(hourglass_page_, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(hourglass_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(hourglass_page_, LV_OBJ_FLAG_HIDDEN);
+
+    hourglass_portrait_ = lv_obj_create(hourglass_page_);
+    lv_obj_remove_style_all(hourglass_portrait_);
+    lv_obj_set_size(hourglass_portrait_, 320, 480);
+    lv_obj_align(hourglass_portrait_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(hourglass_portrait_, LV_COLOR_MAKE(0xff, 0xf7, 0xe8), 0);
+    lv_obj_set_style_bg_opa(hourglass_portrait_, LV_OPA_COVER, 0);
+    lv_obj_set_style_transform_pivot_x(hourglass_portrait_, 160, 0);
+    lv_obj_set_style_transform_pivot_y(hourglass_portrait_, 240, 0);
+    lv_obj_set_style_transform_rotation(hourglass_portrait_, 900, 0);
+    lv_obj_clear_flag(hourglass_portrait_, LV_OBJ_FLAG_SCROLLABLE);
+
+    const lv_color_t brown = LV_COLOR_MAKE(0x4b, 0x2d, 0x16);
+    const lv_color_t sand_line = LV_COLOR_MAKE(0xf6, 0xb2, 0x3f);
+    const lv_color_t sand_soft = LV_COLOR_MAKE(0xff, 0xd1, 0x67);
+
+    auto rounded = [](lv_obj_t* parent, int x, int y, int w, int h, int radius,
+                      lv_color_t bg, lv_opa_t opa, lv_color_t border, int border_w) {
+        lv_obj_t* obj = lv_obj_create(parent);
+        lv_obj_remove_style_all(obj);
+        lv_obj_set_size(obj, w, h);
+        lv_obj_align(obj, LV_ALIGN_TOP_LEFT, x, y);
+        lv_obj_set_style_radius(obj, radius, 0);
+        lv_obj_set_style_bg_color(obj, bg, 0);
+        lv_obj_set_style_bg_opa(obj, opa, 0);
+        lv_obj_set_style_border_color(obj, border, 0);
+        lv_obj_set_style_border_width(obj, border_w, 0);
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+        return obj;
+    };
+
+    lv_obj_t* body = lv_image_create(hourglass_portrait_);
+    lv_image_set_src(body, &qd_hourglass_body);
+    lv_obj_align(body, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    for (int i = 0; i < 16; ++i) {
+        const int y = 143 + i * 3;
+        const int width = std::max(12, 166 - i * 9);
+        const int x = 160 - width / 2 + ((i % 3) - 1);
+        const lv_color_t color = (i % 3 == 0) ? sand_soft : sand_line;
+        hourglass_top_sand_strips_[i] = rounded(hourglass_portrait_, x, y, width, 4, 2,
+                                                color, LV_OPA_80, color, 0);
+    }
+    for (int i = 0; i < 22; ++i) {
+        const int width = std::min(184, 24 + i * 8);
+        const int x = 160 - width / 2 + ((i % 2) ? 1 : -1);
+        const int y = 323 - i * 3;
+        const lv_color_t color = (i % 4 == 0) ? sand_soft : sand_line;
+        hourglass_bottom_sand_strips_[i] = rounded(hourglass_portrait_, x, y, width, 4, 2,
+                                                   color, LV_OPA_TRANSP, color, 0);
+    }
+    for (int i = 0; i < 12; ++i) {
+        const int size = i < 7 ? (i % 2 ? 6 : 7) : (i % 2 ? 5 : 6);
+        hourglass_falling_dots_[i] = circle(hourglass_portrait_, size, i < 7 ? sand_line : sand_soft, LV_OPA_TRANSP);
+        lv_obj_set_style_shadow_width(hourglass_falling_dots_[i], 4, 0);
+        lv_obj_set_style_shadow_color(hourglass_falling_dots_[i], sand_soft, 0);
+        lv_obj_set_style_shadow_opa(hourglass_falling_dots_[i], LV_OPA_30, 0);
+    }
+
+    lv_obj_t* time_panel = rounded(hourglass_portrait_, 34, 366, 252, 66, 14,
+                                   LV_COLOR_MAKE(0xff, 0xfb, 0xf3), LV_OPA_COVER,
+                                   LV_COLOR_MAKE(0xe8, 0xc6, 0xa0), 2);
+    lv_obj_set_style_outline_width(time_panel, 1, 0);
+    lv_obj_set_style_outline_color(time_panel, LV_COLOR_MAKE(0xf1, 0xd3, 0xae), 0);
+    lv_obj_set_style_outline_opa(time_panel, LV_OPA_50, 0);
+    lv_obj_set_style_outline_pad(time_panel, -8, 0);
+
+    hourglass_time_label_ = label_en(time_panel, "15:00", &style_en);
+    lv_obj_set_width(hourglass_time_label_, 230);
+    lv_obj_set_style_text_align(hourglass_time_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(hourglass_time_label_, &lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_color(hourglass_time_label_, brown, 0);
+    lv_obj_align(hourglass_time_label_, LV_ALIGN_TOP_LEFT, 11, 0);
+
+    hourglass_status_label_ = label_en(time_panel, "倒计时中", &style_gold);
+    lv_obj_set_width(hourglass_status_label_, 230);
+    lv_obj_set_style_text_align(hourglass_status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(hourglass_status_label_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(hourglass_status_label_, brown, 0);
+    lv_obj_align(hourglass_status_label_, LV_ALIGN_TOP_LEFT, 11, 44);
+
+    static constexpr const char* kLabels[4] = {"5 min", "10 min", "15 min", "20 min"};
+    for (int i = 0; i < 4; ++i) {
+        hourglass_preset_buttons_[i] = rounded(hourglass_portrait_, 12 + i * 78, 444, 64, 30, 10,
+                                               LV_COLOR_MAKE(0xff, 0xf7, 0xe8), LV_OPA_COVER, brown, 2);
+        lv_obj_add_flag(hourglass_preset_buttons_[i], LV_OBJ_FLAG_CLICKABLE);
+        hourglass_preset_labels_[i] = label_en(hourglass_preset_buttons_[i], kLabels[i], &style_en);
+        lv_obj_set_style_text_font(hourglass_preset_labels_[i], &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(hourglass_preset_labels_[i], brown, 0);
+        lv_obj_align(hourglass_preset_labels_[i], LV_ALIGN_CENTER, 0, 0);
+    }
+
+    hourglass_tick_timer_ = lv_timer_create(HourglassTickCb, 1000, this);
+    hourglass_anim_timer_ = lv_timer_create(HourglassAnimCb, 100, this);
+    lv_timer_pause(hourglass_tick_timer_);
+    lv_timer_pause(hourglass_anim_timer_);
+    ResetHourglassToDefault();
 }
 
 // ===== XiaoZhi page =====
@@ -5205,6 +5530,17 @@ void DesktopUI::ReloadUserProfile() {
     memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
     memset(music_recent_labels_, 0, sizeof(music_recent_labels_));
     focus_page_ = nullptr;
+    hourglass_page_ = nullptr;
+    hourglass_portrait_ = nullptr;
+    hourglass_time_label_ = nullptr;
+    hourglass_status_label_ = nullptr;
+    hourglass_top_sand_ = nullptr;
+    hourglass_bottom_sand_ = nullptr;
+    memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
+    memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
+    memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
+    memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
+    memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
@@ -5220,6 +5556,8 @@ void DesktopUI::ReloadUserProfile() {
     weather_particle_timer_ = nullptr;
     radio_anim_timer_ = nullptr;
     focus_timer_ = nullptr;
+    hourglass_tick_timer_ = nullptr;
+    hourglass_anim_timer_ = nullptr;
 
     Create();
     ShowPage(page);
@@ -5258,6 +5596,17 @@ void DesktopUI::CycleTheme() {
     memset(music_recent_buttons_, 0, sizeof(music_recent_buttons_));
     memset(music_recent_labels_, 0, sizeof(music_recent_labels_));
     focus_page_ = nullptr;
+    hourglass_page_ = nullptr;
+    hourglass_portrait_ = nullptr;
+    hourglass_time_label_ = nullptr;
+    hourglass_status_label_ = nullptr;
+    hourglass_top_sand_ = nullptr;
+    hourglass_bottom_sand_ = nullptr;
+    memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
+    memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
+    memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
+    memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
+    memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
     xiaozhi_page_ = nullptr;
     music_lyric_panel_ = nullptr;
     music_lyric_label_ = nullptr;
@@ -5273,6 +5622,8 @@ void DesktopUI::CycleTheme() {
     weather_particle_timer_ = nullptr;
     radio_anim_timer_ = nullptr;
     focus_timer_ = nullptr;
+    hourglass_tick_timer_ = nullptr;
+    hourglass_anim_timer_ = nullptr;
     
     Create();
     ShowPage(DesktopPage::SETTINGS);
@@ -5387,6 +5738,194 @@ void DesktopUI::ToggleFocusTimer() {
              focus_running_ ? "start" : "pause", focus_is_work_ ? "work" : "break",
              static_cast<unsigned long>(focus_remaining_sec_));
     UpdateFocusUI();
+}
+
+void DesktopUI::ResetHourglassToDefault() {
+    hourglass_selected_index_ = 2;
+    hourglass_total_sec_ = 15 * 60;
+    hourglass_remaining_sec_ = hourglass_total_sec_;
+    hourglass_running_ = false;
+    hourglass_done_ = false;
+    hourglass_anim_tick_ = 0;
+    if (hourglass_tick_timer_) {
+        lv_timer_pause(hourglass_tick_timer_);
+    }
+    if (hourglass_anim_timer_) {
+        lv_timer_pause(hourglass_anim_timer_);
+    }
+    UpdateHourglassUI();
+}
+
+void DesktopUI::EnterHourglassMode() {
+    if (current_page_ != DesktopPage::HOURGLASS) {
+        hourglass_return_page_ = current_page_;
+    }
+    if (hourglass_return_page_ == DesktopPage::HOURGLASS) {
+        hourglass_return_page_ = DesktopPage::MAIN;
+    }
+    hourglass_motion_active_ = true;
+    ResetHourglassToDefault();
+    ShowPage(DesktopPage::HOURGLASS);
+}
+
+void DesktopUI::ExitHourglassMode() {
+    if (current_page_ != DesktopPage::HOURGLASS && !hourglass_motion_active_) {
+        return;
+    }
+    hourglass_motion_active_ = false;
+    hourglass_running_ = false;
+    hourglass_done_ = false;
+    if (hourglass_tick_timer_) {
+        lv_timer_delete(hourglass_tick_timer_);
+        hourglass_tick_timer_ = nullptr;
+    }
+    if (hourglass_anim_timer_) {
+        lv_timer_delete(hourglass_anim_timer_);
+        hourglass_anim_timer_ = nullptr;
+    }
+    const DesktopPage target = hourglass_return_page_ == DesktopPage::HOURGLASS
+        ? DesktopPage::MAIN
+        : hourglass_return_page_;
+    ShowPage(target);
+    if (hourglass_page_) {
+        lv_obj_del(hourglass_page_);
+        hourglass_page_ = nullptr;
+        hourglass_portrait_ = nullptr;
+        hourglass_time_label_ = nullptr;
+        hourglass_status_label_ = nullptr;
+        hourglass_top_sand_ = nullptr;
+        hourglass_bottom_sand_ = nullptr;
+        memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
+        memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
+        memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
+        memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
+        memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
+        ESP_LOGI(TAG, "Hourglass page released");
+    }
+}
+
+void DesktopUI::SelectHourglassPreset(uint8_t index) {
+    static constexpr uint32_t kDurationsSec[4] = {5 * 60, 10 * 60, 15 * 60, 20 * 60};
+    if (index >= 4) {
+        return;
+    }
+    if (index == hourglass_selected_index_ && !hourglass_done_ && hourglass_remaining_sec_ > 0 &&
+        hourglass_remaining_sec_ < hourglass_total_sec_) {
+        hourglass_running_ = !hourglass_running_;
+    } else {
+        hourglass_selected_index_ = index;
+        hourglass_total_sec_ = kDurationsSec[index];
+        hourglass_remaining_sec_ = hourglass_total_sec_;
+        hourglass_done_ = false;
+        hourglass_running_ = true;
+    }
+    if (hourglass_tick_timer_) {
+        if (hourglass_running_) {
+            lv_timer_resume(hourglass_tick_timer_);
+        } else {
+            lv_timer_pause(hourglass_tick_timer_);
+        }
+    }
+    if (hourglass_anim_timer_) {
+        if (hourglass_running_) {
+            lv_timer_resume(hourglass_anim_timer_);
+        } else {
+            lv_timer_pause(hourglass_anim_timer_);
+        }
+    }
+    ESP_LOGI(TAG, "Hourglass preset=%u running=%d remaining=%lu",
+             static_cast<unsigned>(index), hourglass_running_,
+             static_cast<unsigned long>(hourglass_remaining_sec_));
+    UpdateHourglassUI();
+}
+
+bool DesktopUI::HandleHourglassTap(uint16_t x, uint16_t y) {
+    const int16_t portrait_x = static_cast<int16_t>(y);
+    const int16_t portrait_y = static_cast<int16_t>(DISPLAY_WIDTH) - static_cast<int16_t>(x);
+    ESP_LOGI(TAG, "Hourglass tap raw=(%u,%u) portrait=(%d,%d)",
+             static_cast<unsigned>(x), static_cast<unsigned>(y), portrait_x, portrait_y);
+    if (portrait_y < 438 || portrait_y > 476) {
+        return false;
+    }
+    for (uint8_t i = 0; i < 4; ++i) {
+        const int16_t left = 12 + i * 78;
+        if (portrait_x >= left - 6 && portrait_x < left + 70) {
+            SelectHourglassPreset(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+void DesktopUI::UpdateHourglassButtons() {
+    const lv_color_t brown = LV_COLOR_MAKE(0x4b, 0x2d, 0x16);
+    const lv_color_t pink = LV_COLOR_MAKE(0xff, 0x9c, 0xa0);
+    const lv_color_t cream = LV_COLOR_MAKE(0xff, 0xf7, 0xe8);
+    const lv_color_t white = LV_COLOR_MAKE(0xff, 0xff, 0xff);
+    for (uint8_t i = 0; i < 4; ++i) {
+        if (!hourglass_preset_buttons_[i]) {
+            continue;
+        }
+        const bool selected = i == hourglass_selected_index_;
+        lv_obj_set_style_bg_color(hourglass_preset_buttons_[i],
+                                  selected ? pink : cream, 0);
+        lv_obj_set_style_border_width(hourglass_preset_buttons_[i], selected ? 3 : 2, 0);
+        lv_obj_set_style_border_color(hourglass_preset_buttons_[i], brown, 0);
+        if (hourglass_preset_labels_[i]) {
+            lv_obj_set_style_text_color(hourglass_preset_labels_[i],
+                                        selected ? white : brown, 0);
+        }
+    }
+}
+
+void DesktopUI::UpdateHourglassUI() {
+    if (!hourglass_time_label_) {
+        return;
+    }
+    char time_text[16];
+    snprintf(time_text, sizeof(time_text), "%02lu:%02lu",
+             static_cast<unsigned long>(hourglass_remaining_sec_ / 60),
+             static_cast<unsigned long>(hourglass_remaining_sec_ % 60));
+    lv_label_set_text(hourglass_time_label_, time_text);
+    if (hourglass_status_label_) {
+        const bool paused_midway = !hourglass_running_ && hourglass_remaining_sec_ < hourglass_total_sec_;
+        lv_label_set_text(hourglass_status_label_,
+                          hourglass_done_ ? "时间到" : (paused_midway ? "暂停中" : "倒计时中"));
+    }
+
+    const uint32_t elapsed = hourglass_total_sec_ > hourglass_remaining_sec_
+        ? hourglass_total_sec_ - hourglass_remaining_sec_
+        : 0;
+    const uint32_t progress = hourglass_total_sec_ == 0 ? 0 : (elapsed * 1000) / hourglass_total_sec_;
+    const int top_visible = hourglass_done_ ? 0 : std::max(1, 16 - static_cast<int>(progress * 15 / 1000));
+    const int bottom_visible = std::min(22, 4 + static_cast<int>(progress * 18 / 1000));
+    for (int i = 0; i < 16; ++i) {
+        lv_obj_t* strip = hourglass_top_sand_strips_[i];
+        if (!strip) {
+            continue;
+        }
+        const bool visible = i >= (16 - top_visible);
+        const lv_opa_t opa = visible ? static_cast<lv_opa_t>(LV_OPA_70 + (i % 3) * 10)
+                                     : static_cast<lv_opa_t>(LV_OPA_TRANSP);
+        lv_obj_set_style_bg_opa(strip, opa, 0);
+    }
+    for (int i = 0; i < 22; ++i) {
+        lv_obj_t* strip = hourglass_bottom_sand_strips_[i];
+        if (!strip) {
+            continue;
+        }
+        const bool visible = i < bottom_visible;
+        const lv_opa_t opa = visible ? static_cast<lv_opa_t>(LV_OPA_70 + (i % 4) * 6)
+                                     : static_cast<lv_opa_t>(LV_OPA_TRANSP);
+        lv_obj_set_style_bg_opa(strip, opa, 0);
+    }
+    for (auto* dot : hourglass_falling_dots_) {
+        if (dot) {
+            lv_obj_set_style_bg_opa(dot, hourglass_running_ ? LV_OPA_70 : LV_OPA_TRANSP, 0);
+            lv_obj_set_style_shadow_opa(dot, hourglass_running_ ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+        }
+    }
+    UpdateHourglassButtons();
 }
 
 void DesktopUI::StartFocusTimer(bool rotate_180) {
