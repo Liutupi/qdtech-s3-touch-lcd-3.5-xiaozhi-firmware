@@ -1,3 +1,33 @@
+## 2026-07-08 Handoff: v1.7.89 BMI270 Flip Focus + Touch Recovery
+
+Summary:
+- Firmware version target is now `v1.7.89` so OTA clients can see the BMI270 flip-focus and touch-recovery build.
+- Added BMI270 six-axis sensor support on the shared touch I2C bus. The board probes `0x68/0x69`, validates chip ID `0x24`, uploads the BMI270 config blob, and starts a background orientation task.
+- Horizontal 180-degree rotation now starts Focus Timer / Pomodoro mode. Rotating back to the normal horizontal position exits the Focus Timer page.
+- When Focus Timer is opened by the flip gesture, the display output is rotated 180 degrees and touch coordinates are mapped to the inverted screen.
+- Hardened the touch path after flip testing: touch and BMI270 now share an I2C mutex, BMI270 pauses briefly after touch activity, stale long presses synthesize release events, the FT6336 controller is reset after stuck touches, and repeated false taps are suppressed until real release.
+- Focus Timer has a Back button and fallback tap handling for work/break/start/reset/back controls.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/bmi270_context_config.c`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/qdtech_s3_touch_lcd_3_5.cc`
+
+Validation:
+- `idf.py -B build-qdtech-v1.7.88-bmi270 ... build merge-bin` passed after bumping `PROJECT_VER` to `1.7.89`.
+- CMake reported `App "xiaozhi" version: 1.7.89`.
+- App image size after build: `0x6444f0`; smallest app partition: `0x700000`; free: `0xbbb10`.
+- `merge-bin` generated `merged-binary.bin`, size `0x7444f0`.
+- App-only flashed the connected QDTech ESP32-S3 board on `COM3`; esptool hash verification passed.
+- `releases/v1.7.89/qdtech-s3-touch-lcd-3.5-v1.7.89-app.bin`: `86d4b720100093311eb4bc4252b6d203c8b1b46e94cc0afa9a7d6dc0fa905879`
+- `releases/v1.7.89/qdtech-s3-touch-lcd-3.5-v1.7.89-full.bin`: `6bcb3176408d75cbe7d2cea7b94234ec27ee2950f2572587793058a2e44e8394`
+- `releases/v1.7.89/qdtech-s3-touch-lcd-3.5-v1.7.89-firmware.zip`: `94eca5573d0e0f70a708894c644dbb255670ae386b3bf141429e1122402d407d`
+
+Follow-up test request:
+- On hardware, verify three paths after OTA/flash: normal home-page touch, flip into Focus Timer and tap its buttons, then flip back and tap the home page again. The latest touch-stuck suppression is intended to fix the post-flip no-touch issue, but it still needs a real board soak test.
+
 ## 2026-07-08 Handoff: v1.7.87 Music Controls Stability
 
 Summary:

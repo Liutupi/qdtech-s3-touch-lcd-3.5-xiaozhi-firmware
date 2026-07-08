@@ -1,4 +1,4 @@
-#include "desktop_ui.h"
+﻿#include "desktop_ui.h"
 #include "application.h"
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
@@ -1611,6 +1611,13 @@ void DesktopUI::NavigateBack() {
     if (current_page_ == DesktopPage::MAIN) {
         return;
     }
+    if (current_page_ == DesktopPage::FOCUS && focus_auto_rotated_) {
+        if (focus_rotation_callback_) {
+            focus_rotation_callback_(false);
+        }
+        focus_auto_rotated_ = false;
+        ESP_LOGI(TAG, "Focus display rotation restored");
+    }
 
     DesktopPage target = DesktopPage::APPS;
     if (current_page_ == DesktopPage::APPS) {
@@ -1734,7 +1741,39 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::FOCUS) {
-        // Focus page buttons are now handled by LVGL click events
+        uint16_t fx = x;
+        uint16_t fy = y;
+        if (focus_auto_rotated_) {
+            fx = 480 - 1 - fx;
+            fy = 320 - 1 - fy;
+        }
+        ESP_LOGI(TAG, "Focus tap fallback raw=%u,%u logical=%u,%u rotated=%d",
+                 x, y, fx, fy, focus_auto_rotated_);
+        if (fx >= 414 && fx < 466 && fy >= 42 && fy < 66) {
+            ESP_LOGI(TAG, "Focus tap fallback back");
+            NavigateBack();
+            return;
+        }
+        if (fx >= 342 && fx < 450 && fy >= 82 && fy < 124) {
+            ESP_LOGI(TAG, "Focus tap fallback work");
+            SetFocusMode(true);
+            return;
+        }
+        if (fx >= 342 && fx < 450 && fy >= 134 && fy < 176) {
+            ESP_LOGI(TAG, "Focus tap fallback break");
+            SetFocusMode(false);
+            return;
+        }
+        if (fx >= 128 && fx < 260 && fy >= 262 && fy < 306) {
+            ESP_LOGI(TAG, "Focus tap fallback start");
+            ToggleFocusTimer();
+            return;
+        }
+        if (fx >= 276 && fx < 388 && fy >= 262 && fy < 306) {
+            ESP_LOGI(TAG, "Focus tap fallback reset");
+            ResetFocusTimer();
+            return;
+        }
         return;
     }
 
@@ -3241,6 +3280,10 @@ void DesktopUI::CreateFocusPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(sub, &lv_font_montserrat_16, 0);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 118, 46);
     focus_mode_label_ = sub;
+    lv_obj_t* back = CreateButton(focus_page_, "Back", navigate_back_cb);
+    lv_obj_set_size(back, 52, 24);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -14, 42);
 
     lv_obj_t* left_panel = CreatePanel(focus_page_, 104, 116, 22, 86);
     lv_obj_set_style_bg_color(left_panel, LV_COLOR_MAKE(0x11, 0x0f, 0x0c), 0);
@@ -4717,6 +4760,10 @@ void DesktopUI::SetMainPageCallback(std::function<void()> callback) {
     main_page_callback_ = std::move(callback);
 }
 
+void DesktopUI::SetFocusRotationCallback(std::function<void(bool)> callback) {
+    focus_rotation_callback_ = std::move(callback);
+}
+
 void DesktopUI::SetPhotoActiveCallback(std::function<void(bool)> callback) {
     photo_active_callback_ = std::move(callback);
 }
@@ -5342,6 +5389,30 @@ void DesktopUI::ToggleFocusTimer() {
     UpdateFocusUI();
 }
 
+void DesktopUI::StartFocusTimer(bool rotate_180) {
+    if (rotate_180) {
+        if (focus_rotation_callback_) {
+            focus_rotation_callback_(true);
+        }
+        focus_auto_rotated_ = true;
+        ESP_LOGI(TAG, "Focus display rotated 180 by motion");
+    }
+    if (focus_remaining_sec_ == 0) {
+        focus_is_work_ = true;
+        focus_total_sec_ = 25 * 60;
+        focus_remaining_sec_ = focus_total_sec_;
+    }
+    if (focus_is_work_ && !focus_running_) {
+        focus_running_ = true;
+        if (focus_timer_) {
+            lv_timer_resume(focus_timer_);
+        }
+        ESP_LOGI(TAG, "Focus timer start by motion remaining=%lu",
+                 static_cast<unsigned long>(focus_remaining_sec_));
+    }
+    ShowPage(DesktopPage::FOCUS);
+    UpdateFocusUI();
+}
 void DesktopUI::ResetFocusTimer() {
     focus_running_ = false;
     focus_total_sec_ = focus_is_work_ ? 25 * 60 : 5 * 60;

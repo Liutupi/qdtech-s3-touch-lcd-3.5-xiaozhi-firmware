@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "lvgl.h"
 #include <cstddef>
@@ -73,6 +73,7 @@ public:
     void AdjustCalendarMonth(int delta);
     void ShowTodayCalendar();
     void ToggleFocusTimer();
+    void StartFocusTimer(bool rotate_180 = false);
     void ResetFocusTimer();
     void SetFocusMode(bool work_mode);
     void SetSystemBrightness(int value);
@@ -82,6 +83,7 @@ public:
     void ReloadUserProfile();
     void RefreshSettingsControls();
     void SetMainPageCallback(std::function<void()> callback);
+    void SetFocusRotationCallback(std::function<void(bool)> callback);
     void SetPhotoActiveCallback(std::function<void(bool)> callback);
     void SetPhotoRefreshCallback(std::function<void()> callback);
     void SetPhotoState(const char* title, const char* detail);
@@ -313,6 +315,8 @@ private:
     uint32_t focus_total_sec_ = 25 * 60;
     uint16_t focus_completed_count_ = 0;
     uint32_t focus_count_date_ = 0;
+    bool focus_auto_rotated_ = false;
+    std::function<void(bool)> focus_rotation_callback_;
 
     // Settings page elements
     lv_obj_t* settings_brightness_slider_ = nullptr;

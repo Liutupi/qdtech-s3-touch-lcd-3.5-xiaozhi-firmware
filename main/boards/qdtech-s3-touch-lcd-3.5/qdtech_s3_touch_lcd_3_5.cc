@@ -1,4 +1,4 @@
-#include "wifi_board.h"
+﻿#include "wifi_board.h"
 #include "audio_codecs/es8311_audio_codec.h"
 #include "display/lcd_display.h"
 #include "application.h"
@@ -55,6 +55,10 @@ static constexpr int kLyricUdpPort = 45678;
 static constexpr int kMusicCommandHttpPort = 45679;
 static constexpr size_t kLyricUdpPacketMax = 2048;
 static constexpr size_t kMusicCommandBodyMax = 4096;
+extern "C" {
+extern const uint8_t bmi270_context_config_file[];
+extern const int bmi270_context_config_file_size;
+}
 
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
@@ -215,6 +219,21 @@ public:
         return display_;
     }
 
+    void SetLandscapeInverted(bool inverted) {
+        if (landscape_inverted_ == inverted) {
+            return;
+        }
+        landscape_inverted_ = inverted;
+        ESP_LOGI(TAG, "landscape display inverted=%d", landscape_inverted_);
+        if (display_) {
+            lv_obj_invalidate(lv_screen_active());
+        }
+    }
+
+    bool IsLandscapeInverted() const {
+        return landscape_inverted_;
+    }
+
     bool DrawLandscapeRgb565(int x, int y, int width, int height, const uint16_t* pixels,
                              uint32_t timeout_ms = 20) {
         if (!pixels || width <= 0 || height <= 0 || x < 0 || y < 0 ||
@@ -271,7 +290,11 @@ private:
         const int width = area->x2 - area->x1 + 1;
         const int height = area->y2 - area->y1 + 1;
 
-        DrawLandscapeRgb565Locked(x_start, y_start, width, height, color_map);
+        if (landscape_inverted_) {
+            DrawLandscapeRgb565LockedInverted(x_start, y_start, width, height, color_map);
+        } else {
+            DrawLandscapeRgb565Locked(x_start, y_start, width, height, color_map);
+        }
 
         lv_display_flush_ready(display_);
         const int64_t elapsed_us = esp_timer_get_time() - flush_start_us;
@@ -318,6 +341,41 @@ private:
         }
     }
 
+    void DrawLandscapeRgb565LockedInverted(int x_start, int y_start, int width, int height,
+                                           const uint16_t* color_map) {
+        const int x_end = x_start + width - 1;
+        const int y_end = y_start + height - 1;
+        constexpr int transfer_pixels = DISPLAY_WIDTH * DISPLAY_HEIGHT / 10;
+
+        int max_width = transfer_pixels / height;
+        if (max_width < 1) {
+            max_width = 1;
+        }
+
+        int x_start_tmp = x_start;
+        while (x_start_tmp <= x_end) {
+            const int trans_width = std::min(max_width, x_end - x_start_tmp + 1);
+            const int x_end_tmp = x_start_tmp + trans_width - 1;
+
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < trans_width; x++) {
+                    uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
+                    color = (color << 8) | (color >> 8);
+                    transfer_buffer_[(trans_width - x - 1) * height + y] = color;
+                }
+            }
+
+            const int draw_x_start = y_start;
+            const int draw_x_end = y_end;
+            const int draw_y_start = DISPLAY_WIDTH - x_end_tmp - 1;
+            const int draw_y_end = DISPLAY_WIDTH - x_start_tmp - 1;
+
+            xSemaphoreTake(transfer_done_, 0);
+            ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_, draw_x_start, draw_y_start, draw_x_end + 1, draw_y_end + 1, transfer_buffer_));
+            xSemaphoreTake(transfer_done_, pdMS_TO_TICKS(1000));
+            x_start_tmp += trans_width;
+        }
+    }
     void DrawLandscapeRgb565LockedPreSwapped(int x_start, int y_start, int width, int height,
                                               const uint16_t* color_map) {
         const int x_end = x_start + width - 1;
@@ -353,6 +411,7 @@ private:
         }
     }
 
+    bool landscape_inverted_ = false;
     uint16_t* frame_buffer_ = nullptr;
     uint16_t* transfer_buffer_ = nullptr;
     SemaphoreHandle_t transfer_done_ = nullptr;
@@ -364,6 +423,10 @@ public:
         uint16_t x;
         uint16_t y;
     };
+
+    void SetBusMutex(SemaphoreHandle_t mutex) {
+        bus_mutex_ = mutex;
+    }
 
     void Init(i2c_master_bus_handle_t bus) {
         bus_ = bus;
@@ -396,7 +459,7 @@ public:
         gpio_set_level(TOUCH_RST_PIN, 0);
         vTaskDelay(pdMS_TO_TICKS(10));
         gpio_set_level(TOUCH_RST_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(50));
 
         uint8_t max_touches = 0;
         if (ReadReg(kMaxTouches, &max_touches, 1) == ESP_OK && max_touches > 0 && max_touches <= kMaxTouchPoints) {
@@ -406,6 +469,15 @@ public:
         }
         ESP_LOGI(TAG, "Touch max points: %u", max_points_);
         initialized_ = true;
+    }
+
+    void ResetController() {
+        gpio_set_level(TOUCH_RST_PIN, 0);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        gpio_set_level(TOUCH_RST_PIN, 1);
+        read_failures_ = 0;
+        read_backoff_until_us_ = esp_timer_get_time() + 200000;
+        ESP_LOGW(TAG, "touch controller reset");
     }
 
     size_t ReadPoints(TouchPoint* points, size_t max_points) {
@@ -473,7 +545,13 @@ private:
 
     esp_err_t ReadReg(uint16_t reg, uint8_t* data, size_t len) {
         uint8_t addr[2] = {static_cast<uint8_t>(reg >> 8), static_cast<uint8_t>(reg & 0xFF)};
+        if (bus_mutex_) {
+            xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(200));
+        }
         esp_err_t err = i2c_master_transmit_receive(dev_, addr, sizeof(addr), data, len, pdMS_TO_TICKS(100));
+        if (bus_mutex_) {
+            xSemaphoreGive(bus_mutex_);
+        }
         if (err != ESP_OK) {
             NoteReadFailure();
         }
@@ -490,13 +568,20 @@ private:
         if (read_failures_ >= 3 && bus_ && now_us - last_bus_reset_us_ > 3000000) {
             last_bus_reset_us_ = now_us;
             ESP_LOGW(TAG, "touch i2c reset after repeated failures");
+            if (bus_mutex_) {
+                xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(200));
+            }
             i2c_master_bus_reset(bus_);
+            if (bus_mutex_) {
+                xSemaphoreGive(bus_mutex_);
+            }
             read_backoff_until_us_ = now_us + 1000000;
         }
     }
 
     i2c_master_bus_handle_t bus_ = nullptr;
     i2c_master_dev_handle_t dev_ = nullptr;
+    SemaphoreHandle_t bus_mutex_ = nullptr;
     uint8_t max_points_ = 1;
     uint8_t read_failures_ = 0;
     bool initialized_ = false;
@@ -663,6 +748,7 @@ public:
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeTouch();
+        InitializeBmi270();
         InitializeButtons();
         InitializeTools();
         InitializeRadio();
@@ -968,8 +1054,312 @@ private:
             },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
+        i2c_mutex_ = xSemaphoreCreateMutex();
+        ESP_ERROR_CHECK(i2c_mutex_ ? ESP_OK : ESP_ERR_NO_MEM);
     }
 
+    void LockSharedI2c(TickType_t timeout = pdMS_TO_TICKS(200)) {
+        if (i2c_mutex_) {
+            xSemaphoreTake(i2c_mutex_, timeout);
+        }
+    }
+
+    void UnlockSharedI2c() {
+        if (i2c_mutex_) {
+            xSemaphoreGive(i2c_mutex_);
+        }
+    }
+    bool Bmi270ReadReg(uint8_t reg, uint8_t* data, size_t len) {
+        if (!bmi270_dev_ || !data || len == 0) {
+            return false;
+        }
+        LockSharedI2c();
+        esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &reg, 1, data, len, pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 read reg=0x%02x failed: %s", reg, esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool Bmi270WriteReg(uint8_t reg, uint8_t value) {
+        if (!bmi270_dev_) {
+            return false;
+        }
+        const uint8_t data[] = {reg, value};
+        LockSharedI2c();
+        esp_err_t err = i2c_master_transmit(bmi270_dev_, data, sizeof(data), pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 write reg=0x%02x failed: %s", reg, esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool Bmi270WriteData(uint8_t reg, const uint8_t* data, size_t len) {
+        if (!bmi270_dev_ || !data || len == 0) {
+            return false;
+        }
+        std::vector<uint8_t> buffer(len + 1);
+        buffer[0] = reg;
+        std::memcpy(buffer.data() + 1, data, len);
+        LockSharedI2c(pdMS_TO_TICKS(1200));
+        esp_err_t err = i2c_master_transmit(bmi270_dev_, buffer.data(), buffer.size(), pdMS_TO_TICKS(1000));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 write data reg=0x%02x len=%u failed: %s",
+                     reg, static_cast<unsigned>(len), esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool ConfigureBmi270() {
+        Bmi270WriteReg(0x7E, 0xB6);
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        uint8_t chip_id = 0;
+        if (!Bmi270ReadReg(0x00, &chip_id, 1) || chip_id != 0x24) {
+            ESP_LOGW(TAG, "BMI270 vanished after reset chip_id=0x%02x", chip_id);
+            return false;
+        }
+
+        Bmi270WriteReg(0x7C, 0x00);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        Bmi270WriteReg(0x59, 0x00);
+        if (!Bmi270WriteData(0x5E, bmi270_context_config_file,
+                             static_cast<size_t>(bmi270_context_config_file_size))) {
+            return false;
+        }
+        Bmi270WriteReg(0x59, 0x01);
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        uint8_t internal_status = 0;
+        if (!Bmi270ReadReg(0x21, &internal_status, 1)) {
+            return false;
+        }
+        ESP_LOGI(TAG, "BMI270 init status=0x%02x", internal_status);
+        if ((internal_status & 0x0F) != 0x01) {
+            ESP_LOGW(TAG, "BMI270 config load not ready status=0x%02x", internal_status);
+            return false;
+        }
+
+        Bmi270WriteReg(0x7D, 0x0E);
+        Bmi270WriteReg(0x40, 0xA6);
+        Bmi270WriteReg(0x41, 0x03);
+        Bmi270WriteReg(0x42, 0xA6);
+        Bmi270WriteReg(0x43, 0x00);
+        Bmi270WriteReg(0x7C, 0x02);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        return true;
+    }
+
+    bool Bmi270ReadAccel(int16_t& x, int16_t& y, int16_t& z) {
+        uint8_t data[6] = {};
+        if (!Bmi270ReadReg(0x0C, data, sizeof(data))) {
+            return false;
+        }
+        x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
+        y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
+        z = static_cast<int16_t>((static_cast<uint16_t>(data[5]) << 8) | data[4]);
+        return true;
+    }
+
+    bool Bmi270ReadGyro(int16_t& x, int16_t& y, int16_t& z) {
+        uint8_t data[6] = {};
+        if (!Bmi270ReadReg(0x12, data, sizeof(data))) {
+            return false;
+        }
+        x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
+        y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
+        z = static_cast<int16_t>((static_cast<uint16_t>(data[5]) << 8) | data[4]);
+        return true;
+    }
+
+    bool ProbeBmi270Address(uint8_t address) {
+        LockSharedI2c();
+        esp_err_t probe_err = i2c_master_probe(i2c_bus_, address, pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (probe_err != ESP_OK) {
+            return false;
+        }
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = address,
+            .scl_speed_hz = 400000,
+            .scl_wait_us = 0,
+            .flags = {},
+        };
+        esp_err_t err = i2c_master_bus_add_device(i2c_bus_, &dev_cfg, &bmi270_dev_);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 add device addr=0x%02x failed: %s", address, esp_err_to_name(err));
+            return false;
+        }
+
+        uint8_t chip_id = 0;
+        if (!Bmi270ReadReg(0x00, &chip_id, 1)) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+        ESP_LOGI(TAG, "BMI270 probe addr=0x%02x chip_id=0x%02x", address, chip_id);
+        if (chip_id != 0x24) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+
+        bmi270_addr_ = address;
+        if (!ConfigureBmi270()) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+        bmi270_present_ = true;
+        ESP_LOGI(TAG, "BMI270 detected addr=0x%02x; flip-to-focus enabled", bmi270_addr_);
+        return true;
+    }
+
+    void InitializeBmi270() {
+        if (!i2c_bus_) {
+            return;
+        }
+        if (!ProbeBmi270Address(0x68) && !ProbeBmi270Address(0x69)) {
+            ESP_LOGW(TAG, "BMI270 not detected on I2C addr 0x68/0x69");
+            return;
+        }
+        BaseType_t ok = xTaskCreate(
+            [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
+            "bmi270", 4096, this, 3, &bmi270_task_);
+        if (ok != pdPASS) {
+            ESP_LOGW(TAG, "BMI270 task create failed");
+        }
+    }
+
+    void TriggerFocusFromBmi270() {
+        if (!display_) {
+            return;
+        }
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->StartFocusTimer(true);
+            }
+            lvgl_port_unlock();
+        }
+    }
+
+    void ExitFocusFromBmi270() {
+        if (!display_) {
+            return;
+        }
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->NavigateBack();
+            }
+            lvgl_port_unlock();
+        }
+    }
+
+    void Bmi270Task() {
+        int stable_baseline_count = 0;
+        int stable_inverted_count = 0;
+        int stable_rearm_count = 0;
+        int64_t last_log_ms = 0;
+        int64_t last_trigger_ms = 0;
+
+        while (true) {
+            const int64_t loop_now_ms = esp_timer_get_time() / 1000;
+            if (loop_now_ms < touch_quiet_until_ms_) {
+                vTaskDelay(pdMS_TO_TICKS(80));
+                continue;
+            }
+
+            int16_t x = 0;
+            int16_t y = 0;
+            int16_t z = 0;
+            int16_t gx = 0;
+            int16_t gy = 0;
+            int16_t gz = 0;
+            if (!Bmi270ReadAccel(x, y, z) || !Bmi270ReadGyro(gx, gy, gz)) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
+            const int64_t now_ms = esp_timer_get_time() / 1000;
+            const int64_t mag_sq = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y + static_cast<int64_t>(z) * z;
+            const int gyro_peak = std::max({std::abs(static_cast<int>(gx)), std::abs(static_cast<int>(gy)), std::abs(static_cast<int>(gz))});
+
+            if (now_ms - last_log_ms > 3000) {
+                int dot_log = 0;
+                if (bmi270_baseline_mag_sq_ != 0) {
+                    dot_log = static_cast<int>(static_cast<int64_t>(x) * bmi270_baseline_x_ +
+                                               static_cast<int64_t>(y) * bmi270_baseline_y_ +
+                                               static_cast<int64_t>(z) * bmi270_baseline_z_);
+                }
+                ESP_LOGI(TAG, "BMI270 level-180 x=%d y=%d z=%d gyro=%d dot=%d armed=%d",
+                         x, y, z, gyro_peak, dot_log, bmi270_flip_armed_);
+                last_log_ms = now_ms;
+            }
+
+            if (bmi270_baseline_mag_sq_ == 0) {
+                if (mag_sq > 1000000 && gyro_peak < 30) {
+                    stable_baseline_count++;
+                    if (stable_baseline_count >= 10) {
+                        bmi270_baseline_x_ = x;
+                        bmi270_baseline_y_ = y;
+                        bmi270_baseline_z_ = z;
+                        bmi270_baseline_mag_sq_ = mag_sq;
+                        bmi270_flip_armed_ = true;
+                        ESP_LOGI(TAG, "BMI270 level baseline x=%d y=%d z=%d mag=%d",
+                                 x, y, z, static_cast<int>(mag_sq));
+                    }
+                } else {
+                    stable_baseline_count = 0;
+                }
+                vTaskDelay(pdMS_TO_TICKS(50));
+                continue;
+            }
+
+            const int64_t dot = static_cast<int64_t>(x) * bmi270_baseline_x_ +
+                                static_cast<int64_t>(y) * bmi270_baseline_y_ +
+                                static_cast<int64_t>(z) * bmi270_baseline_z_;
+            const int64_t reference = bmi270_baseline_mag_sq_ * 7 / 10;
+            const bool rotated_180 = mag_sq > 1000000 && dot < -reference;
+            const bool normal_level = mag_sq > 1000000 && dot > reference;
+
+            if (bmi270_flip_armed_ && rotated_180 && gyro_peak < 80) {
+                stable_inverted_count++;
+                if (stable_inverted_count >= 20 && now_ms - last_trigger_ms > 15000) {
+                    bmi270_flip_armed_ = false;
+                    stable_inverted_count = 0;
+                    last_trigger_ms = now_ms;
+                    ESP_LOGI(TAG, "BMI270 horizontal 180 stable; starting focus timer x=%d y=%d z=%d dot=%d",
+                             x, y, z, static_cast<int>(dot));
+                    TriggerFocusFromBmi270();
+                }
+            } else {
+                stable_inverted_count = 0;
+            }
+
+            if (!bmi270_flip_armed_ && normal_level && gyro_peak < 30 && now_ms - last_trigger_ms > 5000) {
+                stable_rearm_count++;
+                if (stable_rearm_count >= 25) {
+                    bmi270_flip_armed_ = true;
+                    stable_rearm_count = 0;
+                    ESP_LOGI(TAG, "BMI270 horizontal normal stable; exiting focus timer");
+                    ExitFocusFromBmi270();
+                }
+            } else if (gyro_peak >= 30 || !normal_level) {
+                stable_rearm_count = 0;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+    }
     void InitializeSdCard() {
         if (fc_emulator_service_.PrepareSdCard()) {
             ESP_LOGI(TAG, "SD card prepared early");
@@ -1026,9 +1416,28 @@ private:
             .emoji_font = font_emoji_64_init(),
 #endif
         });
+        if (display_ && lvgl_port_lock(0)) {
+            if (auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()) {
+                desktop_ui->SetFocusRotationCallback([this](bool inverted) {
+                    SetFocusDisplayInverted(inverted);
+                });
+            }
+            lvgl_port_unlock();
+        }
     }
 
+    void SetFocusDisplayInverted(bool inverted) {
+        if (!display_) {
+            return;
+        }
+        touch_cached_down_ = false;
+        touch_down_ = false;
+        touch_ignore_until_ms_ = esp_timer_get_time() / 1000 + 350;
+        static_cast<QdtechLandscapeDisplay*>(display_)->SetLandscapeInverted(inverted);
+        ESP_LOGI(TAG, "focus touch reset for inverted=%d", inverted);
+    }
     void InitializeTouch() {
+        touch_.SetBusMutex(i2c_mutex_);
         touch_.Init(i2c_bus_);
 
         // Create LVGL input device
@@ -1470,9 +1879,20 @@ private:
             return;
         }
 
+        if (board->touch_ignore_until_ms_ > esp_timer_get_time() / 1000) {
+            data->state = LV_INDEV_STATE_RELEASED;
+            return;
+        }
+
         if (board->touch_cached_down_) {
-            data->point.x = board->touch_cached_x_;
-            data->point.y = board->touch_cached_y_;
+            uint16_t x = board->touch_cached_x_;
+            uint16_t y = board->touch_cached_y_;
+            if (board->display_ && static_cast<QdtechLandscapeDisplay*>(board->display_)->IsLandscapeInverted()) {
+                x = DISPLAY_WIDTH - 1 - x;
+                y = DISPLAY_HEIGHT - 1 - y;
+            }
+            data->point.x = x;
+            data->point.y = y;
             data->state = LV_INDEV_STATE_PRESSED;
         } else {
             data->state = LV_INDEV_STATE_RELEASED;
@@ -1485,6 +1905,25 @@ private:
         const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
         auto* desktop_ui = GetDesktopUI();
+        if (touch_ignore_until_ms_ > now_ms) {
+            touch_cached_down_ = false;
+            touch_down_ = false;
+            return;
+        }
+        if (touch_suppressed_until_release_) {
+            if (!touched) {
+                touch_suppressed_until_release_ = false;
+                ESP_LOGI(TAG, "touch suppression cleared");
+            } else {
+                touch_cached_down_ = false;
+                touch_down_ = false;
+                return;
+            }
+        }
+
+        if (touched || touch_down_) {
+            touch_quiet_until_ms_ = now_ms + 600;
+        }
 
         touch_cached_down_ = touched;
         if (touched) {
@@ -1523,7 +1962,21 @@ private:
         } else if (touched && touch_down_) {
             touch_last_x_ = x;
             touch_last_y_ = y;
-            HandleTouchState(x, y, true);
+            if (now_ms - touch_start_ms_ > 450) {
+                touch_down_ = false;
+                touch_cached_down_ = false;
+                touch_ignore_until_ms_ = now_ms + 250;
+                touch_suppressed_until_release_ = true;
+                touch_.ResetController();
+                const int16_t dx = static_cast<int16_t>(touch_last_x_) - static_cast<int16_t>(touch_start_x_);
+                const int16_t dy = static_cast<int16_t>(touch_last_y_) - static_cast<int16_t>(touch_start_y_);
+                ESP_LOGW(TAG, "touch forced release x=%u y=%u dx=%d dy=%d held=%dms",
+                         touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(now_ms - touch_start_ms_));
+                HandleTouchState(touch_last_x_, touch_last_y_, false);
+                HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, 120);
+            } else {
+                HandleTouchState(x, y, true);
+            }
         } else if (!touched && touch_down_) {
             touch_down_ = false;
             int16_t dx = (int16_t)touch_last_x_ - (int16_t)touch_start_x_;
@@ -1623,7 +2076,7 @@ private:
                 ESP_LOGW(TAG, "BOOT still held after 10s; entering deep sleep anyway may wake immediately");
                 break;
             }
-            vTaskDelay(pdMS_TO_TICKS(20));
+            vTaskDelay(pdMS_TO_TICKS(50));
         }
         vTaskDelay(pdMS_TO_TICKS(250));
 
@@ -2103,6 +2556,16 @@ private:
     Button boot_button_;
     LcdDisplay* display_ = nullptr;
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
+    SemaphoreHandle_t i2c_mutex_ = nullptr;
+    i2c_master_dev_handle_t bmi270_dev_ = nullptr;
+    TaskHandle_t bmi270_task_ = nullptr;
+    bool bmi270_present_ = false;
+    bool bmi270_flip_armed_ = false;
+    uint8_t bmi270_addr_ = 0;
+    int16_t bmi270_baseline_x_ = 0;
+    int16_t bmi270_baseline_y_ = 0;
+    int16_t bmi270_baseline_z_ = 0;
+    int64_t bmi270_baseline_mag_sq_ = 0;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
     esp_timer_handle_t boot_power_timer_ = nullptr;
@@ -2120,6 +2583,9 @@ private:
     uint16_t touch_start_y_ = 0;
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
+    int64_t touch_ignore_until_ms_ = 0;
+    int64_t touch_quiet_until_ms_ = 0;
+    bool touch_suppressed_until_release_ = false;
     QdtechBatteryMonitor battery_monitor_;
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
