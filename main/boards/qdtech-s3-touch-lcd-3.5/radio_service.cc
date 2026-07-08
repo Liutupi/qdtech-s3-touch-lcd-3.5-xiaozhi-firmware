@@ -682,8 +682,17 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
 
 void RadioService::PostCommand(Command command) {
     auto queue = static_cast<QueueHandle_t>(queue_);
-    if (queue) {
-        xQueueSend(queue, &command, 0);
+    if (!queue) {
+        return;
+    }
+    if (xQueueSend(queue, &command, 0) == pdTRUE) {
+        return;
+    }
+
+    ESP_LOGW(TAG, "radio command queue full; dropping stale commands command=%d", static_cast<int>(command));
+    xQueueReset(queue);
+    if (xQueueSend(queue, &command, 0) != pdTRUE) {
+        ESP_LOGW(TAG, "radio command queue still full command=%d", static_cast<int>(command));
     }
 }
 
@@ -807,11 +816,14 @@ void RadioService::HandleCommand(Command command) {
             ESP_LOGI(TAG, "radio stopped");
             break;
         case Command::NEXT:
-            if (playing_custom_url_) {
-                playing_custom_url_ = false;
-                if (last_radio_station_index_ >= 0 && last_radio_station_index_ < StationCount()) {
-                    station_index_ = last_radio_station_index_;
-                }
+            if (playing_custom_url_ || station_index_ == custom_station_index_) {
+                play_requested_ = false;
+                stop_requested_ = true;
+                reconnect_attempt_ = 0;
+                Application::GetInstance().SetExternalAudioActive(false);
+                SetUi("Stopped", "Ask XiaoZhi for next song");
+                ESP_LOGI(TAG, "music next ignored until a fresh URL is provided");
+                break;
             }
             NextStation(1);
             play_requested_ = true;

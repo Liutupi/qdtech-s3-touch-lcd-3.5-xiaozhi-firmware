@@ -101,6 +101,8 @@ public:
                                                    const std::string& artist,
                                                    const std::string& url,
                                                    const std::string& lyrics_json)> callback);
+    bool TryAcceptMusicControlTap();
+    void ReplayNextMusicRecent();
     void ReplayMusicRecent(size_t index);
     void RemoveMusicRecent(size_t index);
     void ClearMusicRecent();
@@ -275,6 +277,7 @@ private:
     std::string music_recent_pending_title_;
     size_t music_recent_failed_index_ = kMusicRecentCount;
     std::string music_recent_failed_reason_;
+    int64_t music_control_last_ms_ = 0;
     std::string music_title_ = "No song yet";
     std::string music_artist_ = "Ask XiaoZhi to play NetEase music";
     std::string music_line_ = "Tap Ask and say a song name.";

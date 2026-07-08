@@ -31,6 +31,7 @@
 #define TAG "DesktopUI"
 
 static constexpr int64_t kMusicLyricHoldMs = 12000;
+static constexpr int64_t kMusicControlDebounceMs = 450;
 
 LV_FONT_DECLARE(lv_font_montserrat_12);
 LV_FONT_DECLARE(lv_font_montserrat_14);
@@ -992,20 +993,23 @@ static void music_stop_cb(lv_event_t* event) {
 }
 
 static void music_pause_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_pause_) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui &&
+        g_desktop_ui->TryAcceptMusicControlTap() && g_desktop_ui->music_pause_) {
         g_desktop_ui->music_pause_();
     }
 }
 
 static void music_play_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_play_) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui &&
+        g_desktop_ui->TryAcceptMusicControlTap() && g_desktop_ui->music_play_) {
         g_desktop_ui->music_play_();
     }
 }
 
 static void music_next_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->music_next_) {
-        g_desktop_ui->music_next_();
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui &&
+        g_desktop_ui->TryAcceptMusicControlTap()) {
+        g_desktop_ui->ReplayNextMusicRecent();
     }
 }
 
@@ -5650,6 +5654,15 @@ void DesktopUI::SetMusicReplayCallback(std::function<void(const std::string& tit
     music_replay_cb_ = std::move(callback);
 }
 
+bool DesktopUI::TryAcceptMusicControlTap() {
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    if (now_ms - music_control_last_ms_ < kMusicControlDebounceMs) {
+        return false;
+    }
+    music_control_last_ms_ = now_ms;
+    return true;
+}
+
 void DesktopUI::StartMusicAsk() {
     music_line_ = "Listening... say a song name.";
     if (music_line_label_) {
@@ -6028,6 +6041,21 @@ void DesktopUI::RememberMusicTrack(const char* title, const char* artist, const 
     music_recent_failed_reason_.clear();
     SaveMusicRecent();
     RefreshMusicRecent();
+}
+
+void DesktopUI::ReplayNextMusicRecent() {
+    if (kMusicRecentCount < 2 || music_recent_[1].url.empty()) {
+        music_line_ = "No next song cached. Ask XiaoZhi for a fresh song.";
+        if (music_line_label_) {
+            lv_label_set_text(music_line_label_, "Ready");
+        }
+        if (music_side_lyric_label_) {
+            lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        }
+        SetAppTileStatus(8, "Ask XiaoZhi", COLOR_GOLD);
+        return;
+    }
+    ReplayMusicRecent(1);
 }
 
 void DesktopUI::ReplayMusicRecent(size_t index) {
