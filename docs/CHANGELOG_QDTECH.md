@@ -1,3 +1,10 @@
+## v1.7.87 - 2026-07-08
+
+- Music page controls stability hotfix.
+- Added a short debounce window for Music Play/Pause/Next taps to avoid rapid-command races.
+- Music Next now replays the next cached recent song instead of reusing radio station Next.
+- Radio command queue overflow now drops stale queued commands and keeps the latest user action.
+- Custom music URL playback no longer falls through to radio station switching when a Next command is received.
 # QDTech Firmware Changelog
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.

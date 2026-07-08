@@ -1,3 +1,27 @@
+## 2026-07-08 Handoff: v1.7.87 Music Controls Stability
+
+Summary:
+- Firmware version target is now `v1.7.87` so OTA clients can detect the music-control hotfix after v1.7.86.
+- Stabilized the new Music page Play/Pause/Next controls: rapid taps are debounced, Music Next no longer falls through to radio station switching, and stale radio commands are dropped when the queue is full.
+- Built and app-only flashed the connected QDTech ESP32-S3 board on `COM3`; esptool hash verification passed.
+- Boot log confirmed `Ota: Current version: 1.7.87`, WiFi connected, MQTT connected, and the app reached `STATE: idle`.
+
+Files touched:
+- `CMakeLists.txt`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.h`
+- `main/boards/qdtech-s3-touch-lcd-3.5/desktop_ui.cc`
+- `main/boards/qdtech-s3-touch-lcd-3.5/radio_service.cc`
+
+Validation:
+- `idf.py -B build-qdtech-v1.7.87-musicfix ... set-target esp32s3 build merge-bin` passed.
+- App image size after build: `0x640460`; smallest app partition: `0x700000`; free: `0xbfba0`.
+- `releases/v1.7.87/qdtech-s3-touch-lcd-3.5-v1.7.87-app.bin`: `add6945dd8f9aa3060dfb699cb7a0fe93dc81512298feb0c21b556fab69115d1`
+- `releases/v1.7.87/qdtech-s3-touch-lcd-3.5-v1.7.87-full.bin`: `68068d81a3dfc755abf731c120d46f43b94553292938b78a2b717cef559e2f22`
+- `releases/v1.7.87/qdtech-s3-touch-lcd-3.5-v1.7.87-firmware.zip`: `161b2c89f3b1376bddb0c0720c3d6f3ecd89efab9d34aa177dbbfec14fe2b7b4`
+- App-only flash path: `0x100000 build-qdtech-v1.7.87-musicfix/xiaozhi.bin`.
+
+Follow-up test request:
+- Ask XiaoZhi to play a song, tap Pause/Play several times, then tap Next. Next should either replay the next cached recent song or prompt for a fresh song instead of switching to radio.
 # QDTech 3.5 XiaoZhi Project Handoff
 
 > Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
