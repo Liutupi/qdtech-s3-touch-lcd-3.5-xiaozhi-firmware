@@ -1,3 +1,27 @@
+## 2026-07-09: v1.7.91 Hourglass Completion Alarm
+
+Scope:
+
+- Bumped firmware version to 1.7.91.
+- Added a one-shot audible alarm when the hourglass countdown reaches 00:00.
+- Reused the built-in P3_SUCCESS sound and routed it through a new PlayNotificationSound helper so idle speaker output is re-enabled before playback.
+- Kept the v1.7.90 stable touch/BMI270 behavior unchanged.
+
+Verification:
+
+- idf.py -B build-v1790 reconfigure build merge-bin passed on Windows ESP-IDF 5.5.
+- CMake reported App "xiaozhi" version 1.7.91.
+- xiaozhi.bin size is 0x64e7c0 / 6612928 bytes; QDTech 7 MB app slot has 0xb1840 bytes free.
+- merged-binary.bin size is 0x74e7c0 / 7661504 bytes.
+- Flashed to COM3 and monitored a full 5 minute hourglass countdown.
+- Monitor confirmed Hourglass tick remaining=0, Hourglass alarm sound requested, AudioCodec output enabled, and Hourglass timer done.
+
+Release assets:
+
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin: 21839bde70e75ada23c8fa96679b3626518386f53e1ddb3507fac46573385585
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-full.bin: 99bf3c7175bdd02b726a0c63564135613dd23e4c0a17b1ac984094279759baff
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-firmware.zip: b15325b37fcc19266cf14a78f91e71fadad5aa1f70638a1b9d4c2aaa38add1a9
+- releases/v1.7.91/SHA256SUMS.txt records the same hashes.
 # QDTech Firmware Changelog
 
 This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for git log; it records the practical handoff facts that future maintainers need.

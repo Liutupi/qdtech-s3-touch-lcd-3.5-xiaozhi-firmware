@@ -279,6 +279,14 @@ void Application::PlaySound(const std::string_view& sound) {
     }
 }
 
+void Application::PlayNotificationSound(const std::string_view& sound) {
+    if (sound.empty()) {
+        return;
+    }
+    ResetDecoder();
+    PlaySound(sound);
+}
+
 void Application::EnterAudioTestingMode() {
     ESP_LOGI(TAG, "Entering audio testing mode");
     ResetDecoder();

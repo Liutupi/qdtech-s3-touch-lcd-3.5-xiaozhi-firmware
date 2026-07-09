@@ -1,3 +1,21 @@
+# 2026-07-09 Project Status: v1.7.91 Hourglass Alarm
+
+Firmware:
+
+- Version bumped to 1.7.91 for QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows source/worktree: D:\3.5inch_ESP32-S3\worktree-v1786-hourglass.
+- Windows build directory: build-v1790.
+- Latest app image: build-v1790\xiaozhi.bin.
+- Latest app size: 0x64e7c0 / 6612928 bytes, leaving 0xb1840 bytes in the 0x700000 app partition.
+- Latest merged image: build-v1790\merged-binary.bin, 0x74e7c0 / 7661504 bytes.
+- Release assets are in releases/v1.7.91/.
+
+Stability status:
+
+- This version keeps the proven v1.7.90 stable touch/BMI270 base.
+- Hourglass countdown completion now plays a one-shot P3_SUCCESS notification through the normal decoder reset path so idle speaker output is re-enabled.
+- Hardware monitor confirmed a real 5 minute hourglass countdown reached 00:00, requested the alarm sound, enabled AudioCodec output, and marked the timer done.
+- Photo right-swipe exit and normal tap navigation were reconfirmed during the previous v1.7.90 validation run and were not changed in this release.
 # 2026-07-09 Project Status: v1.7.90 Stable Touch and Hourglass
 
 Firmware:

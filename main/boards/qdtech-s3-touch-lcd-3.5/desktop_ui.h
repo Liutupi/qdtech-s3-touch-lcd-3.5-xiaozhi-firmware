@@ -346,6 +346,7 @@ private:
     DesktopPage hourglass_return_page_ = DesktopPage::MAIN;
     bool hourglass_running_ = false;
     bool hourglass_done_ = false;
+    bool hourglass_alarm_played_ = false;
     bool hourglass_motion_active_ = false;
     uint8_t hourglass_selected_index_ = 2;
     uint8_t hourglass_anim_tick_ = 0;
