@@ -1,3 +1,22 @@
+# 2026-07-09 Project Status: v1.7.90 Stable Touch and Hourglass
+
+Firmware:
+
+- Version bumped to 1.7.90 for QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows source/worktree: D:\3.5inch_ESP32-S3\worktree-v1786-hourglass.
+- Windows build directory: build-v1790.
+- Latest app image: build-v1790\xiaozhi.bin.
+- Latest app size: 0x64e2f0 / 6611696 bytes, leaving 0xb1d10 bytes in the 0x700000 app partition.
+- Latest merged image: build-v1790\merged-binary.bin, 0x74e2f0 / 7660272 bytes.
+- Release assets are in releases/v1.7.90/.
+
+Stability status:
+
+- This version keeps the proven v1.7.86 touch path and adds only the required hourglass/BMI270 behavior.
+- BMI270 polling backs off while touch is active to avoid I2C contention with the touch controller.
+- Unused BLE config service was removed from the QDTech board; HTTP config server remains enabled.
+- Hardware monitor confirmed taps, photo right-swipe exit, Settings vertical scroll, and hourglass enter/exit.
+- Remaining item to keep watching: XiaoZhi page right-swipe should use the same unified swipe return path, but it was not explicitly captured in the final monitor window.
 # 2026-07-04 Project Status: v1.7.76 Stability Hotfix
 
 Firmware:

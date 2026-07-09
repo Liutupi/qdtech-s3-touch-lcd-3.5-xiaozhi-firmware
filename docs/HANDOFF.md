@@ -1,7 +1,44 @@
 # QDTech 3.5 XiaoZhi Project Handoff
 
-> Future Codex note: read this file, `docs/PROJECT_STATUS.md`, `docs/NEXT_TASKS.md`, and `docs/CODEX_RULES.md` before changing code.
+> Future Codex note: read this file, docs/PROJECT_STATUS.md, docs/NEXT_TASKS.md, and docs/CODEX_RULES.md before changing code.
 
+## 2026-07-09 Handoff: v1.7.90 Stable Touch Base with Hourglass
+
+Current target:
+
+- Firmware version target is now v1.7.90.
+- This release intentionally uses v1.7.86 as the touch-stable base after hardware testing showed later post-IMU versions degraded right swipe, vertical scroll, and tap response.
+- Built on Windows with ESP-IDF 5.5 from D:\3.5inch_ESP32-S3\worktree-v1786-hourglass, build directory build-v1790.
+- Release assets were generated in releases/v1.7.90/.
+- The connected board on COM3 has been flashed with the final v1.7.90 image; esptool hash verification passed.
+
+What changed:
+
+- Bumped PROJECT_VER to 1.7.90.
+- Kept the v1.7.86 QDTech touch driver path as the stable baseline.
+- Added BMI270 hourglass orientation logic and the hourglass UI/resource.
+- Added I2C protection so BMI270 reads share the bus politely and back off during active touch windows.
+- Removed the unused QDTech BLE phone-config service from this board to reduce internal SRAM pressure.
+- Kept the HTTP phone/web config server path; QdWifiConfig starts without the BLE low-memory skip path.
+
+Verification:
+
+- idf.py -B build-v1790 build merge-bin passed.
+- CMake reported App "xiaozhi" version 1.7.90 and the app image contains the 1.7.90 version string.
+- xiaozhi.bin size is 0x64e2f0 / 6611696 bytes; QDTech 7 MB OTA app slot has 0xb1d10 bytes free, about 10 percent.
+- merged-binary.bin size is 0x74e2f0 / 7660272 bytes.
+- Final v1.7.90 flash to COM3 completed with esptool hash verification.
+- Serial monitor monitor-v1786-hourglass-noble-20260709.log confirmed HTTP config service startup, no BLE low-memory init path, normal tap down/release events, photo right-swipe back navigation, Settings vertical scroll, and BMI270 hourglass enter/exit. A final v1.7.90 short monitor confirmed QdWifiConfig HTTP startup and BMI270 polling after the final flash.
+
+Release asset SHA256:
+
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-app.bin: 9f938b92184fa603561bc55282e40893d48a73dcfbd2d4a05a8ab5920cb982a3
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-full.bin: b6ede99bb665a67dcfab6d4bfccfabb771cc7a94c4ff53fb2aa7e339f138469d
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-firmware.zip: f55da7c6490d7a3da2215767f221c54352a13e429f4c14eba37d04741b25616a
+
+Release/OTA note:
+
+- On-device updater consumes the latest GitHub Release asset named qdtech-s3-touch-lcd-3.5-*-app.bin plus SHA256SUMS.txt when available. Publish v1.7.90 as the latest GitHub Release with these assets so other boards can download it.
 ## 2026-07-07 Handoff: v1.7.86 OTA Version Correction
 
 Current target:

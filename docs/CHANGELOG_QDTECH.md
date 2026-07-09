@@ -1,7 +1,31 @@
 # QDTech Firmware Changelog
 
-This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for `git log`; it records the practical handoff facts that future maintainers need.
+This changelog tracks QDTech-specific firmware maintenance. It is not a replacement for git log; it records the practical handoff facts that future maintainers need.
 
+## 2026-07-09: v1.7.90 Stable Touch Base, Hourglass, and BLE Removal
+
+Scope:
+
+- Bumped firmware version to 1.7.90.
+- Rebased the QDTech board fix on the v1.7.86 touch-stable path instead of later touch/IMU experiments.
+- Added BMI270-driven hourglass page enter/exit while backing off IMU polling during active touch.
+- Removed unused QDTech BLE config service files and startup path to reduce internal SRAM pressure.
+- Kept HTTP web config service available for phone/browser configuration.
+
+Verification:
+
+- idf.py -B build-v1790 build merge-bin passed on Windows ESP-IDF 5.5.
+- CMake reported App "xiaozhi" version 1.7.90; binary scan confirmed 1.7.90 inside xiaozhi.bin.
+- xiaozhi.bin size is 0x64e2f0 / 6611696 bytes; QDTech 7 MB app slot has 0xb1d10 bytes free.
+- merged-binary.bin size is 0x74e2f0 / 7660272 bytes.
+- Serial monitor confirmed normal touch down/release, app tap, photo right-swipe exit, Settings vertical scroll, HTTP config startup, and hourglass enter/exit.
+
+Release assets:
+
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-app.bin: 9f938b92184fa603561bc55282e40893d48a73dcfbd2d4a05a8ab5920cb982a3
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-full.bin: b6ede99bb665a67dcfab6d4bfccfabb771cc7a94c4ff53fb2aa7e339f138469d
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-firmware.zip: f55da7c6490d7a3da2215767f221c54352a13e429f4c14eba37d04741b25616a
+- releases/v1.7.90/SHA256SUMS.txt records the same hashes.
 ## 2026-07-07: v1.7.85 Music Controls, NAS Private FM, and QR Login Prep
 
 Scope:

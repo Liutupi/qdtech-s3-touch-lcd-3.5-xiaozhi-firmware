@@ -11,7 +11,6 @@
 #include "photo_service.h"
 #include "podcast_service.h"
 #include "qd_esp_mqtt.h"
-#include "qd_ble_config_service.h"
 #include "qd_wifi_config_server.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
@@ -55,7 +54,11 @@ static constexpr int kLyricUdpPort = 45678;
 static constexpr int kMusicCommandHttpPort = 45679;
 static constexpr size_t kLyricUdpPacketMax = 2048;
 static constexpr size_t kMusicCommandBodyMax = 4096;
-
+static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
+extern "C" {
+extern const uint8_t bmi270_context_config_file[];
+extern const int bmi270_context_config_file_size;
+}
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
 
@@ -663,6 +666,7 @@ public:
         InitializeSpi();
         InitializeLcdDisplay();
         InitializeTouch();
+        InitializeBmi270();
         InitializeButtons();
         InitializeTools();
         InitializeRadio();
@@ -968,6 +972,338 @@ private:
             },
         };
         ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_bus_cfg, &i2c_bus_));
+        i2c_mutex_ = xSemaphoreCreateMutex();
+        ESP_ERROR_CHECK(i2c_mutex_ ? ESP_OK : ESP_ERR_NO_MEM);
+    }
+
+    bool LockSharedI2c(TickType_t timeout = pdMS_TO_TICKS(200)) {
+        if (i2c_mutex_) {
+            return xSemaphoreTake(i2c_mutex_, timeout) == pdTRUE;
+        }
+        return true;
+    }
+
+    void UnlockSharedI2c() {
+        if (i2c_mutex_) {
+            xSemaphoreGive(i2c_mutex_);
+        }
+    }
+
+    bool Bmi270ReadReg(uint8_t reg, uint8_t* data, size_t len) {
+        if (!bmi270_dev_ || !data || len == 0) {
+            return false;
+        }
+        if (!LockSharedI2c(0)) {
+            return false;
+        }
+        esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &reg, 1, data, len, pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 read reg=0x%02x failed: %s", reg, esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool Bmi270WriteReg(uint8_t reg, uint8_t value) {
+        if (!bmi270_dev_) {
+            return false;
+        }
+        const uint8_t data[] = {reg, value};
+        if (!LockSharedI2c()) {
+            return false;
+        }
+        esp_err_t err = i2c_master_transmit(bmi270_dev_, data, sizeof(data), pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 write reg=0x%02x failed: %s", reg, esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool Bmi270WriteData(uint8_t reg, const uint8_t* data, size_t len) {
+        if (!bmi270_dev_ || !data || len == 0) {
+            return false;
+        }
+        std::vector<uint8_t> buffer(len + 1);
+        buffer[0] = reg;
+        std::memcpy(buffer.data() + 1, data, len);
+        if (!LockSharedI2c(pdMS_TO_TICKS(1200))) {
+            return false;
+        }
+        esp_err_t err = i2c_master_transmit(bmi270_dev_, buffer.data(), buffer.size(), pdMS_TO_TICKS(1000));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 write data reg=0x%02x len=%u failed: %s",
+                     reg, static_cast<unsigned>(len), esp_err_to_name(err));
+            return false;
+        }
+        return true;
+    }
+
+    bool ConfigureBmi270() {
+        Bmi270WriteReg(0x7E, 0xB6);
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        uint8_t chip_id = 0;
+        if (!Bmi270ReadReg(0x00, &chip_id, 1) || chip_id != 0x24) {
+            ESP_LOGW(TAG, "BMI270 vanished after reset chip_id=0x%02x", chip_id);
+            return false;
+        }
+
+        Bmi270WriteReg(0x7C, 0x00);
+        vTaskDelay(pdMS_TO_TICKS(10));
+        Bmi270WriteReg(0x59, 0x00);
+        if (!Bmi270WriteData(0x5E, bmi270_context_config_file,
+                             static_cast<size_t>(bmi270_context_config_file_size))) {
+            return false;
+        }
+        Bmi270WriteReg(0x59, 0x01);
+        vTaskDelay(pdMS_TO_TICKS(50));
+
+        uint8_t internal_status = 0;
+        if (!Bmi270ReadReg(0x21, &internal_status, 1)) {
+            return false;
+        }
+        ESP_LOGI(TAG, "BMI270 init status=0x%02x", internal_status);
+        if ((internal_status & 0x0F) != 0x01) {
+            ESP_LOGW(TAG, "BMI270 config load not ready status=0x%02x", internal_status);
+            return false;
+        }
+
+        Bmi270WriteReg(0x7D, 0x0E);
+        Bmi270WriteReg(0x40, 0xA6);
+        Bmi270WriteReg(0x41, 0x03);
+        Bmi270WriteReg(0x42, 0xA6);
+        Bmi270WriteReg(0x43, 0x00);
+        Bmi270WriteReg(0x7C, 0x02);
+        vTaskDelay(pdMS_TO_TICKS(50));
+        return true;
+    }
+
+    bool Bmi270ReadAccel(int16_t& x, int16_t& y, int16_t& z) {
+        uint8_t data[6] = {};
+        if (!Bmi270ReadReg(0x0C, data, sizeof(data))) {
+            return false;
+        }
+        x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
+        y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
+        z = static_cast<int16_t>((static_cast<uint16_t>(data[5]) << 8) | data[4]);
+        return true;
+    }
+
+    bool Bmi270ReadGyro(int16_t& x, int16_t& y, int16_t& z) {
+        uint8_t data[6] = {};
+        if (!Bmi270ReadReg(0x12, data, sizeof(data))) {
+            return false;
+        }
+        x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
+        y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
+        z = static_cast<int16_t>((static_cast<uint16_t>(data[5]) << 8) | data[4]);
+        return true;
+    }
+
+    bool ProbeBmi270Address(uint8_t address) {
+        LockSharedI2c();
+        esp_err_t probe_err = i2c_master_probe(i2c_bus_, address, pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (probe_err != ESP_OK) {
+            return false;
+        }
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = address,
+            .scl_speed_hz = 400000,
+            .scl_wait_us = 0,
+            .flags = {},
+        };
+        esp_err_t err = i2c_master_bus_add_device(i2c_bus_, &dev_cfg, &bmi270_dev_);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "BMI270 add device addr=0x%02x failed: %s", address, esp_err_to_name(err));
+            return false;
+        }
+
+        uint8_t chip_id = 0;
+        if (!Bmi270ReadReg(0x00, &chip_id, 1)) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+        ESP_LOGI(TAG, "BMI270 probe addr=0x%02x chip_id=0x%02x", address, chip_id);
+        if (chip_id != 0x24) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+
+        bmi270_addr_ = address;
+        if (!ConfigureBmi270()) {
+            i2c_master_bus_rm_device(bmi270_dev_);
+            bmi270_dev_ = nullptr;
+            return false;
+        }
+        bmi270_present_ = true;
+        ESP_LOGI(TAG, "BMI270 detected addr=0x%02x; hourglass rotation enabled", bmi270_addr_);
+        return true;
+    }
+
+    void InitializeBmi270() {
+        if (!i2c_bus_) {
+            return;
+        }
+        if (!ProbeBmi270Address(0x68) && !ProbeBmi270Address(0x69)) {
+            ESP_LOGW(TAG, "BMI270 not detected on I2C addr 0x68/0x69");
+            return;
+        }
+        BaseType_t ok = xTaskCreate(
+            [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
+            "bmi270", 4096, this, 1, &bmi270_task_);
+        if (ok != pdPASS) {
+            ESP_LOGW(TAG, "BMI270 task create failed");
+        }
+    }
+
+    bool EnterHourglassFromBmi270() {
+        if (!display_) {
+            return false;
+        }
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->EnterHourglassMode();
+                lvgl_port_unlock();
+                return true;
+            }
+            lvgl_port_unlock();
+        }
+        ESP_LOGW(TAG, "BMI270 hourglass enter deferred, LVGL busy");
+        return false;
+    }
+
+    bool ExitHourglassFromBmi270() {
+        if (!display_) {
+            return false;
+        }
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->ExitHourglassMode();
+                lvgl_port_unlock();
+                return true;
+            }
+            lvgl_port_unlock();
+        }
+        ESP_LOGW(TAG, "BMI270 hourglass exit deferred, LVGL busy");
+        return false;
+    }
+
+    void Bmi270Task() {
+        int stable_baseline_count = 0;
+        int stable_portrait_count = 0;
+        int stable_landscape_count = 0;
+        int64_t last_log_ms = 0;
+        bool hourglass_active = false;
+
+        while (true) {
+            const int64_t loop_ms = esp_timer_get_time() / 1000;
+            if (loop_ms < touch_active_until_ms_) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
+
+            int16_t x = 0;
+            int16_t y = 0;
+            int16_t z = 0;
+            int16_t gx = 0;
+            int16_t gy = 0;
+            int16_t gz = 0;
+            if (!Bmi270ReadAccel(x, y, z) || !Bmi270ReadGyro(gx, gy, gz)) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                continue;
+            }
+
+            const int64_t now_ms = esp_timer_get_time() / 1000;
+            const int64_t mag_sq = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y + static_cast<int64_t>(z) * z;
+            const int gyro_peak = std::max({std::abs(static_cast<int>(gx)), std::abs(static_cast<int>(gy)), std::abs(static_cast<int>(gz))});
+
+            if (now_ms - last_log_ms > 3000) {
+                ESP_LOGI(TAG, "BMI270 hourglass x=%d y=%d z=%d gyro=%d active=%d",
+                         x, y, z, gyro_peak, hourglass_active);
+                last_log_ms = now_ms;
+            }
+
+            if (bmi270_baseline_mag_sq_ == 0) {
+                const bool landscape_candidate = mag_sq > 1000000 && gyro_peak < 45 &&
+                    std::abs(static_cast<int>(x)) > 1500 && std::abs(static_cast<int>(y)) < 900;
+                if (landscape_candidate) {
+                    stable_baseline_count++;
+                    if (stable_baseline_count >= 5) {
+                        bmi270_baseline_x_ = x;
+                        bmi270_baseline_y_ = y;
+                        bmi270_baseline_z_ = z;
+                        bmi270_baseline_mag_sq_ = mag_sq;
+                        ESP_LOGI(TAG, "BMI270 landscape baseline x=%d y=%d z=%d mag=%d",
+                                 x, y, z, static_cast<int>(mag_sq));
+                    }
+                } else {
+                    stable_baseline_count = 0;
+                }
+                vTaskDelay(pdMS_TO_TICKS(250));
+                continue;
+            }
+
+            const int64_t dot = static_cast<int64_t>(x) * bmi270_baseline_x_ +
+                                static_cast<int64_t>(y) * bmi270_baseline_y_ +
+                                static_cast<int64_t>(z) * bmi270_baseline_z_;
+            const int64_t xy_dot = static_cast<int64_t>(x) * bmi270_baseline_x_ +
+                                   static_cast<int64_t>(y) * bmi270_baseline_y_;
+            const int64_t baseline_xy_mag_sq = static_cast<int64_t>(bmi270_baseline_x_) * bmi270_baseline_x_ +
+                                               static_cast<int64_t>(bmi270_baseline_y_) * bmi270_baseline_y_;
+            const int64_t current_xy_mag_sq = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y;
+            const bool good_gravity = mag_sq > 1000000;
+            const bool portrait_90 = good_gravity && baseline_xy_mag_sq > 250000 &&
+                current_xy_mag_sq > baseline_xy_mag_sq / 3 &&
+                std::llabs(xy_dot) < baseline_xy_mag_sq * 35 / 100 &&
+                std::llabs(dot) < bmi270_baseline_mag_sq_ * 65 / 100;
+            const bool landscape_normal = good_gravity && dot > bmi270_baseline_mag_sq_ * 65 / 100;
+
+            if (!hourglass_active && portrait_90 && gyro_peak < 150) {
+                if (now_ms < kHourglassStartupHoldoffMs) {
+                    stable_portrait_count = 0;
+                    stable_landscape_count = 0;
+                    vTaskDelay(pdMS_TO_TICKS(250));
+                    continue;
+                }
+                stable_portrait_count++;
+                stable_landscape_count = 0;
+                if (stable_portrait_count >= 5) {
+                    ESP_LOGI(TAG, "BMI270 90 portrait stable; enter hourglass");
+                    if (EnterHourglassFromBmi270()) {
+                        hourglass_active = true;
+                        stable_portrait_count = 0;
+                    }
+                }
+            } else if (!hourglass_active) {
+                stable_portrait_count = 0;
+            }
+
+            if (hourglass_active && landscape_normal && gyro_peak < 100) {
+                stable_landscape_count++;
+                stable_portrait_count = 0;
+                if (stable_landscape_count >= 5) {
+                    ESP_LOGI(TAG, "BMI270 landscape stable; exit hourglass");
+                    if (ExitHourglassFromBmi270()) {
+                        hourglass_active = false;
+                        stable_landscape_count = 0;
+                    }
+                }
+            } else if (hourglass_active) {
+                stable_landscape_count = 0;
+            }
+
+            vTaskDelay(pdMS_TO_TICKS(250));
+        }
     }
 
     void InitializeSdCard() {
@@ -1096,20 +1432,15 @@ private:
     }
 
     std::string MusicFailureLine(const std::string& result) {
-        if (result.find("没有拿到") != std::string::npos) {
-            return "没有拿到可播放链接，请换歌名或说清楚版本。";
-        }
-        if (result.find("试听片段") != std::string::npos ||
-            result.find("short preview") != std::string::npos) {
-            return "这个来源只有试听片段，正在等小智换完整版本。";
+        if (result.find("short preview") != std::string::npos) {
+            return "Only a preview source was found. Try another song version.";
         }
         if (result.find("rejected") != std::string::npos ||
             result.find("unavailable") != std::string::npos) {
-            return "歌曲链接被版权或源站拒绝，请换一个版本。";
+            return "The music source was rejected or unavailable.";
         }
-        return "这首歌暂时没有拿到可播放源，请换歌名或版本。";
+        return "No playable source was found. Try another song name or version.";
     }
-
     void ShowMusicPlayFailure(const std::string& title, const std::string& artist, const std::string& result) {
         lyric_generation_.fetch_add(1);
         SetCurrentLyricSong(title, artist, 0);
@@ -1484,6 +1815,9 @@ private:
         const size_t point_count = touch_.ReadPoints(points, 10);
         const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
+        if (touched) {
+            touch_active_until_ms_ = now_ms + 800;
+        }
         auto* desktop_ui = GetDesktopUI();
 
         touch_cached_down_ = touched;
@@ -1661,8 +1995,8 @@ private:
             "Show a QR code on the device screen. Use this for login URLs such as NetEase Music QR login. Pass the raw QR text or URL in content, not a base64 image.",
             PropertyList({
                 Property("content", kPropertyTypeString),
-                Property("title", kPropertyTypeString, std::string("扫码登录")),
-                Property("hint", kPropertyTypeString, std::string("用手机扫码；点屏幕关闭")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
+                Property("hint", kPropertyTypeString, std::string("Tap screen to close")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto content = properties["content"].value<std::string>();
                 const auto title = properties["title"].value<std::string>();
@@ -1728,7 +2062,7 @@ private:
         mcp_server.AddTool("self.music.play_url",
             "Play a FULL direct HTTP MP3 song URL on this device speaker. Do not use preview, trial, ringtone, web page, playlist, or short clip URLs. Prefer URLs with Content-Length over 1 MB and enough duration for a complete song. Calling this again interrupts the current URL or radio stream. If this tool returns Music URL was NOT started, do not say it already found or played the song; either search for a different complete MP3 URL and call this tool again, or tell the user the song source is unavailable due to copyright or an invalid link. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
-                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString),
                 Property("lyrics_json", kPropertyTypeString, std::string("")),
@@ -1758,7 +2092,7 @@ private:
         mcp_server.AddTool("self.music.play",
             "Alias for self.music.play_url. Play a FULL direct HTTP MP3 song URL, not a preview or short clip. If this tool returns Music URL was NOT started, retry with a different complete MP3 URL or tell the user the source is unavailable. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
-                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString, std::string("")),
                 Property("lyrics_json", kPropertyTypeString, std::string("")),
@@ -1803,7 +2137,7 @@ private:
             "Show the current music lyric line on the XiaoZhi page without speaking it aloud.",
             PropertyList({
                 Property("line", kPropertyTypeString),
-                Property("title", kPropertyTypeString, std::string("")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto line = properties["line"].value<std::string>();
@@ -1968,13 +2302,8 @@ private:
         FirmwareUpdateService::GetInstance().Start(desktop_ui);
     }
 
-    void InitializeBleConfig() {
-        if (!display_) {
-            return;
-        }
-        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
-        ble_config_service_.Start(desktop_ui, &time_weather_service_);
-    }
+
+
 
     void InitializeWifiConfigServer() {
         if (!display_) {
@@ -2051,10 +2380,8 @@ private:
             ESP_LOGW(TAG, "Deferred phone web not ready, retry scheduled");
             return;
         }
-        if (!ble_config_started_) {
-            InitializeBleConfig();
-            ble_config_started_ = true;
-        }
+
+
         network_services_started_ = true;
         ESP_LOGI(TAG, "Deferred phone config services started");
     }
@@ -2103,6 +2430,16 @@ private:
     Button boot_button_;
     LcdDisplay* display_ = nullptr;
     i2c_master_bus_handle_t i2c_bus_ = nullptr;
+    SemaphoreHandle_t i2c_mutex_ = nullptr;
+    i2c_master_dev_handle_t bmi270_dev_ = nullptr;
+    TaskHandle_t bmi270_task_ = nullptr;
+    bool bmi270_present_ = false;
+    uint8_t bmi270_addr_ = 0;
+    int16_t bmi270_baseline_x_ = 0;
+    int16_t bmi270_baseline_y_ = 0;
+    int16_t bmi270_baseline_z_ = 0;
+    int64_t bmi270_baseline_mag_sq_ = 0;
+    int64_t touch_active_until_ms_ = 0;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
     esp_timer_handle_t boot_power_timer_ = nullptr;
@@ -2126,14 +2463,12 @@ private:
     PodcastService podcast_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
-    QdBleConfigService ble_config_service_;
     QdWifiConfigServer wifi_config_server_;
     httpd_handle_t music_command_server_ = nullptr;
     uint16_t* fc_scaled_frame_ = nullptr;
     size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;
     bool network_services_started_ = false;
-    bool ble_config_started_ = false;
     bool lyric_udp_started_ = false;
     std::atomic<int> lyric_generation_{0};
     portMUX_TYPE lyric_lock_ = portMUX_INITIALIZER_UNLOCKED;
