@@ -1,4 +1,4 @@
-﻿#include "wifi_board.h"
+#include "wifi_board.h"
 #include "audio_codecs/es8311_audio_codec.h"
 #include "display/lcd_display.h"
 #include "application.h"
@@ -11,7 +11,6 @@
 #include "photo_service.h"
 #include "podcast_service.h"
 #include "qd_esp_mqtt.h"
-#include "qd_ble_config_service.h"
 #include "qd_wifi_config_server.h"
 #include "radio_service.h"
 #include "time_weather_service.h"
@@ -60,7 +59,6 @@ extern "C" {
 extern const uint8_t bmi270_context_config_file[];
 extern const int bmi270_context_config_file_size;
 }
-
 LV_FONT_DECLARE(font_puhui_16_4);
 LV_FONT_DECLARE(font_awesome_16_4);
 
@@ -220,21 +218,6 @@ public:
         return display_;
     }
 
-    void SetLandscapeInverted(bool inverted) {
-        if (landscape_inverted_ == inverted) {
-            return;
-        }
-        landscape_inverted_ = inverted;
-        ESP_LOGI(TAG, "landscape display inverted=%d", landscape_inverted_);
-        if (display_) {
-            lv_obj_invalidate(lv_screen_active());
-        }
-    }
-
-    bool IsLandscapeInverted() const {
-        return landscape_inverted_;
-    }
-
     bool DrawLandscapeRgb565(int x, int y, int width, int height, const uint16_t* pixels,
                              uint32_t timeout_ms = 20) {
         if (!pixels || width <= 0 || height <= 0 || x < 0 || y < 0 ||
@@ -291,11 +274,7 @@ private:
         const int width = area->x2 - area->x1 + 1;
         const int height = area->y2 - area->y1 + 1;
 
-        if (landscape_inverted_) {
-            DrawLandscapeRgb565LockedInverted(x_start, y_start, width, height, color_map);
-        } else {
-            DrawLandscapeRgb565Locked(x_start, y_start, width, height, color_map);
-        }
+        DrawLandscapeRgb565Locked(x_start, y_start, width, height, color_map);
 
         lv_display_flush_ready(display_);
         const int64_t elapsed_us = esp_timer_get_time() - flush_start_us;
@@ -342,41 +321,6 @@ private:
         }
     }
 
-    void DrawLandscapeRgb565LockedInverted(int x_start, int y_start, int width, int height,
-                                           const uint16_t* color_map) {
-        const int x_end = x_start + width - 1;
-        const int y_end = y_start + height - 1;
-        constexpr int transfer_pixels = DISPLAY_WIDTH * DISPLAY_HEIGHT / 10;
-
-        int max_width = transfer_pixels / height;
-        if (max_width < 1) {
-            max_width = 1;
-        }
-
-        int x_start_tmp = x_start;
-        while (x_start_tmp <= x_end) {
-            const int trans_width = std::min(max_width, x_end - x_start_tmp + 1);
-            const int x_end_tmp = x_start_tmp + trans_width - 1;
-
-            for (int y = 0; y < height; y++) {
-                for (int x = 0; x < trans_width; x++) {
-                    uint16_t color = color_map[y * width + (x_start_tmp - x_start) + x];
-                    color = (color << 8) | (color >> 8);
-                    transfer_buffer_[(trans_width - x - 1) * height + y] = color;
-                }
-            }
-
-            const int draw_x_start = y_start;
-            const int draw_x_end = y_end;
-            const int draw_y_start = DISPLAY_WIDTH - x_end_tmp - 1;
-            const int draw_y_end = DISPLAY_WIDTH - x_start_tmp - 1;
-
-            xSemaphoreTake(transfer_done_, 0);
-            ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_, draw_x_start, draw_y_start, draw_x_end + 1, draw_y_end + 1, transfer_buffer_));
-            xSemaphoreTake(transfer_done_, pdMS_TO_TICKS(1000));
-            x_start_tmp += trans_width;
-        }
-    }
     void DrawLandscapeRgb565LockedPreSwapped(int x_start, int y_start, int width, int height,
                                               const uint16_t* color_map) {
         const int x_end = x_start + width - 1;
@@ -412,7 +356,6 @@ private:
         }
     }
 
-    bool landscape_inverted_ = false;
     uint16_t* frame_buffer_ = nullptr;
     uint16_t* transfer_buffer_ = nullptr;
     SemaphoreHandle_t transfer_done_ = nullptr;
@@ -425,13 +368,15 @@ public:
         uint16_t y;
     };
 
-    void SetBusMutex(SemaphoreHandle_t mutex) {
-        bus_mutex_ = mutex;
-    }
-
     void Init(i2c_master_bus_handle_t bus) {
         bus_ = bus;
         initialized_ = false;
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = TOUCH_I2C_ADDR,
+            .scl_speed_hz = 400000,
+        };
+        ESP_ERROR_CHECK(i2c_master_bus_add_device(bus, &dev_cfg, &dev_));
 
         gpio_config_t rst_cfg = {
             .pin_bit_mask = 1ULL << TOUCH_RST_PIN,
@@ -456,28 +401,14 @@ public:
         gpio_set_level(TOUCH_RST_PIN, 1);
         vTaskDelay(pdMS_TO_TICKS(100));
 
-        ESP_ERROR_CHECK(AddDevice(TOUCH_I2C_ADDR));
-        protocol_ = Protocol::kLegacy;
-        max_points_ = 1;
-        ESP_LOGI(TAG, "Touch controller legacy addr=0x%02x single-point short read", active_addr_);
+        uint8_t max_touches = 0;
+        if (ReadReg(kMaxTouches, &max_touches, 1) == ESP_OK && max_touches > 0 && max_touches <= kMaxTouchPoints) {
+            max_points_ = max_touches;
+        } else {
+            max_points_ = 1;
+        }
         ESP_LOGI(TAG, "Touch max points: %u", max_points_);
         initialized_ = true;
-    }
-
-    void ResetController() {
-        gpio_set_level(TOUCH_RST_PIN, 0);
-        vTaskDelay(pdMS_TO_TICKS(10));
-        gpio_set_level(TOUCH_RST_PIN, 1);
-        read_failures_ = 0;
-        read_backoff_until_us_ = esp_timer_get_time() + 200000;
-        ESP_LOGW(TAG, "touch controller reset");
-    }
-
-    void ClearTouchState() {
-        esp_err_t err = WriteReg(kTouchInfo, 0x00);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "touch clear state failed err=%s", esp_err_to_name(err));
-        }
     }
 
     size_t ReadPoints(TouchPoint* points, size_t max_points) {
@@ -487,99 +418,16 @@ public:
         if (esp_timer_get_time() < read_backoff_until_us_) {
             return 0;
         }
-        if (protocol_ == Protocol::kCst9217) {
-            return ReadCst9217Points(points, max_points, 0);
-        }
         uint8_t touch_info = 0;
         if (ReadReg(kTouchInfo, &touch_info, 1) != ESP_OK || !(touch_info & 0x08)) {
             return 0;
         }
-        return ReadLegacyPoints(points, max_points, touch_info);
-    }
 
-    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
-        TouchPoint point = {};
-        if (ReadPoints(&point, 1) == 0) {
-            return false;
-        }
-        x = point.x;
-        y = point.y;
-        return true;
-    }
-
-private:
-    enum class Protocol {
-        kLegacy,
-        kCst9217,
-    };
-
-    static constexpr uint8_t kMaxTouchPoints = 10;
-    static constexpr uint8_t kCst9217Ack = 0xAB;
-    static constexpr uint16_t kCst9217Data = 0xD000;
-    static constexpr uint16_t kTouchInfo = 0x0010;
-    static constexpr uint16_t kTouchPoint0 = 0x0014;
-
-    size_t ReadCst9217Points(TouchPoint* points, size_t max_points, uint8_t touch_info) {
-        uint8_t data[10] = {};
-        if (ReadReg(kCst9217Data, data, sizeof(data)) != ESP_OK) {
-            return 0;
-        }
-        const int64_t now_us = esp_timer_get_time();
-        if (now_us - last_touch_poll_log_us_ > 1000000) {
-            last_touch_poll_log_us_ = now_us;
-            ESP_LOGI(TAG, "touch cst poll int=%d info=0x%02x data=%02x %02x %02x %02x %02x %02x %02x",
-                     gpio_get_level(TOUCH_INT_PIN), touch_info,
-                     data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
-        }
-        if (data[6] != kCst9217Ack || (data[5] & 0x7F) == 0 || max_points == 0) {
-            return 0;
-        }
-        if ((data[0] & 0x0F) != 0x06) {
-            return 0;
-        }
-        const uint16_t raw_x = (static_cast<uint16_t>(data[1]) << 4) | (data[3] >> 4);
-        const uint16_t raw_y = (static_cast<uint16_t>(data[2]) << 4) | (data[3] & 0x0F);
-        uint16_t x = raw_y;
-        uint16_t y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
-        if (x >= DISPLAY_WIDTH) {
-            x = DISPLAY_WIDTH - 1;
-        }
-        if (y >= DISPLAY_HEIGHT) {
-            y = DISPLAY_HEIGHT - 1;
-        }
-        points[0] = {
-            .x = x,
-            .y = y,
-        };
-        if (now_us - last_touch_raw_log_us_ > 120000) {
-            last_touch_raw_log_us_ = now_us;
-            ESP_LOGI(TAG, "touch cst raw=%u,%u mapped=%u,%u data=%02x %02x %02x %02x %02x %02x %02x",
-                     raw_x, raw_y, x, y,
-                     data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
-        }
-        return 1;
-    }
-
-    size_t ReadLegacyPoints(TouchPoint* points, size_t max_points, uint8_t touch_info) {
         uint8_t point_data[7 * kMaxTouchPoints] = {};
         if (ReadReg(kTouchPoint0, point_data, 7 * max_points_) != ESP_OK) {
             return 0;
         }
         read_failures_ = 0;
-
-        const int64_t now_us = esp_timer_get_time();
-        const bool raw_valid = (touch_info & 0x08) != 0;
-        const bool raw_changed = !last_touch_raw_valid_ || last_touch_raw_info_ != touch_info ||
-                                 std::memcmp(last_touch_raw_point_, point_data, 4) != 0;
-        if (raw_changed || now_us - last_touch_raw_log_us_ > 1000000) {
-            last_touch_raw_log_us_ = now_us;
-            last_touch_raw_valid_ = true;
-            last_touch_raw_info_ = touch_info;
-            std::memcpy(last_touch_raw_point_, point_data, 4);
-            ESP_LOGI(TAG, "touch raw int=%d info=0x%02x p0=%02x %02x %02x %02x",
-                     gpio_get_level(TOUCH_INT_PIN), touch_info,
-                     point_data[0], point_data[1], point_data[2], point_data[3]);
-        }
 
         size_t count = 0;
         for (uint8_t i = 0; i < max_points_; i++) {
@@ -587,15 +435,12 @@ private:
                 break;
             }
             const uint8_t base = i * 7;
-            if (!raw_valid || !(point_data[base] & 0x80)) {
+            if (!(point_data[base] & 0x80)) {
                 continue;
             }
 
             const uint16_t raw_x = ((point_data[base] & 0x3F) << 8) | point_data[base + 1];
             const uint16_t raw_y = ((point_data[base + 2] & 0x3F) << 8) | point_data[base + 3];
-            if (raw_x == 0 && raw_y == 0) {
-                continue;
-            }
 
             uint16_t x = raw_y;
             uint16_t y = raw_x >= DISPLAY_HEIGHT ? 0 : (DISPLAY_HEIGHT - 1 - raw_x);
@@ -613,57 +458,25 @@ private:
         return count;
     }
 
-    esp_err_t AddDevice(uint8_t addr) {
-        i2c_device_config_t dev_cfg = {
-            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-            .device_address = addr,
-            .scl_speed_hz = 400000,
-        };
-        esp_err_t err = i2c_master_bus_add_device(bus_, &dev_cfg, &dev_);
-        if (err == ESP_OK) {
-            active_addr_ = addr;
+    bool ReadFirstPoint(uint16_t& x, uint16_t& y) {
+        TouchPoint point = {};
+        if (ReadPoints(&point, 1) == 0) {
+            return false;
         }
-        return err;
+        x = point.x;
+        y = point.y;
+        return true;
     }
+
+private:
+    static constexpr uint8_t kMaxTouchPoints = 10;
+    static constexpr uint16_t kMaxTouches = 0x0009;
+    static constexpr uint16_t kTouchInfo = 0x0010;
+    static constexpr uint16_t kTouchPoint0 = 0x0014;
 
     esp_err_t ReadReg(uint16_t reg, uint8_t* data, size_t len) {
         uint8_t addr[2] = {static_cast<uint8_t>(reg >> 8), static_cast<uint8_t>(reg & 0xFF)};
-        bool locked = false;
-        if (bus_mutex_) {
-            locked = xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(30)) == pdTRUE;
-            if (!locked) {
-                NoteReadFailure();
-                return ESP_ERR_TIMEOUT;
-            }
-        }
         esp_err_t err = i2c_master_transmit_receive(dev_, addr, sizeof(addr), data, len, pdMS_TO_TICKS(100));
-        if (bus_mutex_ && locked) {
-            xSemaphoreGive(bus_mutex_);
-        }
-        if (err != ESP_OK) {
-            NoteReadFailure();
-        }
-        return err;
-    }
-
-    esp_err_t WriteReg(uint16_t reg, uint8_t value) {
-        uint8_t buf[3] = {
-            static_cast<uint8_t>(reg >> 8),
-            static_cast<uint8_t>(reg & 0xFF),
-            value,
-        };
-        bool locked = false;
-        if (bus_mutex_) {
-            locked = xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(30)) == pdTRUE;
-            if (!locked) {
-                NoteReadFailure();
-                return ESP_ERR_TIMEOUT;
-            }
-        }
-        esp_err_t err = i2c_master_transmit(dev_, buf, sizeof(buf), pdMS_TO_TICKS(100));
-        if (bus_mutex_ && locked) {
-            xSemaphoreGive(bus_mutex_);
-        }
         if (err != ESP_OK) {
             NoteReadFailure();
         }
@@ -674,38 +487,24 @@ private:
         if (!initialized_) {
             return;
         }
-        const int64_t now_us = esp_timer_get_time();
         ++read_failures_;
-        read_backoff_until_us_ = now_us + (read_failures_ >= 3 ? 60000 : 5000);
+        const int64_t now_us = esp_timer_get_time();
+        read_backoff_until_us_ = now_us + 750000;
         if (read_failures_ >= 3 && bus_ && now_us - last_bus_reset_us_ > 3000000) {
             last_bus_reset_us_ = now_us;
             ESP_LOGW(TAG, "touch i2c reset after repeated failures");
-            if (bus_mutex_) {
-                xSemaphoreTake(bus_mutex_, pdMS_TO_TICKS(200));
-            }
             i2c_master_bus_reset(bus_);
-            if (bus_mutex_) {
-                xSemaphoreGive(bus_mutex_);
-            }
-            read_backoff_until_us_ = now_us + 150000;
+            read_backoff_until_us_ = now_us + 1000000;
         }
     }
 
     i2c_master_bus_handle_t bus_ = nullptr;
     i2c_master_dev_handle_t dev_ = nullptr;
-    SemaphoreHandle_t bus_mutex_ = nullptr;
-    Protocol protocol_ = Protocol::kLegacy;
-    uint8_t active_addr_ = 0;
     uint8_t max_points_ = 1;
     uint8_t read_failures_ = 0;
     bool initialized_ = false;
     int64_t read_backoff_until_us_ = 0;
     int64_t last_bus_reset_us_ = 0;
-    int64_t last_touch_raw_log_us_ = 0;
-    int64_t last_touch_poll_log_us_ = 0;
-    bool last_touch_raw_valid_ = false;
-    uint8_t last_touch_raw_info_ = 0;
-    uint8_t last_touch_raw_point_[4] = {};
 };
 
 class QdtechBatteryMonitor {
@@ -1189,6 +988,7 @@ private:
             xSemaphoreGive(i2c_mutex_);
         }
     }
+
     bool Bmi270ReadReg(uint8_t reg, uint8_t* data, size_t len) {
         if (!bmi270_dev_ || !data || len == 0) {
             return false;
@@ -1358,7 +1158,7 @@ private:
         }
         BaseType_t ok = xTaskCreate(
             [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
-            "bmi270", 4096, this, 3, &bmi270_task_);
+            "bmi270", 4096, this, 1, &bmi270_task_);
         if (ok != pdPASS) {
             ESP_LOGW(TAG, "BMI270 task create failed");
         }
@@ -1406,6 +1206,12 @@ private:
         bool hourglass_active = false;
 
         while (true) {
+            const int64_t loop_ms = esp_timer_get_time() / 1000;
+            if (loop_ms < touch_active_until_ms_) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
+
             int16_t x = 0;
             int16_t y = 0;
             int16_t z = 0;
@@ -1428,10 +1234,8 @@ private:
             }
 
             if (bmi270_baseline_mag_sq_ == 0) {
-                const bool landscape_candidate = mag_sq > 1000000 &&
-                    gyro_peak < 45 &&
-                    std::abs(static_cast<int>(x)) > 1500 &&
-                    std::abs(static_cast<int>(y)) < 900;
+                const bool landscape_candidate = mag_sq > 1000000 && gyro_peak < 45 &&
+                    std::abs(static_cast<int>(x)) > 1500 && std::abs(static_cast<int>(y)) < 900;
                 if (landscape_candidate) {
                     stable_baseline_count++;
                     if (stable_baseline_count >= 5) {
@@ -1443,13 +1247,9 @@ private:
                                  x, y, z, static_cast<int>(mag_sq));
                     }
                 } else {
-                    if (stable_baseline_count > 0 || (now_ms - last_log_ms < 250)) {
-                        ESP_LOGI(TAG, "BMI270 wait landscape baseline x=%d y=%d z=%d gyro=%d",
-                                 x, y, z, gyro_peak);
-                    }
                     stable_baseline_count = 0;
                 }
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(250));
                 continue;
             }
 
@@ -1462,21 +1262,17 @@ private:
                                                static_cast<int64_t>(bmi270_baseline_y_) * bmi270_baseline_y_;
             const int64_t current_xy_mag_sq = static_cast<int64_t>(x) * x + static_cast<int64_t>(y) * y;
             const bool good_gravity = mag_sq > 1000000;
-            const bool portrait_90 = good_gravity &&
-                baseline_xy_mag_sq > 250000 &&
+            const bool portrait_90 = good_gravity && baseline_xy_mag_sq > 250000 &&
                 current_xy_mag_sq > baseline_xy_mag_sq / 3 &&
                 std::llabs(xy_dot) < baseline_xy_mag_sq * 35 / 100 &&
                 std::llabs(dot) < bmi270_baseline_mag_sq_ * 65 / 100;
-            const bool landscape_normal = good_gravity &&
-                dot > bmi270_baseline_mag_sq_ * 65 / 100;
+            const bool landscape_normal = good_gravity && dot > bmi270_baseline_mag_sq_ * 65 / 100;
 
             if (!hourglass_active && portrait_90 && gyro_peak < 150) {
                 if (now_ms < kHourglassStartupHoldoffMs) {
                     stable_portrait_count = 0;
                     stable_landscape_count = 0;
-                    ESP_LOGI(TAG, "BMI270 portrait deferred during startup ms=%d",
-                             static_cast<int>(now_ms));
-                    vTaskDelay(pdMS_TO_TICKS(200));
+                    vTaskDelay(pdMS_TO_TICKS(250));
                     continue;
                 }
                 stable_portrait_count++;
@@ -1506,9 +1302,10 @@ private:
                 stable_landscape_count = 0;
             }
 
-            vTaskDelay(pdMS_TO_TICKS(200));
+            vTaskDelay(pdMS_TO_TICKS(250));
         }
     }
+
     void InitializeSdCard() {
         if (fc_emulator_service_.PrepareSdCard()) {
             ESP_LOGI(TAG, "SD card prepared early");
@@ -1565,26 +1362,8 @@ private:
             .emoji_font = font_emoji_64_init(),
 #endif
         });
-        if (display_ && lvgl_port_lock(0)) {
-            if (auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI()) {
-                desktop_ui->SetFocusRotationCallback([this](bool inverted) {
-                    SetFocusDisplayInverted(inverted);
-                });
-            }
-            lvgl_port_unlock();
-        }
     }
 
-    void SetFocusDisplayInverted(bool inverted) {
-        if (!display_) {
-            return;
-        }
-        touch_cached_down_ = false;
-        touch_down_ = false;
-        touch_ignore_until_ms_ = esp_timer_get_time() / 1000 + 350;
-        static_cast<QdtechLandscapeDisplay*>(display_)->SetLandscapeInverted(inverted);
-        ESP_LOGI(TAG, "focus touch reset for inverted=%d", inverted);
-    }
     void InitializeTouch() {
         touch_.Init(i2c_bus_);
 
@@ -1653,20 +1432,15 @@ private:
     }
 
     std::string MusicFailureLine(const std::string& result) {
-        if (result.find("没有拿到") != std::string::npos) {
-            return "没有拿到可播放链接，请换歌名或说清楚版本。";
-        }
-        if (result.find("试听片段") != std::string::npos ||
-            result.find("short preview") != std::string::npos) {
-            return "这个来源只有试听片段，正在等小智换完整版本。";
+        if (result.find("short preview") != std::string::npos) {
+            return "Only a preview source was found. Try another song version.";
         }
         if (result.find("rejected") != std::string::npos ||
             result.find("unavailable") != std::string::npos) {
-            return "歌曲链接被版权或源站拒绝，请换一个版本。";
+            return "The music source was rejected or unavailable.";
         }
-        return "这首歌暂时没有拿到可播放源，请换歌名或版本。";
+        return "No playable source was found. Try another song name or version.";
     }
-
     void ShowMusicPlayFailure(const std::string& title, const std::string& artist, const std::string& result) {
         lyric_generation_.fetch_add(1);
         SetCurrentLyricSong(title, artist, 0);
@@ -2027,20 +1801,9 @@ private:
             return;
         }
 
-        if (board->touch_ignore_until_ms_ > esp_timer_get_time() / 1000) {
-            data->state = LV_INDEV_STATE_RELEASED;
-            return;
-        }
-
         if (board->touch_cached_down_) {
-            uint16_t x = board->touch_cached_x_;
-            uint16_t y = board->touch_cached_y_;
-            if (board->display_ && static_cast<QdtechLandscapeDisplay*>(board->display_)->IsLandscapeInverted()) {
-                x = DISPLAY_WIDTH - 1 - x;
-                y = DISPLAY_HEIGHT - 1 - y;
-            }
-            data->point.x = x;
-            data->point.y = y;
+            data->point.x = board->touch_cached_x_;
+            data->point.y = board->touch_cached_y_;
             data->state = LV_INDEV_STATE_PRESSED;
         } else {
             data->state = LV_INDEV_STATE_RELEASED;
@@ -2050,25 +1813,12 @@ private:
     void PollTouch() {
         QdtechTouch::TouchPoint points[10] = {};
         const size_t point_count = touch_.ReadPoints(points, 10);
-        bool touched = point_count > 0;
+        const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
+        if (touched) {
+            touch_active_until_ms_ = now_ms + 800;
+        }
         auto* desktop_ui = GetDesktopUI();
-
-        if (touched && !touch_down_ && touch_suppress_active_) {
-            const int16_t dx = static_cast<int16_t>(points[0].x) - static_cast<int16_t>(touch_suppress_x_);
-            const int16_t dy = static_cast<int16_t>(points[0].y) - static_cast<int16_t>(touch_suppress_y_);
-            if (LV_ABS(dx) < 18 && LV_ABS(dy) < 18) {
-                touch_cached_down_ = false;
-                return;
-            }
-            touch_suppress_active_ = false;
-        } else if (!touched) {
-            touch_suppress_active_ = false;
-        }
-
-        if (touched || touch_down_) {
-            touch_quiet_until_ms_ = now_ms + 2500;
-        }
 
         touch_cached_down_ = touched;
         if (touched) {
@@ -2108,21 +1858,6 @@ private:
             touch_last_x_ = x;
             touch_last_y_ = y;
             HandleTouchState(x, y, true);
-            const int64_t duration = now_ms - touch_start_ms_;
-            if (duration >= 45) {
-                touch_down_ = false;
-                touch_cached_down_ = false;
-                touch_suppress_active_ = true;
-                touch_suppress_x_ = touch_last_x_;
-                touch_suppress_y_ = touch_last_y_;
-                const int16_t dx = static_cast<int16_t>(touch_last_x_) - static_cast<int16_t>(touch_start_x_);
-                const int16_t dy = static_cast<int16_t>(touch_last_y_) - static_cast<int16_t>(touch_start_y_);
-                ESP_LOGI(TAG, "touch synthetic release x=%u y=%u dx=%d dy=%d duration=%dms",
-                         touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
-                HandleTouchState(touch_last_x_, touch_last_y_, false);
-                HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
-                ResetLatchedTouchController();
-            }
         } else if (!touched && touch_down_) {
             touch_down_ = false;
             int16_t dx = (int16_t)touch_last_x_ - (int16_t)touch_start_x_;
@@ -2133,15 +1868,7 @@ private:
                      touch_last_x_, touch_last_y_, dx, dy, static_cast<int>(duration));
             HandleTouchState(touch_last_x_, touch_last_y_, false);
             HandleTouchRelease(touch_start_x_, touch_start_y_, touch_last_x_, touch_last_y_, duration);
-            ResetLatchedTouchController();
         }
-    }
-
-    void ResetLatchedTouchController() {
-        touch_cached_down_ = false;
-        touch_down_ = false;
-        touch_suppress_active_ = false;
-        touch_.ResetController();
     }
 
     void HandleTouchState(uint16_t x, uint16_t y, bool pressed) {
@@ -2230,7 +1957,7 @@ private:
                 ESP_LOGW(TAG, "BOOT still held after 10s; entering deep sleep anyway may wake immediately");
                 break;
             }
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(pdMS_TO_TICKS(20));
         }
         vTaskDelay(pdMS_TO_TICKS(250));
 
@@ -2268,8 +1995,8 @@ private:
             "Show a QR code on the device screen. Use this for login URLs such as NetEase Music QR login. Pass the raw QR text or URL in content, not a base64 image.",
             PropertyList({
                 Property("content", kPropertyTypeString),
-                Property("title", kPropertyTypeString, std::string("扫码登录")),
-                Property("hint", kPropertyTypeString, std::string("用手机扫码；点屏幕关闭")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
+                Property("hint", kPropertyTypeString, std::string("Tap screen to close")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto content = properties["content"].value<std::string>();
                 const auto title = properties["title"].value<std::string>();
@@ -2335,7 +2062,7 @@ private:
         mcp_server.AddTool("self.music.play_url",
             "Play a FULL direct HTTP MP3 song URL on this device speaker. Do not use preview, trial, ringtone, web page, playlist, or short clip URLs. Prefer URLs with Content-Length over 1 MB and enough duration for a complete song. Calling this again interrupts the current URL or radio stream. If this tool returns Music URL was NOT started, do not say it already found or played the song; either search for a different complete MP3 URL and call this tool again, or tell the user the song source is unavailable due to copyright or an invalid link. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
-                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString),
                 Property("lyrics_json", kPropertyTypeString, std::string("")),
@@ -2365,7 +2092,7 @@ private:
         mcp_server.AddTool("self.music.play",
             "Alias for self.music.play_url. Play a FULL direct HTTP MP3 song URL, not a preview or short clip. If this tool returns Music URL was NOT started, retry with a different complete MP3 URL or tell the user the source is unavailable. After this tool succeeds, do not speak any extra confirmation.",
             PropertyList({
-                Property("title", kPropertyTypeString, std::string("Music")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
                 Property("url", kPropertyTypeString, std::string("")),
                 Property("lyrics_json", kPropertyTypeString, std::string("")),
@@ -2410,7 +2137,7 @@ private:
             "Show the current music lyric line on the XiaoZhi page without speaking it aloud.",
             PropertyList({
                 Property("line", kPropertyTypeString),
-                Property("title", kPropertyTypeString, std::string("")),
+                Property("title", kPropertyTypeString, std::string("Scan QR")),
                 Property("artist", kPropertyTypeString, std::string("")),
             }), [this](const PropertyList& properties) -> ReturnValue {
                 const auto line = properties["line"].value<std::string>();
@@ -2575,13 +2302,8 @@ private:
         FirmwareUpdateService::GetInstance().Start(desktop_ui);
     }
 
-    void InitializeBleConfig() {
-        if (!display_) {
-            return;
-        }
-        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
-        ble_config_service_.Start(desktop_ui, &time_weather_service_);
-    }
+
+
 
     void InitializeWifiConfigServer() {
         if (!display_) {
@@ -2658,10 +2380,8 @@ private:
             ESP_LOGW(TAG, "Deferred phone web not ready, retry scheduled");
             return;
         }
-        if (!ble_config_started_) {
-            InitializeBleConfig();
-            ble_config_started_ = true;
-        }
+
+
         network_services_started_ = true;
         ESP_LOGI(TAG, "Deferred phone config services started");
     }
@@ -2714,12 +2434,12 @@ private:
     i2c_master_dev_handle_t bmi270_dev_ = nullptr;
     TaskHandle_t bmi270_task_ = nullptr;
     bool bmi270_present_ = false;
-    bool bmi270_flip_armed_ = false;
     uint8_t bmi270_addr_ = 0;
     int16_t bmi270_baseline_x_ = 0;
     int16_t bmi270_baseline_y_ = 0;
     int16_t bmi270_baseline_z_ = 0;
     int64_t bmi270_baseline_mag_sq_ = 0;
+    int64_t touch_active_until_ms_ = 0;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
     esp_timer_handle_t boot_power_timer_ = nullptr;
@@ -2730,11 +2450,6 @@ private:
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
     bool touch_cached_down_ = false;
-    bool touch_swipe_dispatched_ = false;
-    bool touch_tap_dispatched_ = false;
-    bool touch_stale_active_ = false;
-    uint16_t touch_stale_x_ = 0;
-    uint16_t touch_stale_y_ = 0;
     uint16_t touch_cached_x_ = 0;
     uint16_t touch_cached_y_ = 0;
     int64_t touch_start_ms_ = 0;
@@ -2742,27 +2457,18 @@ private:
     uint16_t touch_start_y_ = 0;
     uint16_t touch_last_x_ = 0;
     uint16_t touch_last_y_ = 0;
-    int64_t touch_ignore_until_ms_ = 0;
-    int64_t touch_cache_hold_until_ms_ = 0;
-    int64_t touch_quiet_until_ms_ = 0;
-    bool touch_suppress_active_ = false;
-    uint16_t touch_suppress_x_ = 0;
-    uint16_t touch_suppress_y_ = 0;
-    bool touch_suppressed_until_release_ = false;
     QdtechBatteryMonitor battery_monitor_;
     TimeWeatherService time_weather_service_;
     RadioService radio_service_;
     PodcastService podcast_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
-    QdBleConfigService ble_config_service_;
     QdWifiConfigServer wifi_config_server_;
     httpd_handle_t music_command_server_ = nullptr;
     uint16_t* fc_scaled_frame_ = nullptr;
     size_t fc_scaled_pixels_ = 0;
     bool time_weather_started_ = false;
     bool network_services_started_ = false;
-    bool ble_config_started_ = false;
     bool lyric_udp_started_ = false;
     std::atomic<int> lyric_generation_{0};
     portMUX_TYPE lyric_lock_ = portMUX_INITIALIZER_UNLOCKED;
