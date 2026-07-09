@@ -34,7 +34,7 @@ Release asset SHA256:
 
 Release/OTA note:
 
-- GitHub Release v1.7.91 should be published as latest with qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin plus SHA256SUMS.txt so other boards can download it through the on-device updater.
+- GitHub Release v1.7.91 is published as latest with qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin plus SHA256SUMS.txt so other boards can download it through the on-device updater.
 # QDTech 3.5 XiaoZhi Project Handoff
 
 > Future Codex note: read this file, docs/PROJECT_STATUS.md, docs/NEXT_TASKS.md, and docs/CODEX_RULES.md before changing code.
