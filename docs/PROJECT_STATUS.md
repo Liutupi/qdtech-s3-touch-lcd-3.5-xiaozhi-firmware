@@ -1,3 +1,22 @@
+# 2026-07-09 Project Status: v1.7.90 Stable Touch and Hourglass
+
+Firmware:
+
+- Version bumped to 1.7.90 for QDTech ESP32-S3 3.5 inch touch LCD.
+- Windows source/worktree: D:\3.5inch_ESP32-S3\worktree-v1786-hourglass.
+- Windows build directory: build-v1790.
+- Latest app image: build-v1790\xiaozhi.bin.
+- Latest app size: 0x64e530 / 6612272 bytes, leaving 0xb1ad0 bytes in the 0x700000 app partition.
+- Latest merged image: build-v1790\merged-binary.bin, 0x74e530 / 7660848 bytes.
+- Release assets are in releases/v1.7.90/.
+
+Stability status:
+
+- This version keeps the proven v1.7.86 touch behavior and adds the required hourglass/BMI270 behavior.
+- BMI270 polling backs off while touch is active to avoid I2C contention with the touch controller.
+- Unused BLE config service was removed from the QDTech board; HTTP config server remains enabled.
+- Hardware monitor confirmed taps, photo right-swipe exit, Settings vertical scroll, and hourglass enter/exit.
+- Remaining item to keep watching: XiaoZhi page right-swipe should use the same unified swipe return path, but it was not explicitly captured in the final monitor window.
 # 2026-07-04 Project Status: v1.7.76 Stability Hotfix
 
 Firmware:
@@ -225,7 +244,7 @@ Firmware:
 FC/NES status:
 
 - Mapper correction and diagnostics are in place for tested problematic ROMs.
-- `杞╄緯鍓慲 is improved and now runs through mapper 224.
+- `杞╄緯鍓�?is improved and now runs through mapper 224.
 - `蹇墦鏃嬮 [Cony Soft]` is identified as mapper 83 but still flower-screens.
 - `鍚為澶╁湴2` is identified as mapper 198 but still black/solid-color output.
 - CPU/audio/frame generation continue for the two failing ROMs, so the remaining work is mapper/PPU correctness rather than SD loading or display transport.

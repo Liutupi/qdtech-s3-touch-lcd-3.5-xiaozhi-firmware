@@ -1,3 +1,43 @@
+# QDTech 3.5 XiaoZhi Project Handoff
+
+> Future Codex note: read this file, docs/PROJECT_STATUS.md, docs/NEXT_TASKS.md, and docs/CODEX_RULES.md before changing code.
+
+## 2026-07-09 Handoff: v1.7.90 Stable Touch Base with Hourglass
+
+Current target:
+
+- Firmware version target is now v1.7.90.
+- This release keeps the latest main history but restores the QDTech board touch behavior to the v1.7.86-stable path where needed.
+- Built on Windows with ESP-IDF 5.5 from D:\3.5inch_ESP32-S3\worktree-v1786-hourglass, build directory build-v1790.
+- Release assets were generated in releases/v1.7.90/.
+- The connected board on COM3 has been flashed with the final v1.7.90 image; esptool hash verification passed.
+
+What changed:
+
+- Bumped PROJECT_VER to 1.7.90.
+- Kept the v1.7.86 QDTech touch driver behavior as the stable baseline while preserving main-line hourglass UI support.
+- Added BMI270 hourglass orientation logic with I2C protection and touch-active backoff.
+- Removed the unused QDTech BLE phone-config service from this board to reduce internal SRAM pressure.
+- Kept the HTTP phone/web config server path; QdWifiConfig starts without the BLE low-memory skip path.
+
+Verification:
+
+- idf.py -B build-v1790 build merge-bin passed.
+- CMake reported App "xiaozhi" version 1.7.90 and the app image contains the 1.7.90 version string.
+- xiaozhi.bin size is 0x64e530 / 6612272 bytes; QDTech 7 MB OTA app slot has 0xb1ad0 bytes free, about 10 percent.
+- merged-binary.bin size is 0x74e530 / 7660848 bytes.
+- Final v1.7.90 flash to COM3 completed with esptool hash verification.
+- Serial monitor monitor-v1786-hourglass-noble-20260709.log confirmed HTTP config service startup, no BLE low-memory init path, normal tap down/release events, photo right-swipe back navigation, Settings vertical scroll, and BMI270 hourglass enter/exit. A final v1.7.90 short monitor confirmed QdWifiConfig HTTP startup and BMI270 polling after the final flash.
+
+Release asset SHA256:
+
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-app.bin: b59d353927167b3aa55ec10e9a9180283f67a58f46c693e364ff077992493fc4
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-full.bin: f4913860c5f219b548193fc9a91212eef064331dc4445db7d7d592264d49a285
+- releases/v1.7.90/qdtech-s3-touch-lcd-3.5-v1.7.90-firmware.zip: 251ecf0d95fe83525d1cffb1eba036cbb70640ce4b5559f4c0310147d9be60cb
+
+Release/OTA note:
+
+- GitHub Release v1.7.90 is published as latest with qdtech-s3-touch-lcd-3.5-v1.7.90-app.bin plus SHA256SUMS.txt so other boards can download it through the on-device updater.
 ## 2026-07-08 Handoff: v1.8.18 Hourglass + Startup Sync Memory Fix
 
 Summary:
@@ -659,7 +699,7 @@ Verification:
 - `merge-bin` generated `merged-binary.bin`, size `0x73bbc0` / `7584704` bytes.
 - Final flash to `/dev/cu.usbmodem212401` completed and esptool hash verification passed.
 - Boot log confirmed `App version: 1.7.81`, WiFi connected to `MERCURY_A59F`, IP `192.168.1.104`, MCP music tools registered, `QdEspMqtt: MQTT_EVENT_CONNECTED`, `MQTT: Connected to endpoint`, and `Application: STATE: idle`.
-- Live Music Ask test succeeded: from the Music page, `Ask` entered listening, recognized a spoken song request, searched NetEase, called `self.music.play_url`, opened the stream, and played `莫愁乡 - 亞細亞曠世奇才`.
+- Live Music Ask test succeeded: from the Music page, `Ask` entered listening, recognized a spoken song request, searched NetEase, called `self.music.play_url`, opened the stream, and played `莫愁�?- 亞細亞曠世奇才`.
 - Lyrics test succeeded for that same playback: `ParseLyricsJson bytes=4213 lines=87`, `play_url lyrics started`, and repeated `SetMusicLyric` updates were observed while music played.
 - A second test with `逝去的歌` reached `self.music.play_url` but the provided MP3 was rejected as a short preview (`len=480813`), which is expected behavior; the model/MCP side should retry with a full direct MP3 URL.
 - Runtime note: startup OTA/weather HTTP requests can still time out on a slow network, but firmware continues to MQTT and weather retry later recovered.
@@ -956,7 +996,7 @@ Verification:
   - `releases/v1.7.76/SHA256SUMS.txt` records the same hashes for OTA verification.
 - `PROJECT_VER` was bumped to `1.7.76`.
 - `git diff --check` passed.
-- Full final link is still blocked only when the repo lives under `/Users/tupi/Documents/带小智 3.5 寸/...`: ESP-SR prebuilt library paths are split at the `3.5 寸` directory space, causing `ld: cannot find 3.5`. The no-space worktree build proves the current source changes link successfully.
+- Full final link is still blocked only when the repo lives under `/Users/tupi/Documents/带小�?3.5 �?...`: ESP-SR prebuilt library paths are split at the `3.5 寸` directory space, causing `ld: cannot find 3.5`. The no-space worktree build proves the current source changes link successfully.
 - A symlink path does not fix the original path because CMake resolves the real source directory. For future full local macOS builds, use a real no-space source path or a Git worktree such as `/Users/tupi/qdtech_worktree_nospace`.
 
 Next recommended work:
@@ -1121,13 +1161,13 @@ Verification:
 - Flashed to `/dev/cu.usbmodem212401`; esptool hash verification passed.
 - Boot log confirmed `App version: 1.7.73`, Wi-Fi IP `192.168.1.114`, `lyric udp listening port=45678`, MQTT connected, and `self.music.play_url` registered.
 - First song test: `播放道别是一件难事`.
-  - Mac log showed `tool call music.netease_play {"song":"道别是一件难事"}`.
+  - Mac log showed `tool call music.netease_play {"song":"道别是一件难�?}`.
   - Mac log showed `>> tools/call self.music.play_url` with a direct NetEase MP3 URL.
-  - Board serial showed `% self.music.play_url...`, `stream open ... status=200`, and continuous `playing station=道别是一件难事 - 上海彩虹室内合唱团` frames.
+  - Board serial showed `% self.music.play_url...`, `stream open ... status=200`, and continuous `playing station=道别是一件难�?- 上海彩虹室内合唱团` frames.
 - Second song test: `播放绿光`.
-  - Mac log showed `tool call music.netease_play {"song":"绿光","artist":"孙燕姿"}`.
+  - Mac log showed `tool call music.netease_play {"song":"绿光","artist":"孙燕�?}`.
   - Mac log showed a new `>> tools/call self.music.play_url` URL for `绿光`.
-  - Board serial showed `% self.music.play_url...`, `stream open station=绿光 - 孙燕姿 ... status=200`, and continuous playback frames.
+  - Board serial showed `% self.music.play_url...`, `stream open station=绿光 - 孙燕�?... status=200`, and continuous playback frames.
 - Both NetEase LaunchAgents were restarted after the bridge fix:
   - `com.tupi.xiaozhi.netease.yuyu`
   - `com.tupi.xiaozhi.netease.xiaocanglan`
@@ -1148,7 +1188,7 @@ Important future warning:
 Current target:
 
 - Firmware version target: `v1.7.67`.
-- `v1.7.66` was burned and boot-verified, but hardware logs showed it was incomplete: after about a minute, XiaoZhi said "拜拜啦，下次再聊！", audio focus paused the NetEase MP3, and the same URL reopened from the beginning.
+- `v1.7.66` was burned and boot-verified, but hardware logs showed it was incomplete: after about a minute, XiaoZhi said "拜拜啦，下次再聊�?, audio focus paused the NetEase MP3, and the same URL reopened from the beginning.
 
 What changed:
 
@@ -1162,7 +1202,7 @@ Verification:
 - `xiaozhi.bin` size is `0x62ee20`; the 7 MB OTA app slot has `0xd11e0` bytes (12%) free.
 - Flashed to `/dev/cu.usbmodem212401` at 460800 baud; esptool hash verification passed.
 - Boot log confirmed `App version: 1.7.67`, Wi-Fi connected, MQTT connected, idle state, and registered tools including `self.music.play_url`.
-- Hardware test with `宇宇` verified first song `道别是一件难事 - 上海彩虹室内合唱团` and second song `暮色森林 - 欧阳娜娜`.
+- Hardware test with `宇宇` verified first song `道别是一件难�?- 上海彩虹室内合唱团` and second song `暮色森林 - 欧阳娜娜`.
 - Mac-side NetEase log showed `music.netease_play` followed by `>> tools/call self.music.play_url` with a fresh NetEase MP3 URL.
 - Board serial showed `% self.music.play_url...`, `stream open ... status=200`, and continuous MP3 frames for both songs.
 - Autonomous goodbye lines were caught and suppressed:
@@ -1196,7 +1236,7 @@ Verification:
 - Build passed on macOS with ESP-IDF v5.5; CMake reported `App "xiaozhi" version: 1.7.66`.
 - `xiaozhi.bin` size is `0x62ec90`; the 7 MB OTA app slot has `0xd1370` bytes (12%) free.
 - Release assets are in `releases/v1.7.66/`.
-- 待确认: flash/OTA and hardware test with the user phrase "让多多播放网易云音乐".
+- 待确�? flash/OTA and hardware test with the user phrase "让多多播放网易云音乐".
 
 Release assets:
 
@@ -1471,7 +1511,7 @@ Hardware evidence:
 
 - `轩辕剑` dumps now run after CRC correction to mapper 224.
 - `快打旋风 [Cony Soft].nes` is confirmed by serial log as `crc=fdec419f`, `header_mapper=4`, `corrected_mapper=83`; it still displays garbled graphics while CPU/audio continue running.
-- `吞食天地2 [先锋卡通汉化 (laopix简体中文名字版)].nes` is confirmed by serial log as `crc=3963f12a`, `header_mapper=4`, `corrected_mapper=198`; it still shows black/solid-color output while CPU/audio continue running and frame samples stay effectively constant (`min=max=1084` after startup).
+- `吞食天地2 [先锋卡通汉�?(laopix简体中文名字版)].nes` is confirmed by serial log as `crc=3963f12a`, `header_mapper=4`, `corrected_mapper=198`; it still shows black/solid-color output while CPU/audio continue running and frame samples stay effectively constant (`min=max=1084` after startup).
 
 Important limitation:
 
@@ -1562,7 +1602,7 @@ Verification:
   - MQTT connected
   - `Application: STATE: idle`
   - `Daily card updated for 2026-06-28 kind=quote`
-  - `weather ok 27 C 中山 阴 00:00 H98% C98%`
+  - `weather ok 27 C 中山 �?00:00 H98% C98%`
 
 Release assets:
 
@@ -1715,7 +1755,7 @@ Verification:
   - `App version: 1.7.50`.
   - WiFi connected to `liutupi`, IP `192.168.4.177`.
   - MQTT connected and app reached `STATE: idle`.
-  - Weather synced: `weather ok 28 C 中山 毛毛雨 17:30 H95% C100% raw=55 refined=55`.
+  - Weather synced: `weather ok 28 C 中山 毛毛�?17:30 H95% C100% raw=55 refined=55`.
   - No reboot, panic, or backtrace during the observed startup window.
 
 Release assets prepared in `releases/v1.7.50/`:
@@ -1904,7 +1944,7 @@ Verification:
   - Weather refinement worked on live Zhongshan data:
 
 ```text
-weather ok 28 C 中山 阴 00:30 H95% C97% raw=95 refined=3 rain=0.00 cloud=97 humidity=95 updated=00:30
+weather ok 28 C 中山 �?00:30 H95% C97% raw=95 refined=3 rain=0.00 cloud=97 humidity=95 updated=00:30
 ```
 
 - Release assets prepared in `releases/v1.7.46/`:
@@ -2001,7 +2041,7 @@ Known issues:
   - `GET /` returned the HTML form without latitude/longitude input fields.
   - `POST /config` returned `Saving...`, logged `wifi config synced profile=1 weather=1`, refreshed weather, and did not reboot.
 - City-only POST verification passed: posting `city=中山` without coordinates resolved to `22.5231,113.3791`, updated `/config`, refreshed weather, and did not reboot.
-- English city verification passed: posting `city=dongguan` resolved to `东莞市 23.0180,113.7487`, `/config` updated, weather fetched `31 C 东莞市 Storm`, and no reboot occurred.
+- English city verification passed: posting `city=dongguan` resolved to `东莞�?23.0180,113.7487`, `/config` updated, weather fetched `31 C 东莞�?Storm`, and no reboot occurred.
 - BLE code remains present as a guarded fallback/prototype, but the guard still skips NimBLE startup on current hardware memory (`BLE low memory`) to avoid reboot loops.
 
 ## Runtime Notes: 2026-06-25 Phone BLE Profile And Weather Config Sync
@@ -2369,7 +2409,7 @@ Observed boot/runtime facts after flashing:
 - Added a second persisted UI theme named `Cat` while preserving the existing `Classic` black/gold theme.
 - Settings now includes an `Appearance / Theme` row. Tapping `Switch` cycles `Classic` <-> `Cat`, saves the choice in NVS namespace `qd_ui`, and restarts so the whole LVGL desktop is recreated with the selected palette.
 - The Cat theme intentionally keeps the existing page architecture: Main, Apps, Radio, FC/NES, Calendar, Focus, Network, Settings, Photos, and XiaoZhi navigation and callbacks are unchanged. Only palette, card styling, brand mark, icon decoration, and selected Cat-theme layout offsets change.
-- Cat theme visual updates include a pinker background, pink/white cards, pink-orange high-contrast time digits, Chinese brand mark `小苍兰 / 端午`, a small cat on the daily-card panel, and a cat-style XiaoZhi face page.
+- Cat theme visual updates include a pinker background, pink/white cards, pink-orange high-contrast time digits, Chinese brand mark `小苍�?/ 端午`, a small cat on the daily-card panel, and a cat-style XiaoZhi face page.
 - The main-page Cat time card was moved below the top-left brand mark after hardware feedback showed the first version overlapped the logo. In Cat mode the time group now starts lower and uses a shorter card; Classic mode keeps the previous layout.
 - The Chinese brand mark uses the already-linked `font_puhui_16_4` font path to avoid adding new glyph subset requirements for this theme pass.
 - Build verification passed after the final layout fix:
@@ -2407,7 +2447,7 @@ Observed boot/runtime facts after flashing:
 - Final `v1.7.21` build was flashed to `COM13`.
 - Post-flash logs confirmed `App version: 1.7.21`, saved WiFi `liutupi` reconnect, IP `192.168.4.92`, `Ota: Current version: 1.7.21`, idle state, and live battery readings. No WiFi reset/config path appeared.
 - BOOT deep-sleep cycle was not recaptured in the final monitor window; the board remained awake and continued battery logs. The WiFi regression fix is still valid because the startup reset path has been removed.
-- Battery hardware follow-up on 2026-06-20: local schematic `D:\3.5inch_ESP32-S3\5-_Schematic\ESP32-S3原理图.pdf` shows a USB-C powered battery charge/discharge circuit with `U2 TP4054`, `VBUS/+5V`, `JP1 BAT+`, and `CHRG`. USB-C should charge a connected single-cell Li-ion/LiPo battery automatically in hardware; firmware does not need to control charging.
+- Battery hardware follow-up on 2026-06-20: local schematic `D:\3.5inch_ESP32-S3\5-_Schematic\ESP32-S3原理�?pdf` shows a USB-C powered battery charge/discharge circuit with `U2 TP4054`, `VBUS/+5V`, `JP1 BAT+`, and `CHRG`. USB-C should charge a connected single-cell Li-ion/LiPo battery automatically in hardware; firmware does not need to control charging.
 - Battery capacity note: replacing the current 1000mAh pack with a larger 2800mAh pack is acceptable if it is still a single-cell 3.7V nominal / 4.2V full Li-ion/LiPo battery, the connector polarity matches `BAT+`/`GND`, and the pack has protection. Larger capacity only extends runtime and increases charge time.
 - Firmware battery status caveat: the QDTech firmware reads battery voltage through `IO8 / ADC1_CH7` and maps voltage to percentage. The schematic's `CHRG` signal was not found on an ESP32 GPIO in the IO allocation table, so the UI currently reports real battery level but not a hardware-proven charging/charged state.
 - Release assets prepared locally:
@@ -2456,7 +2496,7 @@ Last worked on 2026-06-18 in this Windows workspace:
 
 Latest 2026-06-19 macOS hardware pass for `v1.7.19`:
 
-- Workspace: `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
+- Workspace: `/Users/tupi/Documents/带小�?3.5 �?qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`
 - Build staging directory used to avoid workspace build churn: `/private/tmp/qdtech_s3_build_src`
 - Serial port: `/dev/cu.usbmodem212401`
 - Release target is `v1.7.19`; this bump is intentional so the on-device GitHub Release updater sees the build as newer than `v1.7.18`.
@@ -2519,7 +2559,7 @@ Current FC/NES verification evidence:
 
 2026-06-18 macOS continuation:
 
-- Pulled `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git` into `/Users/tupi/Documents/带小智 3.5 寸/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
+- Pulled `https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware.git` into `/Users/tupi/Documents/带小�?3.5 �?qdtech-s3-touch-lcd-3.5-xiaozhi-firmware`.
 - Improved the in-repo minimal NES core timing and sprite correctness: CPU base-cycle accounting, `CPU cycles * 3` PPU advancement, NMI-cycle PPU advancement, Mapper 2 bank wrapping, sprite bitplane/X/Y fixes, and background fetch timing.
 - Changed FC startup to be fully lazy: normal boot only registers callbacks; the FC task, SD mount, and ROM scan start when the FC page or FC controls request them. Leaving the FC page stops playback and releases the ROM list.
 - Full ESP32-S3 build passed from `/private/tmp/qdtech_s3_build_src` because the original macOS workspace path contains spaces/Chinese text that split an ESP-SR linker search path at link time.
@@ -2573,14 +2613,14 @@ Current FC/NES verification evidence:
   - Numeric ROM sets can place `roms.txt`, `roms.csv`, or `games.txt` in the active ROM directory. Lines may be `001.nes=Super Mario`, `001.nes,Super Mario`, or tab-separated. Aliases load once during scan and are not used in the gameplay frame loop.
   - Validation regenerated `build-qdtech/sdkconfig` in `/private/tmp/qdtech_s3_build_src`; generated config confirmed `CONFIG_FATFS_CODEPAGE_936=y`, `CONFIG_FATFS_CODEPAGE=936`, and `CONFIG_FATFS_API_ENCODING_UTF_8=y`.
   - Latest build was flashed to `/dev/cu.usbmodem212401`: `xiaozhi.bin` `0x3c89f0`, smallest app partition `0x600000`, free `0x237610`.
-  - Hardware monitor confirmed `/sdcard/FC` scan and readable Chinese ROM names in logs, for example `10.能源战士2(无限HP+无限生命)` and `100.恶魔城1无敌版`.
+  - Hardware monitor confirmed `/sdcard/FC` scan and readable Chinese ROM names in logs, for example `10.能源战士2(无限HP+无限生命)` and `100.恶魔�?无敌版`.
   - Entering Nofrendo after the ROM-name pass stayed stable and logged about `27-32` FPS, so this directory/name fix did not regress the smoothness-first `320x240` path.
   - After the user reported that later ROM names still looked garbled on the panel, the FC list/detail labels were switched from Montserrat to the existing `font_puhui_16_4` Chinese font. This addresses the separate display-font layer: decoded UTF-8 names need a font with Chinese glyph coverage.
   - The font-only pass built and flashed successfully to `/dev/cu.usbmodem212401` with the same `xiaozhi.bin` size `0x3c89f0`; boot was verified. The monitor session did not capture a fresh FC page entry after this last flash, so the user still needs to visually confirm the FC list on the panel.
   - User confirmed the FC ROM list became readable after the font pass.
   - Release prep bumped `PROJECT_VER` to `1.7.9` and changed `.gitignore` so `components/nofrendo` is tracked while other generated `components/` content remains ignored. Do not drop the Nofrendo component from future commits; `FcEmulatorService` includes `qdtech_nofrendo.h`.
   - Final `v1.7.9` release build passed from `/private/tmp/qdtech_s3_build_src`: `xiaozhi.bin` `0x3c89f0`, smallest app partition `0x600000`, free `0x237610`.
-  - Final `v1.7.9` build was flashed to `/dev/cu.usbmodem212401`; monitor logs confirmed `App version: 1.7.9`, OTA current version `1.7.9`, early SD mount, FC page activation, `/sdcard/FC` scan, and readable Chinese list navigation through names such as `10.能源战士2(无限HP+无限生命)`, `100.恶魔城1无敌版`, and `115.未来战士HACK`.
+  - Final `v1.7.9` build was flashed to `/dev/cu.usbmodem212401`; monitor logs confirmed `App version: 1.7.9`, OTA current version `1.7.9`, early SD mount, FC page activation, `/sdcard/FC` scan, and readable Chinese list navigation through names such as `10.能源战士2(无限HP+无限生命)`, `100.恶魔�?无敌版`, and `115.未来战士HACK`.
   - Follow-up system stability pass after the user reported slow time/weather sync and occasional crashes after flashing FC:
     - Removed boot-time FC SD prepare; SD now mounts lazily when FC/Photos needs it.
     - FC now reuses an existing `/sdcard` mount instead of trying a second mount.
