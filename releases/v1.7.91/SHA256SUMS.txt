@@ -1,0 +1,3 @@
+21839bde70e75ada23c8fa96679b3626518386f53e1ddb3507fac46573385585  qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin
+99bf3c7175bdd02b726a0c63564135613dd23e4c0a17b1ac984094279759baff  qdtech-s3-touch-lcd-3.5-v1.7.91-full.bin
+b15325b37fcc19266cf14a78f91e71fadad5aa1f70638a1b9d4c2aaa38add1a9  qdtech-s3-touch-lcd-3.5-v1.7.91-firmware.zip

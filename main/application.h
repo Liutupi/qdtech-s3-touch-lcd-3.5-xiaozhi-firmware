@@ -79,6 +79,7 @@ public:
     void Reboot();
     void WakeWordInvoke(const std::string& wake_word);
     void PlaySound(const std::string_view& sound);
+    void PlayNotificationSound(const std::string_view& sound);
     bool CanEnterSleepMode();
     void SendMcpMessage(const std::string& payload);
     void SetAecMode(AecMode mode);

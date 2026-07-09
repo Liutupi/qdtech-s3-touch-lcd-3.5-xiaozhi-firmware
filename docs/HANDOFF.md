@@ -1,3 +1,40 @@
+## 2026-07-09 Handoff: v1.7.91 Hourglass Alarm
+
+Current target:
+
+- Firmware version target is now v1.7.91.
+- This release keeps the v1.7.90 stable touch/BMI270 base and adds an audible hourglass completion alarm.
+- Built on Windows with ESP-IDF 5.5 from D:\3.5inch_ESP32-S3\worktree-v1786-hourglass, build directory build-v1790.
+- Release assets were generated in releases/v1.7.91/.
+- The connected board on COM3 was flashed with the v1.7.91 image; esptool hash verification passed.
+
+What changed:
+
+- Bumped PROJECT_VER to 1.7.91.
+- Added Application::PlayNotificationSound(), which resets the decoder and re-enables speaker output before queueing a short system sound.
+- Hourglass countdown completion now plays Lang::Sounds::P3_SUCCESS exactly once per timer run.
+- Hourglass reset, exit, and new preset selection clear the one-shot alarm latch.
+- Added low-rate hourglass countdown progress logs at each minute and during the final five seconds for future diagnosis.
+
+Verification:
+
+- idf.py -B build-v1790 reconfigure build merge-bin passed.
+- CMake reported App "xiaozhi" version 1.7.91.
+- xiaozhi.bin size is 0x64e7c0 / 6612928 bytes; QDTech 7 MB OTA app slot has 0xb1840 bytes free, about 10 percent.
+- merged-binary.bin size is 0x74e7c0 / 7661504 bytes.
+- Flash to COM3 completed with esptool hash verification.
+- Serial monitor confirmed a real 5 minute hourglass run: remaining=240, 180, 120, 60, then 5/4/3/2/1/0.
+- At completion the monitor logged Hourglass alarm sound requested, AudioCodec: Set output enable to true, and Hourglass timer done; output later returned to disabled after the sound finished.
+
+Release asset SHA256:
+
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin: 21839bde70e75ada23c8fa96679b3626518386f53e1ddb3507fac46573385585
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-full.bin: 99bf3c7175bdd02b726a0c63564135613dd23e4c0a17b1ac984094279759baff
+- releases/v1.7.91/qdtech-s3-touch-lcd-3.5-v1.7.91-firmware.zip: b15325b37fcc19266cf14a78f91e71fadad5aa1f70638a1b9d4c2aaa38add1a9
+
+Release/OTA note:
+
+- GitHub Release v1.7.91 is published as latest with qdtech-s3-touch-lcd-3.5-v1.7.91-app.bin plus SHA256SUMS.txt so other boards can download it through the on-device updater.
 # QDTech 3.5 XiaoZhi Project Handoff
 
 > Future Codex note: read this file, docs/PROJECT_STATUS.md, docs/NEXT_TASKS.md, and docs/CODEX_RULES.md before changing code.

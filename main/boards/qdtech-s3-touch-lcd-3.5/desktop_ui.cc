@@ -1,5 +1,6 @@
 ﻿#include "desktop_ui.h"
 #include "application.h"
+#include "assets/lang_config.h"
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
@@ -736,10 +737,21 @@ void DesktopUI::HourglassTickCb(lv_timer_t* timer) {
     }
     if (self->hourglass_remaining_sec_ > 0) {
         self->hourglass_remaining_sec_--;
+        if (self->hourglass_remaining_sec_ <= 5 || self->hourglass_remaining_sec_ % 60 == 0) {
+            ESP_LOGI(TAG, "Hourglass tick remaining=%lu",
+                     static_cast<unsigned long>(self->hourglass_remaining_sec_));
+        }
     }
     if (self->hourglass_remaining_sec_ == 0) {
         self->hourglass_running_ = false;
         self->hourglass_done_ = true;
+        if (!self->hourglass_alarm_played_) {
+            self->hourglass_alarm_played_ = true;
+            Application::GetInstance().Schedule([]() {
+                ESP_LOGI(TAG, "Hourglass alarm sound requested");
+                Application::GetInstance().PlayNotificationSound(Lang::Sounds::P3_SUCCESS);
+            });
+        }
         if (self->hourglass_tick_timer_) {
             lv_timer_pause(self->hourglass_tick_timer_);
         }
@@ -5746,6 +5758,7 @@ void DesktopUI::ResetHourglassToDefault() {
     hourglass_remaining_sec_ = hourglass_total_sec_;
     hourglass_running_ = false;
     hourglass_done_ = false;
+    hourglass_alarm_played_ = false;
     hourglass_anim_tick_ = 0;
     if (hourglass_tick_timer_) {
         lv_timer_pause(hourglass_tick_timer_);
@@ -5775,6 +5788,7 @@ void DesktopUI::ExitHourglassMode() {
     hourglass_motion_active_ = false;
     hourglass_running_ = false;
     hourglass_done_ = false;
+    hourglass_alarm_played_ = false;
     if (hourglass_tick_timer_) {
         lv_timer_delete(hourglass_tick_timer_);
         hourglass_tick_timer_ = nullptr;
@@ -5817,6 +5831,7 @@ void DesktopUI::SelectHourglassPreset(uint8_t index) {
         hourglass_total_sec_ = kDurationsSec[index];
         hourglass_remaining_sec_ = hourglass_total_sec_;
         hourglass_done_ = false;
+        hourglass_alarm_played_ = false;
         hourglass_running_ = true;
     }
     if (hourglass_tick_timer_) {
