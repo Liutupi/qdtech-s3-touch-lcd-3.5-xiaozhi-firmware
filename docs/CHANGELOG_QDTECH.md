@@ -1,3 +1,11 @@
+## 2026-07-10: v1.7.92 Shake Lab MVP
+
+- Added Apps -> More -> Shake Lab, offline Ask Ball, and D6/2D6 Dice.
+- Added a lightweight motion state machine combining acceleration magnitude deviation, gyro peak, repeated peaks, direction reversals, duration, settling, and cooldown.
+- Retained the one BMI270 board task, touch-active shared-I2C backoff, and low-rate Hourglass orientation behavior outside Shake Lab.
+- Added throttled diagnostic logs; results use P3_SUCCESS only when external audio is inactive.
+- ESP-IDF 5.5 QDTech build/merge passed: app 0x652ec0 / 6631104, app-slot free 0xad140 / 708928, merged 0x752ec0 / 7679680.
+- Flashed to COM3 at 460800 baud with esptool hash verification for all written segments. Verified Apps -> More -> Shake Lab -> Dice and active 30 ms sampling; full physical regression remains recorded in `docs/NEXT_TASKS.md`.
 ## 2026-07-09: v1.7.91 Hourglass Completion Alarm
 
 Scope:

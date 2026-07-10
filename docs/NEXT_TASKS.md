@@ -1,3 +1,9 @@
+# 2026-07-10 v1.7.92 Shake Lab Hardware Follow-Up
+
+- v1.7.92 is flashed to COM3 and release assets are prepared. First confirm Main/Apps taps, Apps More, photo right-swipe, Settings vertical scroll, and XiaoZhi right-swipe.
+- Then test one sustained multi-direction shake for exactly one Ask Ball reveal and cooldown; single pick-up/drop, touch push, and cable movement must not reveal.
+- Test D6 1-6 and 2D6 independent values plus total 2-12; exit Shake Lab, wait 75 seconds after boot, then verify Hourglass 90-degree enter / landscape exit.
+- With music playing, expected result is no Shake Lab notification sound and uninterrupted audio.
 # 2026-07-04 v1.7.76 Stability Hotfix Follow-Up
 
 Current state:

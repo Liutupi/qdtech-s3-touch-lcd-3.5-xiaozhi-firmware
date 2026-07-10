@@ -1,3 +1,9 @@
+# 2026-07-10 Project Status: v1.7.92 Shake Lab MVP
+
+- Apps -> More exposes Shake Lab with Ask Ball and D6/2D6 Dice. It uses LVGL primitives, existing themes, and no new bitmap/GIF/BLE resources.
+- The sole BMI270 task switches between 250 ms normal Hourglass polling and 30 ms Shake Lab polling, with existing touch-active I2C backoff.
+- ESP-IDF 5.5 build and merge passed in `build-v1792`: app 0x652ec0 / 6631104 bytes; free 0xad140 / 708928 bytes (10%); merged 0x752ec0 / 7679680 bytes.
+- The final image was flashed to COM3 at 460800 baud with all esptool hashes verified. Apps -> More -> Shake Lab -> Dice and active high-rate sampling were validated before the final no-behavior callback/log cleanup; the final image still needs the full physical regression pass.
 # 2026-07-09 Project Status: v1.7.91 Hourglass Alarm
 
 Firmware:

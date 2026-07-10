@@ -1,4 +1,4 @@
-﻿#include "desktop_ui.h"
+#include "desktop_ui.h"
 #include "application.h"
 #include "assets/lang_config.h"
 #include "config.h"
@@ -896,6 +896,11 @@ static void open_app_card(uint8_t index) {
                 }
             }
             break;
+        case 10:
+            if (g_desktop_ui) {
+                g_desktop_ui->ShowPage(DesktopPage::SHAKE_LAB);
+            }
+            break;
         default:
             break;
     }
@@ -1516,6 +1521,7 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_photo = current_page_ == DesktopPage::PHOTO;
     const bool was_fc = current_page_ == DesktopPage::FC;
     const bool was_xiaozhi = current_page_ == DesktopPage::XIAOZHI;
+    const bool was_shake_lab = current_page_ == DesktopPage::SHAKE_LAB;
     current_page_ = page;
     if (was_xiaozhi && page != DesktopPage::XIAOZHI) {
         ReleaseThemedFaceGif();
@@ -1536,6 +1542,9 @@ void DesktopUI::ShowPage(DesktopPage page) {
     }
     if (hourglass_page_) {
         lv_obj_add_flag(hourglass_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_page_) {
+        lv_obj_add_flag(shake_lab_page_, LV_OBJ_FLAG_HIDDEN);
     }
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     if (music_page_) {
@@ -1564,6 +1573,7 @@ void DesktopUI::ShowPage(DesktopPage page) {
             ESP_LOGI(TAG, "Show main page");
             break;
         case DesktopPage::APPS:
+            SetAppsMoreVisible(false);
             lv_obj_clear_flag(apps_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show apps page");
             break;
@@ -1625,6 +1635,15 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show hourglass page");
             break;
+        case DesktopPage::SHAKE_LAB:
+            if (!shake_lab_page_) {
+                CreateShakeLabPage(lv_scr_act());
+            }
+            if (shake_lab_page_) {
+                lv_obj_clear_flag(shake_lab_page_, LV_OBJ_FLAG_HIDDEN);
+            }
+            ESP_LOGI(TAG, "Shake Lab page enter");
+            break;
         case DesktopPage::XIAOZHI:
             EnsureThemedFaceGif();
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -1651,6 +1670,11 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show diagnostics page");
             break;
+    }
+
+    if (was_shake_lab && page != DesktopPage::SHAKE_LAB) {
+        ESP_LOGI(TAG, "Shake Lab page exit");
+        ReleaseShakeLabPage();
     }
 
     const bool is_photo = page == DesktopPage::PHOTO;
@@ -1827,6 +1851,11 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (current_page_ == DesktopPage::HOURGLASS) {
         HandleHourglassTap(x, y);
+        return;
+    }
+
+    if (current_page_ == DesktopPage::SHAKE_LAB) {
+        HandleShakeLabTap(x, y);
         return;
     }
 
@@ -2007,6 +2036,16 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
 
     if (hit(372, 28, 96, 56)) {
         NavigateBack();
+        return;
+    }
+    if (hit(248, 42, 102, 30)) {
+        SetAppsMoreVisible(!apps_showing_more_);
+        return;
+    }
+    if (apps_showing_more_) {
+        if (hit(24, 90, 432, 142)) {
+            ShowPage(DesktopPage::SHAKE_LAB);
+        }
         return;
     }
     if (x >= 24 && x < 446 && y >= 76 && y < 76 + 5 * 45) {
@@ -2459,6 +2498,11 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_set_style_radius(back, 16, 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
+    apps_primary_group_ = lv_obj_create(apps_page_);
+    lv_obj_remove_style_all(apps_primary_group_);
+    lv_obj_set_size(apps_primary_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(apps_primary_group_, LV_OBJ_FLAG_SCROLLABLE);
+
     // App tiles
     struct AppInfo {
         const char* cn;
@@ -2482,7 +2526,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     };
 
     for (uint8_t i = 0; i < sizeof(apps) / sizeof(apps[0]); ++i) {
-        lv_obj_t* tile = CreateAppTile(apps_page_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
+        lv_obj_t* tile = CreateAppTile(apps_primary_group_, i, apps[i].cn, apps[i].en, apps[i].status, apps[i].color);
         if (apps[i].cb) {
             lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
         }
@@ -2490,6 +2534,34 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
             lv_obj_add_event_cb(tile, diagnostics_open_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
     }
+
+    apps_more_button_ = CreateButton(apps_page_, "More", nullptr);
+    lv_obj_set_size(apps_more_button_, 92, 26);
+    lv_obj_set_style_radius(apps_more_button_, 10, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(apps_more_button_, 0), &lv_font_montserrat_12, 0);
+    lv_obj_align(apps_more_button_, LV_ALIGN_TOP_LEFT, 248, 45);
+
+    apps_more_group_ = lv_obj_create(apps_page_);
+    lv_obj_remove_style_all(apps_more_group_);
+    lv_obj_set_size(apps_more_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(apps_more_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(apps_more_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t* shake_card = CreatePanel(apps_more_group_, 432, 142, 24, 90);
+    lv_obj_set_style_bg_color(shake_card, COLOR_SURFACE, 0);
+    lv_obj_set_style_border_color(shake_card, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(shake_card, 2, 0);
+    lv_obj_t* shake_title = label_en(shake_card, "Shake Lab", &style_en);
+    lv_obj_set_style_text_font(shake_title, &lv_font_montserrat_20, 0);
+    lv_obj_align(shake_title, LV_ALIGN_TOP_LEFT, 22, 20);
+    lv_obj_t* shake_cn = label_en(shake_card, "摇一摇实验室", &style_gold);
+    lv_obj_set_style_text_font(shake_cn, qd_cn_font_20(), 0);
+    lv_obj_align(shake_cn, LV_ALIGN_TOP_LEFT, 22, 50);
+    lv_obj_t* shake_detail = label_en(shake_card, "Ask Ball  ·  Dice", &style_muted);
+    lv_obj_align(shake_detail, LV_ALIGN_TOP_LEFT, 22, 88);
+    lv_obj_t* shake_mark = circle(shake_card, 54, COLOR_GREEN, LV_OPA_50);
+    lv_obj_align(shake_mark, LV_ALIGN_RIGHT_MID, -30, 0);
+    lv_obj_t* shake_dot = circle(shake_card, 18, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align_to(shake_dot, shake_mark, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t* hint = label_en(apps_page_, "Swipe right: Home", &style_muted);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
@@ -6968,5 +7040,508 @@ void DesktopUI::MusicCoverTimerCb(lv_timer_t* timer) {
         lv_obj_set_size(bar, 9, height);
         lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, kBarX[i], -10);
         lv_obj_set_style_bg_opa(bar, active ? LV_OPA_80 : LV_OPA_30, 0);
+    }
+}
+
+void DesktopUI::SetAppsMoreVisible(bool visible) {
+    apps_showing_more_ = visible;
+    if (apps_primary_group_) {
+        if (visible) {
+            lv_obj_add_flag(apps_primary_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(apps_primary_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (apps_more_group_) {
+        if (visible) {
+            lv_obj_clear_flag(apps_more_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(apps_more_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (apps_more_button_) {
+        lv_obj_t* label = lv_obj_get_child(apps_more_button_, 0);
+        if (label) {
+            lv_label_set_text(label, visible ? "All Apps" : "More");
+        }
+    }
+}
+
+void DesktopUI::SetShakeLabSamplingCallback(std::function<void(bool)> callback) {
+    shake_lab_sampling_callback_ = std::move(callback);
+}
+
+void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
+    shake_lab_page_ = lv_obj_create(root);
+    lv_obj_add_style(shake_lab_page_, &style_screen, 0);
+    lv_obj_set_size(shake_lab_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(shake_lab_page_, media_gesture_cb, LV_EVENT_GESTURE, nullptr);
+    lv_obj_set_style_bg_color(shake_lab_page_, COLOR_BG, 0);
+
+    lv_obj_t* title = label_en(shake_lab_page_, "Shake Lab", &style_en);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 32);
+    lv_obj_t* subtitle = label_en(shake_lab_page_, "摇一摇实验室", &style_gold);
+    lv_obj_set_style_text_font(subtitle, qd_cn_font_16(), 0);
+    lv_obj_align(subtitle, LV_ALIGN_TOP_LEFT, 24, 58);
+    lv_obj_t* back = CreateButton(shake_lab_page_, "Back", nullptr);
+    lv_obj_set_size(back, 76, 28);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -18, 34);
+
+    shake_lab_home_group_ = lv_obj_create(shake_lab_page_);
+    lv_obj_remove_style_all(shake_lab_home_group_);
+    lv_obj_set_size(shake_lab_home_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_home_group_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* ask_card = CreatePanel(shake_lab_home_group_, 204, 156, 24, 104);
+    lv_obj_set_style_border_color(ask_card, COLOR_PURPLE, 0);
+    lv_obj_set_style_border_width(ask_card, 2, 0);
+    lv_obj_t* ask_orb = circle(ask_card, 68, COLOR_PURPLE, LV_OPA_70);
+    lv_obj_align(ask_orb, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_t* ask_core = circle(ask_card, 30, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align_to(ask_core, ask_orb, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_t* ask_title = label_en(ask_card, "Ask Ball", &style_en);
+    lv_obj_set_style_text_font(ask_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(ask_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_t* ask_cn = label_en(ask_card, "答案球", &style_gold);
+    lv_obj_set_style_text_font(ask_cn, qd_cn_font_16(), 0);
+    lv_obj_align(ask_cn, LV_ALIGN_TOP_MID, 0, 116);
+
+    lv_obj_t* dice_card = CreatePanel(shake_lab_home_group_, 204, 156, 252, 104);
+    lv_obj_set_style_border_color(dice_card, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(dice_card, 2, 0);
+    lv_obj_t* dice_demo = lv_obj_create(dice_card);
+    lv_obj_remove_style_all(dice_demo);
+    lv_obj_set_size(dice_demo, 66, 66);
+    lv_obj_set_style_radius(dice_demo, 10, 0);
+    lv_obj_set_style_bg_color(dice_demo, COLOR_CREAM, 0);
+    lv_obj_set_style_bg_opa(dice_demo, LV_OPA_COVER, 0);
+    lv_obj_align(dice_demo, LV_ALIGN_TOP_MID, 0, 18);
+    for (int i = 0; i < 5; ++i) {
+        lv_obj_t* dot = circle(dice_demo, 9, COLOR_GREEN, LV_OPA_COVER);
+        const int16_t px = (i == 1 || i == 3) ? 46 : (i == 2 ? 28 : 10);
+        const int16_t py = (i < 2) ? 10 : (i < 4 ? 28 : 46);
+        lv_obj_set_pos(dot, px, py);
+    }
+    lv_obj_t* dice_title = label_en(dice_card, "Dice", &style_en);
+    lv_obj_set_style_text_font(dice_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(dice_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_t* dice_cn = label_en(dice_card, "骰子", &style_green);
+    lv_obj_set_style_text_font(dice_cn, qd_cn_font_16(), 0);
+    lv_obj_align(dice_cn, LV_ALIGN_TOP_MID, 0, 116);
+
+    shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
+    lv_obj_remove_style_all(shake_lab_mode_group_);
+    lv_obj_set_size(shake_lab_mode_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_mode_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
+    shake_lab_mode_title_ = label_en(shake_lab_mode_group_, "Ask Ball", &style_en);
+    lv_obj_set_style_text_font(shake_lab_mode_title_, &lv_font_montserrat_16, 0);
+    lv_obj_align(shake_lab_mode_title_, LV_ALIGN_TOP_LEFT, 190, 42);
+    lv_obj_t* home = CreateButton(shake_lab_mode_group_, "Home", nullptr);
+    lv_obj_set_size(home, 70, 24);
+    lv_obj_align(home, LV_ALIGN_TOP_RIGHT, -18, 74);
+
+    shake_lab_ask_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_ask_group_);
+    lv_obj_set_size(shake_lab_ask_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_ask_group_, LV_OBJ_FLAG_SCROLLABLE);
+    shake_lab_glow_[0] = circle(shake_lab_ask_group_, 210, COLOR_PURPLE, LV_OPA_20);
+    lv_obj_align(shake_lab_glow_[0], LV_ALIGN_TOP_MID, 0, 80);
+    shake_lab_glow_[1] = circle(shake_lab_ask_group_, 174, COLOR_BLUE, LV_OPA_30);
+    lv_obj_align(shake_lab_glow_[1], LV_ALIGN_TOP_MID, 0, 98);
+    shake_lab_ball_ = circle(shake_lab_ask_group_, 148, COLOR_PURPLE, LV_OPA_COVER);
+    lv_obj_set_style_border_width(shake_lab_ball_, 3, 0);
+    lv_obj_set_style_border_color(shake_lab_ball_, COLOR_GOLD, 0);
+    lv_obj_align(shake_lab_ball_, LV_ALIGN_TOP_MID, 0, 111);
+    for (size_t i = 0; i < sizeof(shake_lab_particles_) / sizeof(shake_lab_particles_[0]); ++i) {
+        shake_lab_particles_[i] = circle(shake_lab_ask_group_, 7, i % 2 ? COLOR_GOLD : COLOR_GREEN, LV_OPA_70);
+    }
+    shake_lab_answer_label_ = label_en(shake_lab_ask_group_, "在心里想一个问题，\n然后摇一摇。", &style_en);
+    lv_obj_set_style_text_font(shake_lab_answer_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(shake_lab_answer_label_, 138);
+    lv_label_set_long_mode(shake_lab_answer_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(shake_lab_answer_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(shake_lab_answer_label_, LV_ALIGN_TOP_MID, 0, 156);
+    shake_lab_hint_label_ = label_en(shake_lab_ask_group_, "Shake steadily to reveal", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_hint_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(shake_lab_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -14);
+
+    shake_lab_dice_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_dice_group_);
+    lv_obj_set_size(shake_lab_dice_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_dice_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t* d6 = CreateButton(shake_lab_dice_group_, "D6", nullptr);
+    lv_obj_set_size(d6, 82, 28);
+    lv_obj_align(d6, LV_ALIGN_TOP_LEFT, 136, 78);
+    lv_obj_t* d6x2 = CreateButton(shake_lab_dice_group_, "2D6", nullptr);
+    lv_obj_set_size(d6x2, 82, 28);
+    lv_obj_align(d6x2, LV_ALIGN_TOP_LEFT, 262, 78);
+    for (int die = 0; die < 2; ++die) {
+        shake_lab_dice_boxes_[die] = lv_obj_create(shake_lab_dice_group_);
+        lv_obj_remove_style_all(shake_lab_dice_boxes_[die]);
+        lv_obj_set_size(shake_lab_dice_boxes_[die], 92, 92);
+        lv_obj_set_style_radius(shake_lab_dice_boxes_[die], 12, 0);
+        lv_obj_set_style_bg_color(shake_lab_dice_boxes_[die], COLOR_CREAM, 0);
+        lv_obj_set_style_bg_opa(shake_lab_dice_boxes_[die], LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(shake_lab_dice_boxes_[die], COLOR_GREEN, 0);
+        lv_obj_set_style_border_width(shake_lab_dice_boxes_[die], 3, 0);
+        lv_obj_align(shake_lab_dice_boxes_[die], LV_ALIGN_TOP_LEFT, 142 + die * 112, 130);
+        shake_lab_dice_values_[die] = label_en(shake_lab_dice_boxes_[die], "", &style_en);
+        lv_obj_set_style_text_font(shake_lab_dice_values_[die], &lv_font_montserrat_20, 0);
+        lv_obj_align(shake_lab_dice_values_[die], LV_ALIGN_BOTTOM_MID, 0, -5);
+        for (int pip = 0; pip < 7; ++pip) {
+            shake_lab_dice_dots_[die][pip] = circle(shake_lab_dice_boxes_[die], 12, COLOR_GREEN, LV_OPA_COVER);
+        }
+    }
+    shake_lab_dice_total_label_ = label_en(shake_lab_dice_group_, "Choose D6 or 2D6, then shake", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_dice_total_label_, &lv_font_montserrat_14, 0);
+    lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -34);
+    shake_lab_dice_lucky_label_ = label_en(shake_lab_dice_group_, "LUCKY", &style_gold);
+    lv_obj_set_style_text_font(shake_lab_dice_lucky_label_, &lv_font_montserrat_16, 0);
+    lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
+
+    shake_lab_anim_timer_ = lv_timer_create(ShakeLabAnimCb, 80, this);
+    lv_timer_pause(shake_lab_anim_timer_);
+    UpdateShakeLabDice();
+}
+
+bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
+    auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
+        return x >= left && x < left + width && y >= top && y < top + height;
+    };
+    if (hit(388, 30, 84, 42)) {
+        if (shake_lab_mode_ == ShakeLabMode::HOME) {
+            NavigateBack();
+        } else {
+            LeaveShakeLabMode();
+        }
+        return true;
+    }
+    if (shake_lab_mode_ == ShakeLabMode::HOME) {
+        if (hit(24, 104, 204, 156)) {
+            EnterShakeLabMode(ShakeLabMode::ASK_BALL);
+            return true;
+        }
+        if (hit(252, 104, 204, 156)) {
+            EnterShakeLabMode(ShakeLabMode::DICE);
+            return true;
+        }
+        return false;
+    }
+    if (hit(392, 72, 82, 40)) {
+        LeaveShakeLabMode();
+        return true;
+    }
+    if (shake_lab_mode_ == ShakeLabMode::DICE) {
+        if (hit(132, 72, 96, 40)) {
+            shake_lab_dice_count_ = 1;
+            UpdateShakeLabDice();
+            return true;
+        }
+        if (hit(252, 72, 104, 40)) {
+            shake_lab_dice_count_ = 2;
+            UpdateShakeLabDice();
+            return true;
+        }
+    }
+    return false;
+}
+
+void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
+    if (!shake_lab_page_ || mode == ShakeLabMode::HOME) {
+        return;
+    }
+    shake_lab_mode_ = mode;
+    shake_lab_detector_state_ = ShakeDetector::State::ARMED;
+    shake_lab_intensity_ = 0;
+    shake_lab_anim_tick_ = 0;
+    if (shake_lab_home_group_) {
+        lv_obj_add_flag(shake_lab_home_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_mode_group_) {
+        lv_obj_clear_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_ask_group_) {
+        if (mode == ShakeLabMode::ASK_BALL) {
+            lv_obj_clear_flag(shake_lab_ask_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_ask_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (shake_lab_dice_group_) {
+        if (mode == ShakeLabMode::DICE) {
+            lv_obj_clear_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (shake_lab_mode_title_) {
+        lv_label_set_text(shake_lab_mode_title_, mode == ShakeLabMode::ASK_BALL ? "Ask Ball" : "Dice");
+    }
+    if (mode == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
+        lv_label_set_text(shake_lab_answer_label_, "在心里想一个问题，\n然后摇一摇。");
+        lv_label_set_text(shake_lab_hint_label_, "Shake steadily to reveal");
+        UpdateShakeLabVisuals();
+    }
+    if (mode == ShakeLabMode::DICE) {
+        if (shake_lab_dice_total_label_) {
+            lv_label_set_text(shake_lab_dice_total_label_, "Choose D6 or 2D6, then shake");
+        }
+        if (shake_lab_dice_lucky_label_) {
+            lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        UpdateShakeLabDice();
+    }
+    shake_lab_sampling_active_ = true;
+    if (shake_lab_sampling_callback_) {
+        shake_lab_sampling_callback_(true);
+    }
+    ESP_LOGI(TAG, "Shake Lab mode=%s armed", mode == ShakeLabMode::ASK_BALL ? "Ask Ball" : "Dice");
+}
+
+void DesktopUI::LeaveShakeLabMode() {
+    if (shake_lab_anim_timer_) {
+        lv_timer_pause(shake_lab_anim_timer_);
+    }
+    if (shake_lab_sampling_active_ && shake_lab_sampling_callback_) {
+        shake_lab_sampling_callback_(false);
+    }
+    shake_lab_sampling_active_ = false;
+    shake_lab_detector_state_ = ShakeDetector::State::IDLE;
+    shake_lab_intensity_ = 0;
+    shake_lab_mode_ = ShakeLabMode::HOME;
+    if (shake_lab_mode_group_) {
+        lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_home_group_) {
+        lv_obj_clear_flag(shake_lab_home_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+    ESP_LOGI(TAG, "Shake Lab returned home");
+}
+
+void DesktopUI::ReleaseShakeLabPage() {
+    LeaveShakeLabMode();
+    if (shake_lab_anim_timer_) {
+        lv_timer_delete(shake_lab_anim_timer_);
+        shake_lab_anim_timer_ = nullptr;
+    }
+    if (shake_lab_page_) {
+        lv_obj_del(shake_lab_page_);
+    }
+    shake_lab_page_ = nullptr;
+    shake_lab_home_group_ = nullptr;
+    shake_lab_mode_group_ = nullptr;
+    shake_lab_ask_group_ = nullptr;
+    shake_lab_dice_group_ = nullptr;
+    shake_lab_ball_ = nullptr;
+    shake_lab_answer_label_ = nullptr;
+    shake_lab_hint_label_ = nullptr;
+    shake_lab_mode_title_ = nullptr;
+    shake_lab_dice_total_label_ = nullptr;
+    shake_lab_dice_lucky_label_ = nullptr;
+    memset(shake_lab_glow_, 0, sizeof(shake_lab_glow_));
+    memset(shake_lab_particles_, 0, sizeof(shake_lab_particles_));
+    memset(shake_lab_dice_boxes_, 0, sizeof(shake_lab_dice_boxes_));
+    memset(shake_lab_dice_values_, 0, sizeof(shake_lab_dice_values_));
+    memset(shake_lab_dice_dots_, 0, sizeof(shake_lab_dice_dots_));
+}
+
+void DesktopUI::UpdateShakeLabDice() {
+    if (!shake_lab_dice_boxes_[0]) {
+        return;
+    }
+    static constexpr int16_t kPipPositions[7][2] = {
+        {18, 18}, {62, 18}, {40, 40}, {18, 62}, {62, 62}, {18, 40}, {62, 40},
+    };
+    static constexpr bool kPipMap[7][7] = {
+        {false, false, true, false, false, false, false},
+        {true, false, false, false, true, false, false},
+        {true, false, true, false, true, false, false},
+        {true, true, false, true, true, false, false},
+        {true, true, true, true, true, false, false},
+        {true, true, true, true, true, true, true},
+        {false, false, false, false, false, false, false},
+    };
+    for (int die = 0; die < 2; ++die) {
+        const bool visible = die < shake_lab_dice_count_;
+        if (visible) {
+            lv_obj_clear_flag(shake_lab_dice_boxes_[die], LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_dice_boxes_[die], LV_OBJ_FLAG_HIDDEN);
+        }
+        const uint8_t value = std::max<uint8_t>(1, std::min<uint8_t>(6, shake_lab_dice_values_state_[die]));
+        for (int pip = 0; pip < 7; ++pip) {
+            lv_obj_t* dot = shake_lab_dice_dots_[die][pip];
+            if (!dot) {
+                continue;
+            }
+            lv_obj_set_pos(dot, kPipPositions[pip][0], kPipPositions[pip][1]);
+            if (visible && kPipMap[value - 1][pip]) {
+                lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+}
+
+void DesktopUI::UpdateShakeLabVisuals() {
+    if (!shake_lab_page_ || shake_lab_mode_ != ShakeLabMode::ASK_BALL) {
+        return;
+    }
+    const bool active = shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+        shake_lab_detector_state_ == ShakeDetector::State::SETTLING;
+    const int16_t radius = static_cast<int16_t>(72 + (active ? shake_lab_intensity_ / 3 : 0));
+    const lv_opa_t particle_opa = active ? static_cast<lv_opa_t>(LV_OPA_50 + shake_lab_intensity_ * 2)
+                                        : static_cast<lv_opa_t>(LV_OPA_30);
+    for (size_t i = 0; i < sizeof(shake_lab_particles_) / sizeof(shake_lab_particles_[0]); ++i) {
+        if (!shake_lab_particles_[i]) {
+            continue;
+        }
+        const float angle = static_cast<float>((shake_lab_anim_tick_ * (active ? 12 : 3) + i * 36) % 360) *
+            3.1415926f / 180.0f;
+        const int16_t x = static_cast<int16_t>(240 + std::cos(angle) * (radius - static_cast<int>(i % 3) * 8) - 4);
+        const int16_t y = static_cast<int16_t>(184 + std::sin(angle) * (radius - static_cast<int>(i % 3) * 8) - 4);
+        lv_obj_set_pos(shake_lab_particles_[i], x, y);
+        lv_obj_set_style_bg_opa(shake_lab_particles_[i], particle_opa, 0);
+    }
+    if (shake_lab_ball_) {
+        lv_obj_set_style_border_color(shake_lab_ball_, active ? COLOR_GOLD : COLOR_PURPLE, 0);
+        lv_obj_set_style_shadow_width(shake_lab_ball_, active ? 18 : 8, 0);
+        lv_obj_set_style_shadow_color(shake_lab_ball_, COLOR_PURPLE, 0);
+        lv_obj_set_style_shadow_opa(shake_lab_ball_, active ? LV_OPA_70 : LV_OPA_30, 0);
+    }
+    if (shake_lab_glow_[0]) {
+        lv_obj_set_style_bg_opa(shake_lab_glow_[0], active ? LV_OPA_40 : LV_OPA_20, 0);
+    }
+    if (shake_lab_glow_[1]) {
+        lv_obj_set_style_bg_opa(shake_lab_glow_[1], active ? static_cast<lv_opa_t>(140) : static_cast<lv_opa_t>(LV_OPA_30), 0);
+    }
+}
+
+void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || !self->shake_lab_page_ || self->shake_lab_mode_ == ShakeLabMode::HOME) {
+        return;
+    }
+    ++self->shake_lab_anim_tick_;
+    if (self->shake_lab_mode_ == ShakeLabMode::ASK_BALL) {
+        self->UpdateShakeLabVisuals();
+        return;
+    }
+    if (self->shake_lab_mode_ == ShakeLabMode::DICE &&
+        (self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+         (self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING && self->shake_lab_anim_tick_ % 3 == 0))) {
+        self->shake_lab_dice_values_state_[0] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        self->shake_lab_dice_values_state_[1] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        self->UpdateShakeLabDice();
+    }
+}
+
+void DesktopUI::RevealShakeLabResult() {
+    if (shake_lab_mode_ == ShakeLabMode::ASK_BALL) {
+        static constexpr const char* kAnswers[] = {
+            "大胆去做。", "可以。", "值得一试。", "你已经准备好了。", "答案偏向肯定。",
+            "可以，但慢一点。", "先做小范围尝试。", "时机正在靠近。", "保持耐心。", "准备好再出发。",
+            "再观察一下。", "先收集更多信息。", "现在不必急着决定。", "把问题拆小。", "给自己一点时间。",
+            "这一次，答案是否定的。", "暂时不要。", "别为了取悦别人决定。", "换一条路。", "先保护好自己。",
+            "你需要的是勇气。", "先完成，再完美。", "换个角度想想。", "相信你的节奏。", "休息后再决定。",
+            "先问问内心。", "保持好奇。", "把注意力放回当下。", "小步也算前进。", "答案会慢慢清楚。",
+            "可以开始了。", "先别否定自己。", "顺着最重要的事做。", "别让恐惧替你决定。", "今天适合行动。",
+            "现在先稳住。", "把边界说清楚。", "相信积累。", "这件事有转机。", "先听听真实感受。",
+            "你比想象中更接近。", "留一点余地。", "可以请求帮助。", "不急，答案在路上。", "愿你做自己的选择。",
+        };
+        const size_t index = esp_random() % (sizeof(kAnswers) / sizeof(kAnswers[0]));
+        if (shake_lab_answer_label_) {
+            lv_label_set_text(shake_lab_answer_label_, kAnswers[index]);
+        }
+        if (shake_lab_hint_label_) {
+            lv_label_set_text(shake_lab_hint_label_, "Answer revealed");
+        }
+        ESP_LOGI(TAG, "Shake Lab Ask Ball reveal index=%u", static_cast<unsigned>(index));
+    } else if (shake_lab_mode_ == ShakeLabMode::DICE) {
+        shake_lab_dice_values_state_[0] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        shake_lab_dice_values_state_[1] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        UpdateShakeLabDice();
+        if (shake_lab_dice_total_label_) {
+            char total[32];
+            if (shake_lab_dice_count_ == 2) {
+                snprintf(total, sizeof(total), "%u + %u = %u", shake_lab_dice_values_state_[0],
+                         shake_lab_dice_values_state_[1], shake_lab_dice_values_state_[0] + shake_lab_dice_values_state_[1]);
+            } else {
+                snprintf(total, sizeof(total), "Result: %u", shake_lab_dice_values_state_[0]);
+            }
+            lv_label_set_text(shake_lab_dice_total_label_, total);
+        }
+        const bool lucky = shake_lab_dice_values_state_[0] == 6 ||
+            (shake_lab_dice_count_ == 2 && shake_lab_dice_values_state_[1] == 6);
+        if (shake_lab_dice_lucky_label_) {
+            if (lucky) {
+                lv_obj_clear_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        ESP_LOGI(TAG, "Shake Lab Dice reveal d1=%u d2=%u count=%u", shake_lab_dice_values_state_[0],
+                 shake_lab_dice_values_state_[1], shake_lab_dice_count_);
+    }
+    if (!Application::GetInstance().IsExternalAudioActive()) {
+        Application::GetInstance().Schedule([]() {
+            Application::GetInstance().PlayNotificationSound(Lang::Sounds::P3_SUCCESS);
+        });
+    } else {
+        ESP_LOGI(TAG, "Shake Lab result sound suppressed while external audio is active");
+    }
+    if (shake_lab_anim_timer_) {
+        lv_timer_pause(shake_lab_anim_timer_);
+    }
+}
+
+void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
+    if (!shake_lab_page_ || !shake_lab_sampling_active_) {
+        return;
+    }
+    shake_lab_intensity_ = result.intensity;
+    shake_lab_detector_state_ = result.state;
+    switch (result.transition) {
+        case ShakeDetector::Transition::ARMED_TO_SHAKING:
+            if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
+                lv_label_set_text(shake_lab_answer_label_, "摇晃已感应");
+            } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
+                lv_label_set_text(shake_lab_dice_total_label_, "Rolling...");
+            }
+            if (shake_lab_anim_timer_) {
+                lv_timer_resume(shake_lab_anim_timer_);
+            }
+            break;
+        case ShakeDetector::Transition::SHAKING_TO_SETTLING:
+            if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
+                lv_label_set_text(shake_lab_answer_label_, "正在感应……");
+            } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
+                lv_label_set_text(shake_lab_dice_total_label_, "Settling...");
+            }
+            break;
+        case ShakeDetector::Transition::SETTLING_TO_REVEAL:
+            RevealShakeLabResult();
+            break;
+        case ShakeDetector::Transition::COOLDOWN_COMPLETE:
+            if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_hint_label_) {
+                lv_label_set_text(shake_lab_hint_label_, "Ready to shake again");
+            } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
+                lv_label_set_text(shake_lab_dice_total_label_, "Ready to roll again");
+            }
+            ESP_LOGI(TAG, "Shake Lab cooldown complete");
+            break;
+        case ShakeDetector::Transition::NONE:
+            break;
+    }
+    if (shake_lab_mode_ == ShakeLabMode::ASK_BALL &&
+        (result.state == ShakeDetector::State::SHAKING || result.state == ShakeDetector::State::SETTLING)) {
+        UpdateShakeLabVisuals();
     }
 }

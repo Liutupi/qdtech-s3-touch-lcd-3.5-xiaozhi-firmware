@@ -1,3 +1,13 @@
+## 2026-07-10 Handoff: v1.7.92 Shake Lab MVP
+
+- Firmware version is v1.7.92. Shake Lab adds offline Ask Ball and D6/2D6 Dice through Apps -> More.
+- `ShakeDetector` is board-local and owns no task or I2C access. The existing single BMI270 task remains the only reader.
+- Ask Ball/Dice enable 30 ms sampling only while active; all other pages keep 250 ms Hourglass orientation polling. Reads retain the shared-I2C non-blocking lock and 800 ms touch-active backoff.
+- Shake Lab is lazy-created. Exit pauses/deletes its LVGL timer and page object tree. P3_SUCCESS plays once on reveal only when external audio is inactive.
+- Thresholds: motion accel deviation >=2800 or gyro >=750; strong peak >=4400 or >=1000; 4 peaks plus 2 reversals in 800 ms for >=260 ms; 700 ms still -> settling; 650 ms stable -> reveal; 1400 ms cooldown.
+- ESP-IDF 5.5 build/merge passed in `build-v1792`: `xiaozhi.bin` 0x652ec0 / 6631104 bytes; 7 MB slot free 0xad140 / 708928 bytes; `merged-binary.bin` 0x752ec0 / 7679680 bytes.
+- Flashed to COM3 at 460800 baud. esptool verified every written segment hash. The Apps -> More -> Shake Lab -> Dice path and high-rate BMI270 sampling were verified on the immediately preceding functional image; the final image only corrects the diagnostic interval format and removes duplicate LVGL callback dispatch.
+- Remaining physical follow-up: leave Shake Lab, keep landscape baseline, wait 75 seconds after boot, then rotate 90 degrees to confirm Hourglass entry/exit; also perform the existing touch/photo/Settings/XiaoZhi regression sweep and shake false-trigger/cooldown checks.
 ## 2026-07-09 Handoff: v1.7.91 Hourglass Alarm
 
 Current target:

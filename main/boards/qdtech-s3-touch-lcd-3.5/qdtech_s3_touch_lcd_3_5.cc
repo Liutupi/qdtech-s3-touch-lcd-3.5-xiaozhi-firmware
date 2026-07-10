@@ -55,6 +55,11 @@ static constexpr int kMusicCommandHttpPort = 45679;
 static constexpr size_t kLyricUdpPacketMax = 2048;
 static constexpr size_t kMusicCommandBodyMax = 4096;
 static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
+static constexpr int64_t kBmi270LowRatePollMs = 250;
+static constexpr int64_t kShakeLabSampleIntervalMs = 30;
+static constexpr int64_t kShakeLabUiUpdateIntervalMs = 80;
+static constexpr int64_t kShakeLabTouchSkipLogIntervalMs = 2000;
+static constexpr int64_t kShakeLabI2cErrorLogIntervalMs = 2000;
 extern "C" {
 extern const uint8_t bmi270_context_config_file[];
 extern const int bmi270_context_config_file_size;
@@ -1093,6 +1098,30 @@ private:
         return true;
     }
 
+    bool Bmi270ReadSample(int16_t& accel_x, int16_t& accel_y, int16_t& accel_z,
+                          int16_t& gyro_x, int16_t& gyro_y, int16_t& gyro_z) {
+        if (!bmi270_dev_) {
+            return false;
+        }
+        constexpr uint8_t kAccelStartRegister = 0x0C;
+        uint8_t data[12] = {};
+        if (!LockSharedI2c(0)) {
+            return false;
+        }
+        const esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &kAccelStartRegister, 1, data,
+                                                           sizeof(data), pdMS_TO_TICKS(100));
+        UnlockSharedI2c();
+        if (err != ESP_OK) {
+            return false;
+        }
+        accel_x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
+        accel_y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
+        accel_z = static_cast<int16_t>((static_cast<uint16_t>(data[5]) << 8) | data[4]);
+        gyro_x = static_cast<int16_t>((static_cast<uint16_t>(data[7]) << 8) | data[6]);
+        gyro_y = static_cast<int16_t>((static_cast<uint16_t>(data[9]) << 8) | data[8]);
+        gyro_z = static_cast<int16_t>((static_cast<uint16_t>(data[11]) << 8) | data[10]);
+        return true;
+    }
     bool Bmi270ReadGyro(int16_t& x, int16_t& y, int16_t& z) {
         uint8_t data[6] = {};
         if (!Bmi270ReadReg(0x12, data, sizeof(data))) {
@@ -1149,6 +1178,12 @@ private:
     }
 
     void InitializeBmi270() {
+        if (display_) {
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            qd_display->GetDesktopUI()->SetShakeLabSamplingCallback([this](bool active) {
+                shake_lab_sampling_active_.store(active, std::memory_order_relaxed);
+            });
+        }
         if (!i2c_bus_) {
             return;
         }
@@ -1181,6 +1216,18 @@ private:
         return false;
     }
 
+    bool PublishShakeLabUpdate(const ShakeDetector::Result& result) {
+        if (!display_) {
+            return false;
+        }
+        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+        if (!lvgl_port_lock(0)) {
+            return false;
+        }
+        qd_display->GetDesktopUI()->UpdateShakeLabDetector(result);
+        lvgl_port_unlock();
+        return true;
+    }
     bool ExitHourglassFromBmi270() {
         if (!display_) {
             return false;
@@ -1203,10 +1250,76 @@ private:
         int stable_portrait_count = 0;
         int stable_landscape_count = 0;
         int64_t last_log_ms = 0;
+        int64_t last_shake_touch_skip_log_ms = 0;
+        int64_t last_shake_i2c_error_log_ms = 0;
+        int64_t last_shake_ui_update_ms = 0;
         bool hourglass_active = false;
+        bool shake_sampling_was_active = false;
 
         while (true) {
             const int64_t loop_ms = esp_timer_get_time() / 1000;
+            const bool shake_sampling_active = shake_lab_sampling_active_.load(std::memory_order_relaxed);
+            if (shake_sampling_active) {
+                if (!shake_sampling_was_active) {
+                    shake_detector_.Arm(loop_ms);
+                    shake_sampling_was_active = true;
+                    last_shake_ui_update_ms = 0;
+                    ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
+                             static_cast<int>(kShakeLabSampleIntervalMs));
+                }
+                if (loop_ms < touch_active_until_ms_) {
+                    if (loop_ms - last_shake_touch_skip_log_ms >= kShakeLabTouchSkipLogIntervalMs) {
+                        ESP_LOGI(TAG, "Shake Lab BMI270 read skipped: touch active");
+                        last_shake_touch_skip_log_ms = loop_ms;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    continue;
+                }
+                int16_t x = 0;
+                int16_t y = 0;
+                int16_t z = 0;
+                int16_t gx = 0;
+                int16_t gy = 0;
+                int16_t gz = 0;
+                if (!Bmi270ReadSample(x, y, z, gx, gy, gz)) {
+                    if (loop_ms - last_shake_i2c_error_log_ms >= kShakeLabI2cErrorLogIntervalMs) {
+                        ESP_LOGW(TAG, "Shake Lab BMI270 I2C read failed");
+                        last_shake_i2c_error_log_ms = loop_ms;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    continue;
+                }
+                const auto result = shake_detector_.Process({x, y, z, gx, gy, gz, loop_ms});
+                if (result.transition == ShakeDetector::Transition::ARMED_TO_SHAKING) {
+                    ESP_LOGI(TAG, "Shake Lab ARMED -> SHAKING peaks=%u reversals=%u accel=%u gyro=%u",
+                             result.stats.peak_count, result.stats.direction_reversals,
+                             result.stats.max_accel_deviation, result.stats.max_gyro_peak);
+                } else if (result.transition == ShakeDetector::Transition::SHAKING_TO_SETTLING) {
+                    ESP_LOGI(TAG, "Shake Lab SHAKING -> SETTLING duration=%lums peaks=%u reversals=%u accel=%u gyro=%u",
+                             static_cast<unsigned long>(result.stats.shaking_duration_ms), result.stats.peak_count,
+                             result.stats.direction_reversals, result.stats.max_accel_deviation,
+                             result.stats.max_gyro_peak);
+                } else if (result.transition == ShakeDetector::Transition::SETTLING_TO_REVEAL) {
+                    ESP_LOGI(TAG, "Shake Lab SETTLING -> REVEAL duration=%lums peaks=%u reversals=%u",
+                             static_cast<unsigned long>(result.stats.shaking_duration_ms), result.stats.peak_count,
+                             result.stats.direction_reversals);
+                } else if (result.transition == ShakeDetector::Transition::COOLDOWN_COMPLETE) {
+                    ESP_LOGI(TAG, "Shake Lab cooldown complete");
+                }
+                if (result.transition != ShakeDetector::Transition::NONE ||
+                    loop_ms - last_shake_ui_update_ms >= kShakeLabUiUpdateIntervalMs) {
+                    if (PublishShakeLabUpdate(result)) {
+                        last_shake_ui_update_ms = loop_ms;
+                    }
+                }
+                vTaskDelay(pdMS_TO_TICKS(kShakeLabSampleIntervalMs));
+                continue;
+            }
+            if (shake_sampling_was_active) {
+                shake_detector_.Reset();
+                shake_sampling_was_active = false;
+                ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling disabled; restoring low-rate orientation polling");
+            }
             if (loop_ms < touch_active_until_ms_) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 continue;
@@ -1218,7 +1331,7 @@ private:
             int16_t gx = 0;
             int16_t gy = 0;
             int16_t gz = 0;
-            if (!Bmi270ReadAccel(x, y, z) || !Bmi270ReadGyro(gx, gy, gz)) {
+            if (!Bmi270ReadSample(x, y, z, gx, gy, gz)) {
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
             }
@@ -2440,6 +2553,8 @@ private:
     int16_t bmi270_baseline_z_ = 0;
     int64_t bmi270_baseline_mag_sq_ = 0;
     int64_t touch_active_until_ms_ = 0;
+    std::atomic<bool> shake_lab_sampling_active_{false};
+    ShakeDetector shake_detector_;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
     esp_timer_handle_t boot_power_timer_ = nullptr;

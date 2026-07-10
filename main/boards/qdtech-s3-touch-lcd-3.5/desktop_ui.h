@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include "lvgl.h"
+#include "shake_detector.h"
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -18,6 +19,7 @@ enum class DesktopPage {
     PODCAST,
     FOCUS,
     HOURGLASS,
+    SHAKE_LAB,
     XIAOZHI,
     NETWORK,
     SETTINGS,
@@ -80,6 +82,8 @@ public:
     void EnterHourglassMode();
     void ExitHourglassMode();
     bool IsHourglassPage() const { return current_page_ == DesktopPage::HOURGLASS; }
+    void SetShakeLabSamplingCallback(std::function<void(bool)> callback);
+    void UpdateShakeLabDetector(const ShakeDetector::Result& result);
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
     void SetWifiConfigStatus(const char* status);
@@ -353,6 +357,42 @@ private:
     uint32_t hourglass_total_sec_ = 15 * 60;
     uint32_t hourglass_remaining_sec_ = 15 * 60;
 
+    enum class ShakeLabMode : uint8_t {
+        HOME,
+        ASK_BALL,
+        DICE,
+    };
+    lv_obj_t* shake_lab_page_ = nullptr;
+    lv_obj_t* shake_lab_home_group_ = nullptr;
+    lv_obj_t* shake_lab_mode_group_ = nullptr;
+    lv_obj_t* shake_lab_ask_group_ = nullptr;
+    lv_obj_t* shake_lab_dice_group_ = nullptr;
+    lv_obj_t* shake_lab_ball_ = nullptr;
+    lv_obj_t* shake_lab_glow_[2] = {};
+    lv_obj_t* shake_lab_particles_[10] = {};
+    lv_obj_t* shake_lab_answer_label_ = nullptr;
+    lv_obj_t* shake_lab_hint_label_ = nullptr;
+    lv_obj_t* shake_lab_mode_title_ = nullptr;
+    lv_obj_t* shake_lab_dice_boxes_[2] = {};
+    lv_obj_t* shake_lab_dice_values_[2] = {};
+    lv_obj_t* shake_lab_dice_dots_[2][7] = {};
+    lv_obj_t* shake_lab_dice_total_label_ = nullptr;
+    lv_obj_t* shake_lab_dice_lucky_label_ = nullptr;
+    lv_timer_t* shake_lab_anim_timer_ = nullptr;
+    std::function<void(bool)> shake_lab_sampling_callback_;
+    ShakeLabMode shake_lab_mode_ = ShakeLabMode::HOME;
+    ShakeDetector::State shake_lab_detector_state_ = ShakeDetector::State::IDLE;
+    uint8_t shake_lab_intensity_ = 0;
+    uint8_t shake_lab_dice_count_ = 1;
+    uint8_t shake_lab_dice_values_state_[2] = {1, 1};
+    uint16_t shake_lab_anim_tick_ = 0;
+    bool shake_lab_sampling_active_ = false;
+
+    lv_obj_t* apps_primary_group_ = nullptr;
+    lv_obj_t* apps_more_group_ = nullptr;
+    lv_obj_t* apps_more_button_ = nullptr;
+    bool apps_showing_more_ = false;
+
     // Settings page elements
     lv_obj_t* settings_brightness_slider_ = nullptr;
     lv_obj_t* settings_brightness_value_ = nullptr;
@@ -441,6 +481,7 @@ private:
     void CreatePodcastPage(lv_obj_t* root);
     void CreateFocusPage(lv_obj_t* root);
     void CreateHourglassPage(lv_obj_t* root);
+    void CreateShakeLabPage(lv_obj_t* root);
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);
@@ -471,6 +512,14 @@ private:
     void UpdateHourglassUI();
     void UpdateHourglassButtons();
     bool HandleHourglassTap(uint16_t x, uint16_t y);
+    bool HandleShakeLabTap(uint16_t x, uint16_t y);
+    void SetAppsMoreVisible(bool visible);
+    void EnterShakeLabMode(ShakeLabMode mode);
+    void LeaveShakeLabMode();
+    void ReleaseShakeLabPage();
+    void UpdateShakeLabVisuals();
+    void UpdateShakeLabDice();
+    void RevealShakeLabResult();
     void UpdateFocusUI();
     uint32_t CurrentFocusDateKey() const;
     void ReconcileFocusDate(bool persist);
@@ -488,6 +537,7 @@ private:
     static void FocusTimerCb(lv_timer_t* timer);
     static void HourglassTickCb(lv_timer_t* timer);
     static void HourglassAnimCb(lv_timer_t* timer);
+    static void ShakeLabAnimCb(lv_timer_t* timer);
     static void DailyCardBreathCb(lv_timer_t* timer);
     static void ClockShadowCb(lv_timer_t* timer);
     static void WeatherParticleCb(lv_timer_t* timer);
