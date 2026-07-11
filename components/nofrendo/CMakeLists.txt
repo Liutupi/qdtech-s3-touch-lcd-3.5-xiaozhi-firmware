@@ -35,4 +35,5 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
     -Wno-error=attributes
     -Wno-error=implicit-fallthrough
     -Wno-error=maybe-uninitialized
+    -Wno-error=stringop-truncation
 )
