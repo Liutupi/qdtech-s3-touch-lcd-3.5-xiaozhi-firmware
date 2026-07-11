@@ -30,7 +30,8 @@ jobs:
           # Command to run inside the docker container (default: builds the project)
           command: >-
             mkdir -p /tmp/qdtech-managed-patches/78__esp-ml307
-            /tmp/qdtech-managed-patches/78__esp-wifi-connect/include &&
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/include
+            /tmp/qdtech-managed-patches/78__esp-opus-encoder &&
             cp managed_components/78__esp-ml307/esp_udp.cc
             /tmp/qdtech-managed-patches/78__esp-ml307/ &&
             cp managed_components/78__esp-wifi-connect/wifi_configuration_ap.cc
@@ -39,8 +40,11 @@ jobs:
             cp managed_components/78__esp-wifi-connect/include/wifi_configuration_ap.h
             managed_components/78__esp-wifi-connect/include/wifi_station.h
             /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/ &&
+            cp managed_components/78__esp-opus-encoder/CMakeLists.txt
+            /tmp/qdtech-managed-patches/78__esp-opus-encoder/ &&
             rm -rf managed_components/78__esp-ml307
-            managed_components/78__esp-wifi-connect &&
+            managed_components/78__esp-wifi-connect
+            managed_components/78__esp-opus-encoder &&
             idf.py reconfigure &&
             cp /tmp/qdtech-managed-patches/78__esp-ml307/esp_udp.cc
             managed_components/78__esp-ml307/ &&
@@ -50,5 +54,7 @@ jobs:
             cp /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/wifi_configuration_ap.h
             /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/wifi_station.h
             managed_components/78__esp-wifi-connect/include/ &&
+            cp /tmp/qdtech-managed-patches/78__esp-opus-encoder/CMakeLists.txt
+            managed_components/78__esp-opus-encoder/ &&
             idf.py build
                 
