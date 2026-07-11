@@ -45,7 +45,9 @@ jobs:
             rm -rf managed_components/78__esp-ml307
             managed_components/78__esp-wifi-connect
             managed_components/78__esp-opus-encoder &&
-            idf.py reconfigure &&
+            idf.py -D
+            SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;main/boards/qdtech-s3-touch-lcd-3.5/sdkconfig.defaults"
+            reconfigure &&
             cp /tmp/qdtech-managed-patches/78__esp-ml307/esp_udp.cc
             managed_components/78__esp-ml307/ &&
             cp /tmp/qdtech-managed-patches/78__esp-wifi-connect/wifi_configuration_ap.cc
