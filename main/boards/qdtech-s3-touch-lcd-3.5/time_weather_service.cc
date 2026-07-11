@@ -665,9 +665,10 @@ bool TimeWeatherService::FetchWeather() {
         return false;
     }
     const DeviceState state = Application::GetInstance().GetDeviceState();
-    if (state == kDeviceStateStarting ||
-        state == kDeviceStateActivating ||
-        state == kDeviceStateConnecting) {
+    // Weather is an independent HTTPS request. OTA/MQTT activation can stay pending
+    // when the XiaoZhi service is unreachable, so only defer during the earliest
+    // boot state and keep desktop weather usable on an otherwise healthy Wi-Fi link.
+    if (state == kDeviceStateStarting) {
         ESP_LOGW(TAG, "defer weather fetch, application state=%d", state);
         weather_low_memory_deferred_ = true;
         ShowCachedWeather("Weather wait");
@@ -823,9 +824,20 @@ void TimeWeatherService::SetWeatherSafe(const char* temperature, const char* sum
     if (!desktop_ui_) {
         return;
     }
-    if (lvgl_port_lock(100)) {
-        desktop_ui_->SetWeather(temperature, summary, weather_code);
-        lvgl_port_unlock();
+    // Returning from Hourglass or Shake Lab can briefly keep LVGL busy while their
+    // object trees are reclaimed. Never silently discard a successful weather result.
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        if (lvgl_port_lock(pdMS_TO_TICKS(200))) {
+            desktop_ui_->SetWeather(temperature, summary, weather_code);
+            lvgl_port_unlock();
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(40));
+    }
+    ESP_LOGW(TAG, "weather UI update deferred: LVGL busy");
+    weather_refresh_requested_.store(true);
+    if (task_handle_) {
+        xTaskNotifyGive(task_handle_);
     }
 }
 

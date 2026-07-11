@@ -361,30 +361,37 @@ private:
         HOME,
         ASK_BALL,
         DICE,
+        FORTUNE,
     };
     lv_obj_t* shake_lab_page_ = nullptr;
     lv_obj_t* shake_lab_home_group_ = nullptr;
     lv_obj_t* shake_lab_mode_group_ = nullptr;
     lv_obj_t* shake_lab_ask_group_ = nullptr;
     lv_obj_t* shake_lab_dice_group_ = nullptr;
+    lv_obj_t* shake_lab_fortune_group_ = nullptr;
     lv_obj_t* shake_lab_ball_ = nullptr;
     lv_obj_t* shake_lab_glow_[2] = {};
     lv_obj_t* shake_lab_particles_[10] = {};
     lv_obj_t* shake_lab_answer_label_ = nullptr;
     lv_obj_t* shake_lab_hint_label_ = nullptr;
     lv_obj_t* shake_lab_mode_title_ = nullptr;
-    lv_obj_t* shake_lab_dice_boxes_[2] = {};
-    lv_obj_t* shake_lab_dice_values_[2] = {};
-    lv_obj_t* shake_lab_dice_dots_[2][7] = {};
+    lv_obj_t* shake_lab_dice_boxes_[6] = {};
+    lv_obj_t* shake_lab_dice_values_[6] = {};
+    lv_obj_t* shake_lab_dice_dots_[6][7] = {};
+    lv_obj_t* shake_lab_dice_count_label_ = nullptr;
     lv_obj_t* shake_lab_dice_total_label_ = nullptr;
     lv_obj_t* shake_lab_dice_lucky_label_ = nullptr;
+    lv_obj_t* shake_lab_fortune_number_label_ = nullptr;
+    lv_obj_t* shake_lab_fortune_poem_label_ = nullptr;
+    lv_obj_t* shake_lab_fortune_explain_label_ = nullptr;
+    lv_obj_t* shake_lab_fortune_hint_label_ = nullptr;
     lv_timer_t* shake_lab_anim_timer_ = nullptr;
     std::function<void(bool)> shake_lab_sampling_callback_;
     ShakeLabMode shake_lab_mode_ = ShakeLabMode::HOME;
     ShakeDetector::State shake_lab_detector_state_ = ShakeDetector::State::IDLE;
     uint8_t shake_lab_intensity_ = 0;
     uint8_t shake_lab_dice_count_ = 1;
-    uint8_t shake_lab_dice_values_state_[2] = {1, 1};
+    uint8_t shake_lab_dice_values_state_[6] = {1, 1, 1, 1, 1, 1};
     uint16_t shake_lab_anim_tick_ = 0;
     bool shake_lab_sampling_active_ = false;
 

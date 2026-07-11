@@ -1,3 +1,16 @@
+## 2026-07-11 Handoff: v1.7.93 Shake Lab Fortune + Weather/Radio Polish
+
+- Firmware version is `v1.7.93`. Shake Lab now offers Ask Ball, selectable 1-6 dice, and an offline Fortune Stick mode with 24 numbered fortunes, levels, poems, and interpretations.
+- Dice uses a compact 3x2 layout, reports totals, and highlights lucky sixes while retaining the existing single BMI270 task and ShakeDetector state machine.
+- Rebuilt the QDTech LXGW 16/20 px subsets with all desktop Chinese characters. Fortune text and mixed Chinese/English bottom status use these fonts; automated audit: zero missing glyphs.
+- Weather refresh survives transient LVGL lock contention and refreshes on return to Main. Hidden weather particles pause behind apps; Hourglass/Shake Lab trees are reclaimed asynchronously.
+- Radio buttons use one completed-tap path, preventing missed release clicks and duplicate Play/Pause toggles.
+- User physically verified expanded dice and Fortune Stick. The reported mixed-language bottom status glyph issue was corrected before the release build.
+- ESP-IDF 5.5 `reconfigure build merge-bin` passed; CMake reported `1.7.93`. App `0x665510`, slot free `0x9aaf0` (9%), merged `0x765510`.
+- The preceding functional image was flashed and hash-verified on `/dev/cu.usbmodem211401`. The final version-metadata rebuild could not be reflashed because USB serial disconnected during release preparation.
+- SHA256: app `5de3b17389cc50fbec2abe0c94ef7a35bde3dd02b5934dc9bac5b7dc634e9d7b`; full `6cc6da85e1728783d671b0a632eaa08c68e7dbb1969ec4d9db565f251fbeb6d5`; ZIP `403ce403ed3e6ae42e5743b574a241f66a8eca3290ef4b79fa2cb82ab78e8ee8`.
+- Publish `v1.7.93` as latest. App binary is OTA; full binary is recovery flash at offset `0x0`.
+
 ## 2026-07-10 Handoff: v1.7.92 Shake Lab MVP
 
 - Firmware version is v1.7.92. Shake Lab adds offline Ask Ball and D6/2D6 Dice through Apps -> More.

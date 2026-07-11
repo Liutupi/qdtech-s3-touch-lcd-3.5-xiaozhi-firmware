@@ -2392,7 +2392,7 @@ private:
             podcast_service_.Stop();
         };
         desktop_ui->SetMainPageCallback([this]() {
-            time_weather_service_.RequestRefresh(false);
+            time_weather_service_.RequestRefresh(true);
         });
         desktop_ui->SetFcExitCallback([this]() {
             time_weather_service_.RequestRefresh(true);

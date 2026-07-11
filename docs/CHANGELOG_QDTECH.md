@@ -1,3 +1,13 @@
+## 2026-07-11: v1.7.93 Shake Lab Fortune and Desktop Recovery
+
+- Expanded Shake Lab from D6/2D6 to 1-6 dice with totals and lucky-six feedback.
+- Added offline Fortune Stick with 24 numbered fortunes, levels, poems, and interpretations.
+- Rebuilt compact Chinese fonts and fixed the mixed Chinese/English `Shake again` status font.
+- Fixed weather refresh after Hourglass/Shake Lab return and reduced hidden UI work.
+- Stabilized Radio controls with one completed-tap path.
+- Build/merge passed: app `0x665510`, slot free `0x9aaf0`, merged `0x765510`.
+- SHA256: app `5de3b17389cc50fbec2abe0c94ef7a35bde3dd02b5934dc9bac5b7dc634e9d7b`; full `6cc6da85e1728783d671b0a632eaa08c68e7dbb1969ec4d9db565f251fbeb6d5`; ZIP `403ce403ed3e6ae42e5743b574a241f66a8eca3290ef4b79fa2cb82ab78e8ee8`.
+
 ## 2026-07-10: v1.7.92 Shake Lab MVP
 
 - Added Apps -> More -> Shake Lab, offline Ask Ball, and D6/2D6 Dice.
