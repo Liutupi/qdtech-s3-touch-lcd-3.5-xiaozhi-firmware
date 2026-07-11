@@ -1260,38 +1260,6 @@ static void calendar_next_cb(lv_event_t* event) {
     }
 }
 
-static void radio_prev_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        if (g_desktop_ui->radio_prev_) {
-            g_desktop_ui->radio_prev_();
-        }
-    }
-}
-
-static void radio_play_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        if (g_desktop_ui->radio_play_pause_) {
-            g_desktop_ui->radio_play_pause_();
-        }
-    }
-}
-
-static void radio_stop_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        if (g_desktop_ui->radio_stop_) {
-            g_desktop_ui->radio_stop_();
-        }
-    }
-}
-
-static void radio_next_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
-        if (g_desktop_ui->radio_next_) {
-            g_desktop_ui->radio_next_();
-        }
-    }
-}
-
 static void podcast_prev_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui && g_desktop_ui->podcast_prev_) {
         g_desktop_ui->podcast_prev_();
@@ -1672,6 +1640,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
             break;
     }
 
+    // Do not keep weather particles mutating hidden objects behind full-screen apps.
+    // They are resumed by ApplyWeatherVisual when the main-page weather is updated.
+    if (weather_particle_timer_ && page != DesktopPage::MAIN) {
+        lv_timer_pause(weather_particle_timer_);
+    }
+
     if (was_shake_lab && page != DesktopPage::SHAKE_LAB) {
         ESP_LOGI(TAG, "Shake Lab page exit");
         ReleaseShakeLabPage();
@@ -1692,9 +1666,8 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (is_main && !was_main && main_page_callback_) {
         main_page_callback_();
     }
-    if (lv_screen_active()) {
-        lv_obj_invalidate(lv_screen_active());
-    }
+    // Changing page-root hidden flags already invalidates the affected areas.
+    // Avoid forcing an extra full 480x320 redraw on every page transition.
 }
 
 void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
@@ -1879,15 +1852,25 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::RADIO) {
+        // Use the board's completed-tap path for radio controls.  The touch
+        // controller can briefly reset on I2C errors, which means LVGL may see a
+        // press without the matching release and never emit LV_EVENT_CLICKED.
+        // Radio buttons intentionally have no LVGL callbacks (see CreateRadioPage),
+        // so each completed tap is dispatched exactly once here.
         if (hit(372, 28, 96, 56)) {
+            ESP_LOGI(TAG, "Radio Back tap");
             NavigateBack();
         } else if (hit(24, 180, 76, 32) && radio_prev_) {
+            ESP_LOGI(TAG, "Radio Prev tap");
             radio_prev_();
         } else if (hit(124, 180, 76, 32) && radio_play_pause_) {
+            ESP_LOGI(TAG, "Radio PlayPause tap");
             radio_play_pause_();
         } else if (hit(224, 180, 76, 32) && radio_stop_) {
+            ESP_LOGI(TAG, "Radio Stop tap");
             radio_stop_();
         } else if (hit(324, 180, 76, 32) && radio_next_) {
+            ESP_LOGI(TAG, "Radio Next tap");
             radio_next_();
         }
         return;
@@ -3138,7 +3121,7 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     // 返回按钮
-    lv_obj_t* back = CreateButton(radio_page_, "Back", navigate_back_cb);
+    lv_obj_t* back = CreateButton(radio_page_, "Back", nullptr);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -22, 45);
 
     // 当前电台信息
@@ -3155,16 +3138,16 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
     // 播放控制按钮
-    lv_obj_t* prev = CreateButton(radio_page_, "Prev", radio_prev_cb);
+    lv_obj_t* prev = CreateButton(radio_page_, "Prev", nullptr);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 24, 180);
 
-    lv_obj_t* play = CreateButton(radio_page_, "Play", radio_play_cb);
+    lv_obj_t* play = CreateButton(radio_page_, "Play", nullptr);
     lv_obj_align(play, LV_ALIGN_TOP_LEFT, 124, 180);
 
-    lv_obj_t* stop = CreateButton(radio_page_, "Stop", radio_stop_cb);
+    lv_obj_t* stop = CreateButton(radio_page_, "Stop", nullptr);
     lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 224, 180);
 
-    lv_obj_t* next = CreateButton(radio_page_, "Next", radio_next_cb);
+    lv_obj_t* next = CreateButton(radio_page_, "Next", nullptr);
     lv_obj_align(next, LV_ALIGN_TOP_LEFT, 324, 180);
 
     // 电台数量信息
@@ -5874,7 +5857,8 @@ void DesktopUI::ExitHourglassMode() {
         : hourglass_return_page_;
     ShowPage(target);
     if (hourglass_page_) {
-        lv_obj_del(hourglass_page_);
+        // Paint the destination page first, then reclaim this large object tree.
+        lv_obj_delete_async(hourglass_page_);
         hourglass_page_ = nullptr;
         hourglass_portrait_ = nullptr;
         hourglass_time_label_ = nullptr;
@@ -7095,12 +7079,12 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_size(shake_lab_home_group_, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(shake_lab_home_group_, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* ask_card = CreatePanel(shake_lab_home_group_, 204, 156, 24, 104);
+    lv_obj_t* ask_card = CreatePanel(shake_lab_home_group_, 138, 156, 18, 104);
     lv_obj_set_style_border_color(ask_card, COLOR_PURPLE, 0);
     lv_obj_set_style_border_width(ask_card, 2, 0);
-    lv_obj_t* ask_orb = circle(ask_card, 68, COLOR_PURPLE, LV_OPA_70);
+    lv_obj_t* ask_orb = circle(ask_card, 60, COLOR_PURPLE, LV_OPA_70);
     lv_obj_align(ask_orb, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_t* ask_core = circle(ask_card, 30, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_t* ask_core = circle(ask_card, 26, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(ask_core, ask_orb, LV_ALIGN_CENTER, 0, 0);
     lv_obj_t* ask_title = label_en(ask_card, "Ask Ball", &style_en);
     lv_obj_set_style_text_font(ask_title, &lv_font_montserrat_16, 0);
@@ -7109,7 +7093,7 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(ask_cn, qd_cn_font_16(), 0);
     lv_obj_align(ask_cn, LV_ALIGN_TOP_MID, 0, 116);
 
-    lv_obj_t* dice_card = CreatePanel(shake_lab_home_group_, 204, 156, 252, 104);
+    lv_obj_t* dice_card = CreatePanel(shake_lab_home_group_, 138, 156, 171, 104);
     lv_obj_set_style_border_color(dice_card, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(dice_card, 2, 0);
     lv_obj_t* dice_demo = lv_obj_create(dice_card);
@@ -7131,6 +7115,28 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_t* dice_cn = label_en(dice_card, "骰子", &style_green);
     lv_obj_set_style_text_font(dice_cn, qd_cn_font_16(), 0);
     lv_obj_align(dice_cn, LV_ALIGN_TOP_MID, 0, 116);
+
+    lv_obj_t* fortune_card = CreatePanel(shake_lab_home_group_, 138, 156, 324, 104);
+    lv_obj_set_style_border_color(fortune_card, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(fortune_card, 2, 0);
+    lv_obj_t* stick = lv_obj_create(fortune_card);
+    lv_obj_remove_style_all(stick);
+    lv_obj_set_size(stick, 34, 72);
+    lv_obj_set_style_radius(stick, 8, 0);
+    lv_obj_set_style_bg_color(stick, COLOR_GOLD, 0);
+    lv_obj_set_style_bg_opa(stick, LV_OPA_COVER, 0);
+    lv_obj_set_style_transform_rotation(stick, 80, 0);
+    lv_obj_align(stick, LV_ALIGN_TOP_MID, 0, 13);
+    lv_obj_t* fortune_mark = label_en(stick, "签", &style_en);
+    lv_obj_set_style_text_font(fortune_mark, &qd_font_lxgw_20, 0);
+    lv_obj_set_style_text_color(fortune_mark, COLOR_BG, 0);
+    lv_obj_align(fortune_mark, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_t* fortune_title = label_en(fortune_card, "Fortune", &style_en);
+    lv_obj_set_style_text_font(fortune_title, &lv_font_montserrat_16, 0);
+    lv_obj_align(fortune_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_t* fortune_cn = label_en(fortune_card, "趣味抽签", &style_gold);
+    lv_obj_set_style_text_font(fortune_cn, &qd_font_lxgw_16, 0);
+    lv_obj_align(fortune_cn, LV_ALIGN_TOP_MID, 0, 116);
 
     shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
     lv_obj_remove_style_all(shake_lab_mode_group_);
@@ -7174,36 +7180,71 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_size(shake_lab_dice_group_, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(shake_lab_dice_group_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t* d6 = CreateButton(shake_lab_dice_group_, "D6", nullptr);
-    lv_obj_set_size(d6, 82, 28);
-    lv_obj_align(d6, LV_ALIGN_TOP_LEFT, 136, 78);
-    lv_obj_t* d6x2 = CreateButton(shake_lab_dice_group_, "2D6", nullptr);
-    lv_obj_set_size(d6x2, 82, 28);
-    lv_obj_align(d6x2, LV_ALIGN_TOP_LEFT, 262, 78);
-    for (int die = 0; die < 2; ++die) {
+    lv_obj_t* dice_minus = CreateButton(shake_lab_dice_group_, "-", nullptr);
+    lv_obj_set_size(dice_minus, 52, 28);
+    lv_obj_align(dice_minus, LV_ALIGN_TOP_LEFT, 142, 76);
+    shake_lab_dice_count_label_ = label_en(shake_lab_dice_group_, "1 Die", &style_green);
+    lv_obj_set_width(shake_lab_dice_count_label_, 90);
+    lv_obj_set_style_text_align(shake_lab_dice_count_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(shake_lab_dice_count_label_, LV_ALIGN_TOP_MID, 0, 82);
+    lv_obj_t* dice_plus = CreateButton(shake_lab_dice_group_, "+", nullptr);
+    lv_obj_set_size(dice_plus, 52, 28);
+    lv_obj_align(dice_plus, LV_ALIGN_TOP_LEFT, 286, 76);
+    for (int die = 0; die < 6; ++die) {
         shake_lab_dice_boxes_[die] = lv_obj_create(shake_lab_dice_group_);
         lv_obj_remove_style_all(shake_lab_dice_boxes_[die]);
-        lv_obj_set_size(shake_lab_dice_boxes_[die], 92, 92);
-        lv_obj_set_style_radius(shake_lab_dice_boxes_[die], 12, 0);
+        lv_obj_set_size(shake_lab_dice_boxes_[die], 58, 58);
+        lv_obj_set_style_radius(shake_lab_dice_boxes_[die], 9, 0);
         lv_obj_set_style_bg_color(shake_lab_dice_boxes_[die], COLOR_CREAM, 0);
         lv_obj_set_style_bg_opa(shake_lab_dice_boxes_[die], LV_OPA_COVER, 0);
         lv_obj_set_style_border_color(shake_lab_dice_boxes_[die], COLOR_GREEN, 0);
-        lv_obj_set_style_border_width(shake_lab_dice_boxes_[die], 3, 0);
-        lv_obj_align(shake_lab_dice_boxes_[die], LV_ALIGN_TOP_LEFT, 142 + die * 112, 130);
+        lv_obj_set_style_border_width(shake_lab_dice_boxes_[die], 2, 0);
+        const int col = die % 3;
+        const int row = die / 3;
+        lv_obj_align(shake_lab_dice_boxes_[die], LV_ALIGN_TOP_LEFT, 133 + col * 76, 116 + row * 66);
         shake_lab_dice_values_[die] = label_en(shake_lab_dice_boxes_[die], "", &style_en);
-        lv_obj_set_style_text_font(shake_lab_dice_values_[die], &lv_font_montserrat_20, 0);
-        lv_obj_align(shake_lab_dice_values_[die], LV_ALIGN_BOTTOM_MID, 0, -5);
+        lv_obj_add_flag(shake_lab_dice_values_[die], LV_OBJ_FLAG_HIDDEN);
         for (int pip = 0; pip < 7; ++pip) {
-            shake_lab_dice_dots_[die][pip] = circle(shake_lab_dice_boxes_[die], 12, COLOR_GREEN, LV_OPA_COVER);
+            shake_lab_dice_dots_[die][pip] = circle(shake_lab_dice_boxes_[die], 7, COLOR_GREEN, LV_OPA_COVER);
         }
     }
-    shake_lab_dice_total_label_ = label_en(shake_lab_dice_group_, "Choose D6 or 2D6, then shake", &style_muted);
-    lv_obj_set_style_text_font(shake_lab_dice_total_label_, &lv_font_montserrat_14, 0);
-    lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -34);
+    shake_lab_dice_total_label_ = label_en(shake_lab_dice_group_, "Choose 1-6 dice, then shake", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_dice_total_label_, &lv_font_montserrat_12, 0);
+    lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -25);
     shake_lab_dice_lucky_label_ = label_en(shake_lab_dice_group_, "LUCKY", &style_gold);
     lv_obj_set_style_text_font(shake_lab_dice_lucky_label_, &lv_font_montserrat_16, 0);
-    lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_MID, 0, -10);
+    lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_RIGHT, -18, -8);
     lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
+
+    shake_lab_fortune_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_fortune_group_);
+    lv_obj_set_size(shake_lab_fortune_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_fortune_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_fortune_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t* fortune_panel = CreatePanel(shake_lab_fortune_group_, 410, 198, 35, 104);
+    lv_obj_set_style_border_color(fortune_panel, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(fortune_panel, 2, 0);
+    shake_lab_fortune_number_label_ = label_en(fortune_panel, "诚心摇签·静待签来", &style_gold);
+    lv_obj_set_style_text_font(shake_lab_fortune_number_label_, &qd_font_lxgw_20, 0);
+    lv_obj_align(shake_lab_fortune_number_label_, LV_ALIGN_TOP_MID, 0, 14);
+    shake_lab_fortune_poem_label_ = label_en(fortune_panel, "手持签筒轻轻摇，\n一枝缘分自会来。", &style_en);
+    lv_obj_set_style_text_font(shake_lab_fortune_poem_label_, &qd_font_lxgw_20, 0);
+    lv_obj_set_width(shake_lab_fortune_poem_label_, 360);
+    lv_label_set_long_mode(shake_lab_fortune_poem_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(shake_lab_fortune_poem_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(shake_lab_fortune_poem_label_, LV_ALIGN_TOP_MID, 0, 52);
+    shake_lab_fortune_explain_label_ = label_en(fortune_panel, "摇动设备，抽取今日之签。", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_fortune_explain_label_, &qd_font_lxgw_16, 0);
+    lv_obj_set_width(shake_lab_fortune_explain_label_, 370);
+    lv_label_set_long_mode(shake_lab_fortune_explain_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(shake_lab_fortune_explain_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(shake_lab_fortune_explain_label_, LV_ALIGN_TOP_MID, 0, 118);
+    shake_lab_fortune_hint_label_ = label_en(fortune_panel, "Shake steadily to draw", &style_green);
+    // This status switches between English and mixed Chinese/English strings
+    // (for example "可再次摇签 · Shake again"), so it must not use the
+    // Latin-only Montserrat font.
+    lv_obj_set_style_text_font(shake_lab_fortune_hint_label_, &qd_font_lxgw_16, 0);
+    lv_obj_align(shake_lab_fortune_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -10);
 
     shake_lab_anim_timer_ = lv_timer_create(ShakeLabAnimCb, 80, this);
     lv_timer_pause(shake_lab_anim_timer_);
@@ -7223,12 +7264,16 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         return true;
     }
     if (shake_lab_mode_ == ShakeLabMode::HOME) {
-        if (hit(24, 104, 204, 156)) {
+        if (hit(18, 104, 138, 156)) {
             EnterShakeLabMode(ShakeLabMode::ASK_BALL);
             return true;
         }
-        if (hit(252, 104, 204, 156)) {
+        if (hit(171, 104, 138, 156)) {
             EnterShakeLabMode(ShakeLabMode::DICE);
+            return true;
+        }
+        if (hit(324, 104, 138, 156)) {
+            EnterShakeLabMode(ShakeLabMode::FORTUNE);
             return true;
         }
         return false;
@@ -7238,13 +7283,13 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         return true;
     }
     if (shake_lab_mode_ == ShakeLabMode::DICE) {
-        if (hit(132, 72, 96, 40)) {
-            shake_lab_dice_count_ = 1;
+        if (hit(132, 70, 72, 42)) {
+            shake_lab_dice_count_ = std::max<uint8_t>(1, shake_lab_dice_count_ - 1);
             UpdateShakeLabDice();
             return true;
         }
-        if (hit(252, 72, 104, 40)) {
-            shake_lab_dice_count_ = 2;
+        if (hit(276, 70, 72, 42)) {
+            shake_lab_dice_count_ = std::min<uint8_t>(6, shake_lab_dice_count_ + 1);
             UpdateShakeLabDice();
             return true;
         }
@@ -7280,8 +7325,17 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
             lv_obj_add_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (shake_lab_fortune_group_) {
+        if (mode == ShakeLabMode::FORTUNE) {
+            lv_obj_clear_flag(shake_lab_fortune_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_fortune_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
     if (shake_lab_mode_title_) {
-        lv_label_set_text(shake_lab_mode_title_, mode == ShakeLabMode::ASK_BALL ? "Ask Ball" : "Dice");
+        const char* title = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
+                            (mode == ShakeLabMode::DICE ? "Dice" : "Fortune Stick");
+        lv_label_set_text(shake_lab_mode_title_, title);
     }
     if (mode == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
         lv_label_set_text(shake_lab_answer_label_, "在心里想一个问题，\n然后摇一摇。");
@@ -7290,18 +7344,26 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     }
     if (mode == ShakeLabMode::DICE) {
         if (shake_lab_dice_total_label_) {
-            lv_label_set_text(shake_lab_dice_total_label_, "Choose D6 or 2D6, then shake");
+            lv_label_set_text(shake_lab_dice_total_label_, "Choose 1-6 dice, then shake");
         }
         if (shake_lab_dice_lucky_label_) {
             lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
         }
         UpdateShakeLabDice();
     }
+    if (mode == ShakeLabMode::FORTUNE) {
+        lv_label_set_text(shake_lab_fortune_number_label_, "诚心摇签·静待签来");
+        lv_label_set_text(shake_lab_fortune_poem_label_, "手持签筒轻轻摇，\n一枝缘分自会来。");
+        lv_label_set_text(shake_lab_fortune_explain_label_, "摇动设备，抽取今日之签。");
+        lv_label_set_text(shake_lab_fortune_hint_label_, "Shake steadily to draw");
+    }
     shake_lab_sampling_active_ = true;
     if (shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(true);
     }
-    ESP_LOGI(TAG, "Shake Lab mode=%s armed", mode == ShakeLabMode::ASK_BALL ? "Ask Ball" : "Dice");
+    const char* mode_name = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
+                            (mode == ShakeLabMode::DICE ? "Dice" : "Fortune");
+    ESP_LOGI(TAG, "Shake Lab mode=%s armed", mode_name);
 }
 
 void DesktopUI::LeaveShakeLabMode() {
@@ -7331,19 +7393,26 @@ void DesktopUI::ReleaseShakeLabPage() {
         shake_lab_anim_timer_ = nullptr;
     }
     if (shake_lab_page_) {
-        lv_obj_del(shake_lab_page_);
+        // Paint the destination page first, then reclaim this large object tree.
+        lv_obj_delete_async(shake_lab_page_);
     }
     shake_lab_page_ = nullptr;
     shake_lab_home_group_ = nullptr;
     shake_lab_mode_group_ = nullptr;
     shake_lab_ask_group_ = nullptr;
     shake_lab_dice_group_ = nullptr;
+    shake_lab_fortune_group_ = nullptr;
     shake_lab_ball_ = nullptr;
     shake_lab_answer_label_ = nullptr;
     shake_lab_hint_label_ = nullptr;
     shake_lab_mode_title_ = nullptr;
+    shake_lab_dice_count_label_ = nullptr;
     shake_lab_dice_total_label_ = nullptr;
     shake_lab_dice_lucky_label_ = nullptr;
+    shake_lab_fortune_number_label_ = nullptr;
+    shake_lab_fortune_poem_label_ = nullptr;
+    shake_lab_fortune_explain_label_ = nullptr;
+    shake_lab_fortune_hint_label_ = nullptr;
     memset(shake_lab_glow_, 0, sizeof(shake_lab_glow_));
     memset(shake_lab_particles_, 0, sizeof(shake_lab_particles_));
     memset(shake_lab_dice_boxes_, 0, sizeof(shake_lab_dice_boxes_));
@@ -7356,7 +7425,7 @@ void DesktopUI::UpdateShakeLabDice() {
         return;
     }
     static constexpr int16_t kPipPositions[7][2] = {
-        {18, 18}, {62, 18}, {40, 40}, {18, 62}, {62, 62}, {18, 40}, {62, 40},
+        {10, 10}, {40, 10}, {25, 25}, {10, 40}, {40, 40}, {10, 25}, {40, 25},
     };
     static constexpr bool kPipMap[7][7] = {
         {false, false, true, false, false, false, false},
@@ -7367,7 +7436,13 @@ void DesktopUI::UpdateShakeLabDice() {
         {true, true, true, true, true, true, true},
         {false, false, false, false, false, false, false},
     };
-    for (int die = 0; die < 2; ++die) {
+    if (shake_lab_dice_count_label_) {
+        char count_text[16];
+        snprintf(count_text, sizeof(count_text), "%u %s", shake_lab_dice_count_,
+                 shake_lab_dice_count_ == 1 ? "Die" : "Dice");
+        lv_label_set_text(shake_lab_dice_count_label_, count_text);
+    }
+    for (int die = 0; die < 6; ++die) {
         const bool visible = die < shake_lab_dice_count_;
         if (visible) {
             lv_obj_clear_flag(shake_lab_dice_boxes_[die], LV_OBJ_FLAG_HIDDEN);
@@ -7437,8 +7512,9 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
     if (self->shake_lab_mode_ == ShakeLabMode::DICE &&
         (self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
          (self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING && self->shake_lab_anim_tick_ % 3 == 0))) {
-        self->shake_lab_dice_values_state_[0] = static_cast<uint8_t>(esp_random() % 6 + 1);
-        self->shake_lab_dice_values_state_[1] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        for (uint8_t die = 0; die < self->shake_lab_dice_count_; ++die) {
+            self->shake_lab_dice_values_state_[die] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        }
         self->UpdateShakeLabDice();
     }
 }
@@ -7465,21 +7541,23 @@ void DesktopUI::RevealShakeLabResult() {
         }
         ESP_LOGI(TAG, "Shake Lab Ask Ball reveal index=%u", static_cast<unsigned>(index));
     } else if (shake_lab_mode_ == ShakeLabMode::DICE) {
-        shake_lab_dice_values_state_[0] = static_cast<uint8_t>(esp_random() % 6 + 1);
-        shake_lab_dice_values_state_[1] = static_cast<uint8_t>(esp_random() % 6 + 1);
+        uint16_t sum = 0;
+        bool lucky = false;
+        for (uint8_t die = 0; die < shake_lab_dice_count_; ++die) {
+            shake_lab_dice_values_state_[die] = static_cast<uint8_t>(esp_random() % 6 + 1);
+            sum += shake_lab_dice_values_state_[die];
+            lucky = lucky || shake_lab_dice_values_state_[die] == 6;
+        }
         UpdateShakeLabDice();
         if (shake_lab_dice_total_label_) {
             char total[32];
-            if (shake_lab_dice_count_ == 2) {
-                snprintf(total, sizeof(total), "%u + %u = %u", shake_lab_dice_values_state_[0],
-                         shake_lab_dice_values_state_[1], shake_lab_dice_values_state_[0] + shake_lab_dice_values_state_[1]);
-            } else {
+            if (shake_lab_dice_count_ == 1) {
                 snprintf(total, sizeof(total), "Result: %u", shake_lab_dice_values_state_[0]);
+            } else {
+                snprintf(total, sizeof(total), "%u dice  Total: %u", shake_lab_dice_count_, sum);
             }
             lv_label_set_text(shake_lab_dice_total_label_, total);
         }
-        const bool lucky = shake_lab_dice_values_state_[0] == 6 ||
-            (shake_lab_dice_count_ == 2 && shake_lab_dice_values_state_[1] == 6);
         if (shake_lab_dice_lucky_label_) {
             if (lucky) {
                 lv_obj_clear_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
@@ -7487,8 +7565,48 @@ void DesktopUI::RevealShakeLabResult() {
                 lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
             }
         }
-        ESP_LOGI(TAG, "Shake Lab Dice reveal d1=%u d2=%u count=%u", shake_lab_dice_values_state_[0],
-                 shake_lab_dice_values_state_[1], shake_lab_dice_count_);
+        ESP_LOGI(TAG, "Shake Lab Dice reveal count=%u total=%u", shake_lab_dice_count_, sum);
+    } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE) {
+        struct Fortune {
+            const char* level;
+            const char* poem;
+            const char* explain;
+        };
+        static constexpr Fortune kFortunes[] = {
+            {"上上签", "春风得意马蹄轻，\n一日看尽好风景。", "运势正盛，大胆前行；好消息正在路上。"},
+            {"上上签", "云开月出正分明，\n不用迟疑问前程。", "困惑将散，目标渐清；选择你真正想走的路。"},
+            {"上签", "桂香吹过小窗前，\n喜事轻轻到枕边。", "近日有小惊喜，人缘亦旺；记得接住别人的善意。"},
+            {"上签", "长路虽遥步步安，\n贵人携手过重山。", "不必独自硬撑；合作、求助会让事情更顺。"},
+            {"上签", "种得梧桐树影长，\n凤来只待日升东。", "积累正在发芽，暂时未见成果，但方向是对的。"},
+            {"中上签", "小舟初过浪头平，\n稳把船舵向远行。", "进展可期，宜稳不宜急；先守好节奏。"},
+            {"中上签", "花未全开香已至，\n且将耐心待佳期。", "机会已近，再准备一点；不必为短暂等待焦虑。"},
+            {"中上签", "故人一笑春风里，\n旧愿重逢有转机。", "旧人、旧事或搁置的计划可能带来新突破。"},
+            {"中签", "山中暂起一层雾，\n风过自然见归途。", "信息不足，暂缓决定；先观察，别被情绪催促。"},
+            {"中签", "一杯清茶消百虑，\n心定方知下一步。", "你需要的不是更多用力，而是休息后的清醒。"},
+            {"中签", "双路分岔莫心慌，\n先问初衷在哪方。", "两个选择各有得失；以长期价值而非眼前轻松作答。"},
+            {"中签", "细雨湿衣人不觉，\n微功日积自成河。", "当下看似平常，每天的小步正在改变结果。"},
+            {"中平签", "客来客往皆有时，\n门前洒扫守心知。", "先整理环境和边界；不必挽留不属于你的人与事。"},
+            {"中平签", "溪水绕石不争先，\n转个弯儿天更宽。", "正面强攻不是唯一解法；换个方法反而更快。"},
+            {"中平签", "灯火微明夜未央，\n留些余力待晨光。", "此时宜保守能量，别一次耗尽；重要事留到状态更好时。"},
+            {"平签", "潮起潮落本平常，\n不因一浪失方向。", "短期波动不代表失败；看长一点，继续保持基本功。"},
+            {"平签", "棋至中盘须细想，\n一着不急局自安。", "现在适合复盘而非冲刺；检查隐藏成本和后续影响。"},
+            {"平签", "他人花开他人春，\n自家种子有良辰。", "别用别人的时间表评价自己；你有自己的生长节奏。"},
+            {"中下签", "风大莫将高帆挂，\n收绳系船待云开。", "外部变数较多，暂不宜冒进；先留退路与缓冲。"},
+            {"中下签", "明珠暂隐尘沙里，\n拂去浮灰价自知。", "价值未被看见不等于没有价值；先完善表达与作品。"},
+            {"下签", "急雨敲窗宜闭户，\n莫向风头问远途。", "当下不宜强行推进；先处理风险，等情势稳定再决定。"},
+            {"下签", "旧桥木朽莫强过，\n另寻新渡保平安。", "原方案隐患已现；及时换路不是退缩，而是判断力。"},
+            {"下签", "言多易失心中尺，\n且把真情留三分。", "谨慎沟通，先听后说；未确定的事不必过早承诺。"},
+            {"安心签", "今日无须问吉凶，\n好好吃饭好好眠。", "这一签只提醒你：先照顾好自己，答案不必在今天全部出现。"},
+        };
+        const size_t index = esp_random() % (sizeof(kFortunes) / sizeof(kFortunes[0]));
+        char number[48];
+        snprintf(number, sizeof(number), "第%02u签 · %s", static_cast<unsigned>(index + 1), kFortunes[index].level);
+        lv_label_set_text(shake_lab_fortune_number_label_, number);
+        lv_label_set_text(shake_lab_fortune_poem_label_, kFortunes[index].poem);
+        lv_label_set_text(shake_lab_fortune_explain_label_, kFortunes[index].explain);
+        lv_label_set_text(shake_lab_fortune_hint_label_, "解签已显示 · Ready again soon");
+        ESP_LOGI(TAG, "Shake Lab Fortune reveal index=%u level=%s", static_cast<unsigned>(index),
+                 kFortunes[index].level);
     }
     if (!Application::GetInstance().IsExternalAudioActive()) {
         Application::GetInstance().Schedule([]() {
@@ -7514,6 +7632,8 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_answer_label_, "摇晃已感应");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Rolling...");
+            } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
+                lv_label_set_text(shake_lab_fortune_hint_label_, "签筒已动·请继续摇");
             }
             if (shake_lab_anim_timer_) {
                 lv_timer_resume(shake_lab_anim_timer_);
@@ -7524,6 +7644,8 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_answer_label_, "正在感应……");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Settling...");
+            } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
+                lv_label_set_text(shake_lab_fortune_hint_label_, "一枝签正在落下……");
             }
             break;
         case ShakeDetector::Transition::SETTLING_TO_REVEAL:
@@ -7534,6 +7656,8 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_hint_label_, "Ready to shake again");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Ready to roll again");
+            } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
+                lv_label_set_text(shake_lab_fortune_hint_label_, "可再次摇签 · Shake again");
             }
             ESP_LOGI(TAG, "Shake Lab cooldown complete");
             break;
