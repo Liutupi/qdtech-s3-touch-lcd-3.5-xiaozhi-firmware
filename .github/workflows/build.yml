@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Espressif IoT Development Framework (ESP-IDF)
         # You may pin to the exact commit or the version.
@@ -24,9 +24,31 @@ jobs:
           # Relative path under $GITHUB_WORKSPACE to place the repository
           #path: # optional, default is 
           # Version of ESP-IDF docker image to use
-          esp_idf_version: release-v5.4
+          esp_idf_version: release-v5.5
           # ESP32 variant to build for
           target: esp32s3
           # Command to run inside the docker container (default: builds the project)
-          # command: # optional, default is idf.py build
+          command: >-
+            mkdir -p /tmp/qdtech-managed-patches/78__esp-ml307
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/include &&
+            cp managed_components/78__esp-ml307/esp_udp.cc
+            /tmp/qdtech-managed-patches/78__esp-ml307/ &&
+            cp managed_components/78__esp-wifi-connect/wifi_configuration_ap.cc
+            managed_components/78__esp-wifi-connect/wifi_station.cc
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/ &&
+            cp managed_components/78__esp-wifi-connect/include/wifi_configuration_ap.h
+            managed_components/78__esp-wifi-connect/include/wifi_station.h
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/ &&
+            rm -rf managed_components/78__esp-ml307
+            managed_components/78__esp-wifi-connect &&
+            idf.py reconfigure &&
+            cp /tmp/qdtech-managed-patches/78__esp-ml307/esp_udp.cc
+            managed_components/78__esp-ml307/ &&
+            cp /tmp/qdtech-managed-patches/78__esp-wifi-connect/wifi_configuration_ap.cc
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/wifi_station.cc
+            managed_components/78__esp-wifi-connect/ &&
+            cp /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/wifi_configuration_ap.h
+            /tmp/qdtech-managed-patches/78__esp-wifi-connect/include/wifi_station.h
+            managed_components/78__esp-wifi-connect/include/ &&
+            idf.py build
                 
