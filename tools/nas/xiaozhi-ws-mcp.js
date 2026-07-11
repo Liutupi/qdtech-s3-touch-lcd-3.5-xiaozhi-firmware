@@ -5,6 +5,7 @@ const fs = require('fs');
 const dgram = require('dgram');
 const http = require('http');
 const os = require('os');
+const crypto = require('crypto');
 const WebSocket = require('ws');
 const {
   searchPlayable,
@@ -35,6 +36,7 @@ let activeWebSocket = null;
 let connectionStartedAt = 0;
 let lastInboundAt = Date.now();
 let restartingForWatchdog = false;
+let privateFmRestoring = false;
 
 const watchdogEnabled = process.env.MCP_WATCHDOG_ENABLED !== '0';
 const watchdogCheckMs = Number(process.env.MCP_WATCHDOG_CHECK_MS || 60000);
@@ -57,6 +59,48 @@ lyricUdpSocket.bind(() => {
 const endpoint =
   process.env.MCP_ENDPOINT ||
   (fs.existsSync('./current-endpoint.txt') ? fs.readFileSync('./current-endpoint.txt', 'utf8').trim() : '');
+
+// All three account containers share /app, so use an endpoint-derived suffix
+// instead of a single shared state file. Only the autoplay boolean is stored;
+// the endpoint/token itself is never written.
+const privateFmStateKey = crypto.createHash('sha256').update(endpoint).digest('hex').slice(0, 12);
+const privateFmStateFile = process.env.PRIVATE_FM_STATE_FILE ||
+  `./private-fm-autoplay-${privateFmStateKey}.json`;
+
+function persistPrivateFmAutoplayState() {
+  const tmpFile = `${privateFmStateFile}.tmp`;
+  try {
+    fs.writeFileSync(tmpFile, JSON.stringify({
+      enabled: privateFmAutoplay,
+      updated_at_ms: Date.now(),
+    }));
+    fs.renameSync(tmpFile, privateFmStateFile);
+  } catch (error) {
+    console.error('private fm autoplay state save failed', error.message || String(error));
+    try {
+      if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    } catch (_) {
+      // Best effort cleanup only.
+    }
+  }
+}
+
+function loadPrivateFmAutoplayState() {
+  try {
+    if (!fs.existsSync(privateFmStateFile)) return;
+    const saved = JSON.parse(fs.readFileSync(privateFmStateFile, 'utf8'));
+    privateFmAutoplay = saved?.enabled === true;
+    if (privateFmAutoplay) {
+      privateFmGeneration += 1;
+      console.log('private fm autoplay state restored', JSON.stringify({
+        state_file: privateFmStateFile,
+        updated_at_ms: Number(saved.updated_at_ms || 0),
+      }));
+    }
+  } catch (error) {
+    console.error('private fm autoplay state load failed', error.message || String(error));
+  }
+}
 
 if (require.main === module && !endpoint.startsWith('wss://api.xiaozhi.me/mcp/?token=')) {
   console.error('MCP_ENDPOINT is missing or invalid');
@@ -255,9 +299,6 @@ function sendFireAndForgetRequest(ws, method, params) {
 }
 
 async function callLocalDevicePlayUrl(args) {
-  if (!deviceMusicHost) {
-    return false;
-  }
   const payload = Buffer.from(JSON.stringify({
     type: 'play_url',
     title: args.title,
@@ -265,24 +306,31 @@ async function callLocalDevicePlayUrl(args) {
     url: args.url,
     lyrics_json: args.lyrics_json || '',
   }));
-  return new Promise((resolve) => {
-    lyricUdpSocket.send(payload, 0, payload.length, deviceMusicPort, deviceMusicHost, (error) => {
+  // The board uses DHCP, so a configured host can become stale.  Background
+  // autoplay tool calls are not always routed back to an idle board by the MCP
+  // service; broadcast the fallback packet on every local subnet instead of
+  // depending on yesterday's address.
+  const targets = new Set(getLyricUdpTargets());
+  if (deviceMusicHost) targets.add(deviceMusicHost);
+  const results = await Promise.all([...targets].map((host) => new Promise((resolve) => {
+    lyricUdpSocket.send(payload, 0, payload.length, deviceMusicPort, host, (error) => {
       if (error) {
-        console.error('<< local device play_url udp failed', error.message || String(error));
+        console.error('<< local device play_url udp failed', host, error.message || String(error));
         resolve(false);
         return;
       }
-	      console.log('<< local device play_url udp', JSON.stringify({
-	        host: deviceMusicHost,
-	        port: deviceMusicPort,
-	        bytes: payload.length,
-	        has_lyrics: hasUsableLyrics(args.lyrics_json, args.lyric_count),
-	        lyrics_json_bytes: lyricsJsonBytes(args.lyrics_json),
-	        ok: true,
-	      }));
+      console.log('<< local device play_url udp', JSON.stringify({
+        host,
+        port: deviceMusicPort,
+        bytes: payload.length,
+        has_lyrics: hasUsableLyrics(args.lyrics_json, args.lyric_count),
+        lyrics_json_bytes: lyricsJsonBytes(args.lyrics_json),
+        ok: true,
+      }));
       resolve(true);
     });
-  });
+  })));
+  return results.some(Boolean);
 }
 
 function toMcpResult(result) {
@@ -406,7 +454,7 @@ function parseLoggedResult(text) {
   }
 }
 
-async function callDevicePlayUrl(ws, toolResult) {
+async function callDevicePlayUrl(ws, toolResult, useLocalFallback = false) {
   const args = extractPlayUrlArguments(toolResult);
   if (!args) {
     return;
@@ -432,7 +480,9 @@ async function callDevicePlayUrl(ws, toolResult) {
 	    arguments: deviceArgs,
 	  });
 	  console.log('<< self.music.play_url sent');
-	  await callLocalDevicePlayUrl(args);
+	  if (useLocalFallback) {
+	    await callLocalDevicePlayUrl(args);
+	  }
 }
 
 function extractLoginQrArguments(toolResult) {
@@ -484,6 +534,7 @@ function stopPrivateFmAutoplay(reason = '') {
     clearTimeout(privateFmTimer);
     privateFmTimer = null;
   }
+  persistPrivateFmAutoplayState();
   if (reason) {
     console.log('private fm autoplay stopped', JSON.stringify({ reason }));
   }
@@ -559,18 +610,26 @@ function logPrivateFmResult(result, prefix = 'private fm song selected') {
   }
 }
 
-function schedulePrivateFmNext(ws, playResult) {
+function schedulePrivateFmNext(ws, playResult, overrideDelayMs = 0) {
   if (!privateFmAutoplay || !playResult?.success) {
     return;
   }
   const generation = privateFmGeneration;
-  const delayMs = privateFmDelayMs(playResult);
+  const delayMs = overrideDelayMs > 0 ? overrideDelayMs : privateFmDelayMs(playResult);
   if (privateFmTimer) {
     clearTimeout(privateFmTimer);
   }
   privateFmTimer = setTimeout(async () => {
     privateFmTimer = null;
-    if (!privateFmAutoplay || generation !== privateFmGeneration || ws.readyState !== WebSocket.OPEN) {
+    if (!privateFmAutoplay || generation !== privateFmGeneration) {
+      return;
+    }
+    const playbackWs = activeWebSocket?.readyState === WebSocket.OPEN
+      ? activeWebSocket
+      : (ws?.readyState === WebSocket.OPEN ? ws : null);
+    if (!playbackWs) {
+      console.log('private fm autoplay waiting for mcp reconnect');
+      schedulePrivateFmNext(activeWebSocket, playResult, 3000);
       return;
     }
     try {
@@ -579,17 +638,17 @@ function schedulePrivateFmNext(ws, playResult) {
       const next = await playPrivateFm();
       logPrivateFmResult(next, 'private fm autoplay next selected');
       if (!next.success) {
-        schedulePrivateFmRetry(ws, next);
+        schedulePrivateFmRetry(playbackWs, next);
         return;
       }
       setPrivateFmCurrent(next);
       const toolResult = toolResultFromPlayResult(next);
-      await callDevicePlayUrl(ws, toolResult);
-      setTimeout(() => startLyricSync(ws, next), 1000);
-      schedulePrivateFmNext(ws, next);
+      await callDevicePlayUrl(playbackWs, toolResult, true);
+      setTimeout(() => startLyricSync(playbackWs, next), 1000);
+      schedulePrivateFmNext(playbackWs, next);
     } catch (error) {
       console.error('private fm autoplay next failed', error.message || String(error));
-      schedulePrivateFmRetry(ws, { message: error.message || String(error) });
+      schedulePrivateFmRetry(playbackWs, { message: error.message || String(error) });
     }
   }, delayMs);
   console.log('private fm autoplay scheduled', JSON.stringify({
@@ -609,30 +668,64 @@ function schedulePrivateFmRetry(ws, result) {
   }
   privateFmTimer = setTimeout(async () => {
     privateFmTimer = null;
-    if (!privateFmAutoplay || generation !== privateFmGeneration || ws.readyState !== WebSocket.OPEN) {
+    if (!privateFmAutoplay || generation !== privateFmGeneration) {
+      return;
+    }
+    const playbackWs = activeWebSocket?.readyState === WebSocket.OPEN
+      ? activeWebSocket
+      : (ws?.readyState === WebSocket.OPEN ? ws : null);
+    if (!playbackWs) {
+      console.log('private fm autoplay retry waiting for mcp reconnect');
+      schedulePrivateFmRetry(activeWebSocket, result);
       return;
     }
     try {
       const next = await playPrivateFm();
       logPrivateFmResult(next, 'private fm autoplay retry selected');
       if (!next.success) {
-        schedulePrivateFmRetry(ws, next);
+        schedulePrivateFmRetry(playbackWs, next);
         return;
       }
       setPrivateFmCurrent(next);
       const toolResult = toolResultFromPlayResult(next);
-      await callDevicePlayUrl(ws, toolResult);
-      setTimeout(() => startLyricSync(ws, next), 1000);
-      schedulePrivateFmNext(ws, next);
+      await callDevicePlayUrl(playbackWs, toolResult, true);
+      setTimeout(() => startLyricSync(playbackWs, next), 1000);
+      schedulePrivateFmNext(playbackWs, next);
     } catch (error) {
       console.error('private fm autoplay retry failed', error.message || String(error));
-      schedulePrivateFmRetry(ws, { message: error.message || String(error) });
+      schedulePrivateFmRetry(playbackWs, { message: error.message || String(error) });
     }
   }, 30000);
   console.log('private fm autoplay retry scheduled', JSON.stringify({
     reason: result?.message || result?.code || 'unknown',
     delay_ms: 30000,
   }));
+}
+
+async function resumePrivateFmAfterProcessRestart(ws) {
+  if (!privateFmAutoplay || privateFmCurrent || privateFmRestoring || ws?.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  privateFmRestoring = true;
+  try {
+    console.log('private fm autoplay resuming after process restart');
+    const next = await playPrivateFm();
+    logPrivateFmResult(next, 'private fm process restart selected');
+    if (!next.success) {
+      schedulePrivateFmRetry(ws, next);
+      return;
+    }
+    setPrivateFmCurrent(next);
+    const toolResult = toolResultFromPlayResult(next);
+    await callDevicePlayUrl(ws, toolResult, true);
+    setTimeout(() => startLyricSync(ws, next), 1000);
+    schedulePrivateFmNext(ws, next);
+  } catch (error) {
+    console.error('private fm process restart resume failed', error.message || String(error));
+    schedulePrivateFmRetry(ws, { message: error.message || String(error) });
+  } finally {
+    privateFmRestoring = false;
+  }
 }
 
 function safeLyricLine(line) {
@@ -767,6 +860,7 @@ async function handleTool(name, args) {
     stopLyricSync();
     privateFmAutoplay = args.continuous !== false;
     privateFmGeneration += 1;
+    persistPrivateFmAutoplayState();
     const result = await playPrivateFm();
     logPrivateFmResult(result);
     if (result.success) {
@@ -851,6 +945,17 @@ function connect() {
 
   ws.on('open', () => {
     console.log('connected to xiaozhi mcp');
+    if (privateFmAutoplay && privateFmCurrent?.success && !privateFmTimer) {
+      const elapsedMs = Math.max(0, Date.now() - privateFmStartedAtMs);
+      const remainingMs = Math.max(1000, privateFmDelayMs(privateFmCurrent) - elapsedMs);
+      console.log('private fm autoplay resumed after reconnect', JSON.stringify({
+        title: privateFmCurrent.title,
+        remaining_ms: remainingMs,
+      }));
+      schedulePrivateFmNext(ws, privateFmCurrent, remainingMs);
+    } else if (privateFmAutoplay && !privateFmCurrent) {
+      void resumePrivateFmAfterProcessRestart(ws);
+    }
   });
 
   ws.on('message', async (data) => {
@@ -957,7 +1062,8 @@ function restartByWatchdog(reason, details) {
   }
   restartingForWatchdog = true;
   console.error('mcp watchdog restart', JSON.stringify({ reason, ...details }));
-  stopPrivateFmAutoplay(`watchdog:${reason}`);
+  // Preserve private FM state across the watchdog's transport refresh.  The
+  // next-song timer resolves the current open socket when it fires.
   stopLyricSync();
 
   if (watchdogExitOnStale) {
@@ -1021,6 +1127,7 @@ function startWatchdog() {
 }
 
 if (require.main === module) {
+  loadPrivateFmAutoplayState();
   startMusicApiServer();
   connect();
   startWatchdog();

@@ -33,11 +33,16 @@
 
 static const char* TAG = "RadioService";
 
-static constexpr int kReadBufferSize = 16 * 1024;
-static constexpr int kReadTargetBytes = 8 * 1024;
-static constexpr int kInitialReadTargetBytes = 2 * 1024;
-static constexpr int kReadChunkBytes = 2048;
+// Keep enough compressed audio in PSRAM to absorb Wi-Fi/TLS scheduling jitter.
+// A 320 kbps stream consumes about 40 KB/s, so the steady-state target below
+// provides roughly 600 ms of headroom without spending scarce internal SRAM.
+static constexpr int kReadBufferSize = 48 * 1024;
+static constexpr int kRadioReadTargetBytes = 16 * 1024;
+static constexpr int kMusicReadTargetBytes = 24 * 1024;
+static constexpr int kInitialReadTargetBytes = 8 * 1024;
+static constexpr int kReadChunkBytes = 4096;
 static constexpr int kPcmMaxSamples = MAX_NCHAN * MAX_NGRAN * MAX_NSAMP;
+static constexpr int kPcmOutputMaxSamples = kPcmMaxSamples * 3;
 static constexpr TickType_t kCustomUrlSpeakingGraceTicks = pdMS_TO_TICKS(4000);
 static constexpr int kRadioEmptyReadLimit = 200;
 static constexpr int kCustomUrlEmptyReadLimit = 1200;
@@ -81,46 +86,6 @@ static std::string Lower(std::string text) {
 static bool IsNetEaseMusicUrl(const std::string& url) {
     return url.find(".music.126.net/") != std::string::npos ||
            url.find("music.163.com/") != std::string::npos;
-}
-static int ProbeMusicUrlLength(const std::string& url) {
-    esp_http_client_config_t config = {};
-    config.url = url.c_str();
-    config.timeout_ms = 3000;
-    config.buffer_size = 1024;
-    config.buffer_size_tx = 512;
-    config.disable_auto_redirect = false;
-    config.max_redirection_count = 5;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
-
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (!client) {
-        return -1;
-    }
-    esp_http_client_set_header(client, "User-Agent", "Mozilla/5.0 ESP32 Radio");
-    esp_http_client_set_header(client, "Accept", "audio/mpeg,audio/*;q=0.9,*/*;q=0.8");
-    esp_http_client_set_header(client, "Icy-MetaData", "0");
-    if (IsNetEaseMusicUrl(url)) {
-        esp_http_client_set_header(client, "User-Agent",
-                                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                                   "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36");
-        esp_http_client_set_header(client, "Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8");
-        esp_http_client_set_header(client, "Referer", "https://music.163.com/");
-        esp_http_client_set_header(client, "Origin", "https://music.163.com");
-        esp_http_client_set_header(client, "Connection", "close");
-    }
-
-    int content_length = -1;
-    esp_err_t err = esp_http_client_open(client, 0);
-    if (err == ESP_OK) {
-        content_length = esp_http_client_fetch_headers(client);
-        const int status = esp_http_client_get_status_code(client);
-        if (status < 200 || status >= 400) {
-            content_length = -1;
-        }
-        esp_http_client_close(client);
-    }
-    esp_http_client_cleanup(client);
-    return content_length;
 }
 
 static RadioCategory ParseCategory(const char* cat) {
@@ -627,15 +592,13 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
         return "Music URL was NOT started: 没有拿到可直接播放的歌曲链接。请重新搜索完整 MP3 直链，不要只返回歌名、网页、歌单或空链接。";
     }
 
+    // Cancel any radio/custom stream before allocating another HTTP/TLS
+    // client. The old implementation probed Content-Length with a separate
+    // connection while the previous stream was still retrying, briefly
+    // driving internal SRAM down to a few hundred bytes.
+    stream_generation_.fetch_add(1, std::memory_order_relaxed);
+    stop_requested_ = true;
     Application::GetInstance().PrepareExternalAudioPlayback();
-
-    const int music_length = ProbeMusicUrlLength(url);
-    if (music_length > 0 && music_length < kMinimumCustomMusicBytes) {
-        ESP_LOGW(TAG, "music url rejected as short preview len=%d url=%s", music_length, url.c_str());
-        SetUi("Error", "Need full song URL");
-        Application::GetInstance().SetExternalAudioActive(false);
-        return "Music URL was NOT started: 这个链接只有试听片段，不能当作完整歌曲播放。请换一个来源，重新搜索 Content-Length 超过 1 MB 的完整 MP3 直链，然后再次调用 self.music.play_url。";
-    }
 
     EnsureStationsLoaded();
     std::string display_name = title.empty() ? "Music URL" : title;
@@ -643,8 +606,6 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
         display_name += " - ";
         display_name += artist;
     }
-
-    stream_generation_.fetch_add(1, std::memory_order_relaxed);
 
     RadioStation station;
     station.name = display_name;
@@ -728,6 +689,11 @@ void RadioService::Task() {
         const uint32_t generation = stream_generation_.load(std::memory_order_relaxed);
         PlayCurrentStation(generation);
         if (generation != stream_generation_.load(std::memory_order_relaxed)) {
+            reconnect_attempt_ = 0;
+            continue;
+        }
+        if (skip_reconnect_once_) {
+            skip_reconnect_once_ = false;
             reconnect_attempt_ = 0;
             continue;
         }
@@ -874,6 +840,8 @@ void RadioService::PlayCurrentStation(uint32_t stream_generation) {
     
     const auto station_urls = kStations[station_index_].urls;
     bool tried_any = false;
+    int attempted_sources = 0;
+    int permanent_failures = 0;
     stop_requested_ = false;
     int url_order[3] = {0, 1, 2};
     
@@ -897,14 +865,28 @@ void RadioService::PlayCurrentStation(uint32_t stream_generation) {
             continue;
         }
         tried_any = true;
+        attempted_sources++;
         if (PlayUrl(url, i, stream_generation)) {
             return;
+        }
+        if (last_url_permanent_error_) {
+            permanent_failures++;
         }
         if (stream_generation != stream_generation_.load(std::memory_order_relaxed)) {
             return;
         }
         SetUi("Connecting", "Trying fallback");
         vTaskDelay(pdMS_TO_TICKS(300));
+    }
+    if (!playing_custom_url_ && play_requested_ && attempted_sources > 0 &&
+        permanent_failures == attempted_sources) {
+        const std::string failed_station = kStations[station_index_].name;
+        NextStation(1);
+        skip_reconnect_once_ = true;
+        SetUi("Connecting", "Skipped unavailable station");
+        ESP_LOGW(TAG, "radio station permanently unavailable; skipped station=%s next=%s sources=%d",
+                 failed_station.c_str(), kStations[station_index_].name.c_str(), attempted_sources);
+        return;
     }
     if (play_requested_) {
         SetUi("Error", tried_any ? "All sources failed" : "No source");
@@ -915,6 +897,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     const std::string station_name = kStations[station_index_].name;
     SetUi("Connecting", url_index == 0 ? "Opening stream" : "Fallback source");
     ResetAudioLeveler();
+    last_url_permanent_error_ = false;
     if (playing_custom_url_) {
         custom_url_stream_completed_ = false;
         custom_url_fatal_error_ = false;
@@ -923,6 +906,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     esp_http_client_config_t config = {};
     config.url = url.c_str();
     config.timeout_ms = playing_custom_url_ ? 5000 : 2500;
+    // esp_http_client keeps this buffer in scarce internal SRAM.  Compressed
+    // stream headroom lives in the 48 KB PSRAM buffer below, so a larger HTTP
+    // scratch buffer only increases the risk of TLS/MQTT allocation failures.
     config.buffer_size = 4096;
     config.buffer_size_tx = 1024;
     config.disable_auto_redirect = false;
@@ -958,10 +944,18 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
 
     int content_length = esp_http_client_fetch_headers(client);
     int status = esp_http_client_get_status_code(client);
+    if (stream_generation != stream_generation_.load(std::memory_order_relaxed)) {
+        ESP_LOGI(TAG, "discard stale stream response station=%s url_index=%d", station_name.c_str(), url_index);
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return false;
+    }
     if (status < 200 || status >= 400) {
         ESP_LOGW(TAG, "bad stream status station=%s url_index=%d status=%d len=%d url=%s",
                  station_name.c_str(), url_index, status, content_length, url.c_str());
-        if (playing_custom_url_ && (status == 401 || status == 403 || status == 404 || status == 410)) {
+        last_url_permanent_error_ = status == 400 || status == 401 || status == 403 ||
+                                    status == 404 || status == 410;
+        if (playing_custom_url_ && last_url_permanent_error_) {
             ESP_LOGW(TAG, "custom music url rejected status=%d, stopping retries station=%s",
                      status, station_name.c_str());
             custom_url_fatal_error_ = true;
@@ -975,6 +969,19 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         return false;
     }
 
+    if (playing_custom_url_ && content_length > 0 && content_length < kMinimumCustomMusicBytes) {
+        ESP_LOGW(TAG, "music url rejected as short preview len=%d station=%s", content_length,
+                 station_name.c_str());
+        custom_url_fatal_error_ = true;
+        play_requested_ = false;
+        stop_requested_ = true;
+        Application::GetInstance().SetExternalAudioActive(false);
+        SetUi("Error", "Need full song URL");
+        esp_http_client_close(client);
+        esp_http_client_cleanup(client);
+        return false;
+    }
+
     ESP_LOGI(TAG, "stream open station=%s url_index=%d status=%d len=%d url=%s",
              station_name.c_str(), url_index, status, content_length, url.c_str());
     SetUi("Buffering", "Filling buffer");
@@ -982,7 +989,9 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     HMP3Decoder decoder = MP3InitDecoder();
     auto* read_buffer = static_cast<uint8_t*>(heap_caps_malloc(kReadBufferSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
     auto* pcm_buffer = static_cast<int16_t*>(heap_caps_malloc(kPcmMaxSamples * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
-    if (!decoder || !read_buffer || !pcm_buffer) {
+    auto* mono_buffer = static_cast<int16_t*>(heap_caps_malloc(kPcmMaxSamples * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    auto* output_buffer = static_cast<int16_t*>(heap_caps_malloc(kPcmOutputMaxSamples * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!decoder || !read_buffer || !pcm_buffer || !mono_buffer || !output_buffer) {
         ESP_LOGE(TAG, "decoder alloc failed");
         SetUi("Error", "No decoder memory");
         if (decoder) {
@@ -990,6 +999,8 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         }
         heap_caps_free(read_buffer);
         heap_caps_free(pcm_buffer);
+        heap_caps_free(mono_buffer);
+        heap_caps_free(output_buffer);
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         return false;
@@ -1026,7 +1037,12 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             memmove(read_buffer, read_ptr, bytes_left);
             read_ptr = read_buffer;
         }
-        const int target_bytes = (total_bytes == 0 || playing_custom_url_) ? kInitialReadTargetBytes : kReadTargetBytes;
+        // Only use the smaller target before the first decoded frame.  The old
+        // `|| playing_custom_url_` condition accidentally kept every music URL
+        // at a 2 KB target for the entire song, turning normal network jitter
+        // directly into audible drop-outs.
+        const int steady_target = playing_custom_url_ ? kMusicReadTargetBytes : kRadioReadTargetBytes;
+        const int target_bytes = decoded_frames == 0 ? kInitialReadTargetBytes : steady_target;
         while (bytes_left < target_bytes && bytes_left < kReadBufferSize &&
                play_requested_ && !stop_requested_ &&
                stream_generation == stream_generation_.load(std::memory_order_relaxed)) {
@@ -1127,7 +1143,8 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         decode_errors = 0;
         MP3FrameInfo frame_info = {};
         MP3GetLastFrameInfo(decoder, &frame_info);
-        WritePcm(pcm_buffer, frame_info.outputSamps, frame_info.nChans, frame_info.samprate);
+        WritePcm(pcm_buffer, frame_info.outputSamps, frame_info.nChans, frame_info.samprate,
+                 mono_buffer, kPcmMaxSamples, output_buffer, kPcmOutputMaxSamples);
         if (decoded_frames == 0) {
             if (station_index_ >= 0 && station_index_ < static_cast<int>(last_success_url_.size())) {
                 last_success_url_[station_index_] = url_index;
@@ -1153,6 +1170,8 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
     MP3FreeDecoder(decoder);
     heap_caps_free(read_buffer);
     heap_caps_free(pcm_buffer);
+    heap_caps_free(mono_buffer);
+    heap_caps_free(output_buffer);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
     return decoded_frames > 0 && play_requested_ && !stop_requested_ && !stream_failed && !stream_completed &&
@@ -1257,73 +1276,78 @@ void RadioService::SetUi(const char* state, const char* detail) {
     }
 }
 
-void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate) {
-    if (!pcm || samples <= 0 || channels <= 0 || sample_rate <= 0) {
+void RadioService::WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate,
+                            int16_t* mono_buffer, int mono_capacity,
+                            int16_t* output_buffer, int output_capacity) {
+    if (!pcm || !mono_buffer || !output_buffer || samples <= 0 || channels <= 0 || sample_rate <= 0) {
         return;
     }
 
     int frames = channels == 2 ? samples / 2 : samples;
-    if (frames <= 0) {
+    if (frames <= 0 || frames > mono_capacity) {
+        ESP_LOGW(TAG, "pcm frame capacity exceeded frames=%d capacity=%d", frames, mono_capacity);
         return;
     }
 
-    pcm_mono_buf_.resize(frames);
     if (channels == 2) {
         for (int i = 0; i < frames; ++i) {
-            pcm_mono_buf_[i] = Clamp16(((int)pcm[i * 2] + (int)pcm[i * 2 + 1]) / 2);
+            mono_buffer[i] = Clamp16(((int)pcm[i * 2] + (int)pcm[i * 2 + 1]) / 2);
         }
     } else {
-        for (int i = 0; i < frames; ++i) {
-            pcm_mono_buf_[i] = pcm[i];
-        }
+        memcpy(mono_buffer, pcm, frames * sizeof(int16_t));
     }
 
     auto* codec = Board::GetInstance().GetAudioCodec();
     const int out_rate = codec->output_sample_rate();
+    int out_frames = frames;
     if (sample_rate == out_rate) {
-        pcm_output_buf_.swap(pcm_mono_buf_);
+        memcpy(output_buffer, mono_buffer, frames * sizeof(int16_t));
     } else {
-        int out_frames = std::max(1, frames * out_rate / sample_rate);
-        pcm_output_buf_.resize(out_frames);
+        out_frames = std::max(1, frames * out_rate / sample_rate);
+        if (out_frames > output_capacity) {
+            ESP_LOGW(TAG, "pcm output capacity exceeded frames=%d capacity=%d", out_frames, output_capacity);
+            return;
+        }
         for (int i = 0; i < out_frames; ++i) {
             int64_t src_pos_q16 = (int64_t)i * sample_rate * 65536 / out_rate;
             int src_index = src_pos_q16 >> 16;
             int frac = src_pos_q16 & 0xffff;
             if (src_index >= frames - 1) {
-                pcm_output_buf_[i] = pcm_mono_buf_[frames - 1];
+                output_buffer[i] = mono_buffer[frames - 1];
             } else {
-                int a = pcm_mono_buf_[src_index];
-                int b = pcm_mono_buf_[src_index + 1];
-                pcm_output_buf_[i] = Clamp16((a * (65536 - frac) + b * frac) >> 16);
+                int a = mono_buffer[src_index];
+                int b = mono_buffer[src_index + 1];
+                output_buffer[i] = Clamp16((a * (65536 - frac) + b * frac) >> 16);
             }
         }
     }
 
-    ApplyAudioLeveler(pcm_output_buf_);
+    ApplyAudioLeveler(output_buffer, out_frames);
     if (!codec->output_enabled()) {
         codec->EnableOutput(true);
     }
-    codec->OutputData(pcm_output_buf_);
+    codec->OutputData(output_buffer, out_frames);
 }
 
 void RadioService::ResetAudioLeveler() {
     audio_gain_q12_ = 4096;
 }
 
-void RadioService::ApplyAudioLeveler(std::vector<int16_t>& pcm) {
-    if (pcm.empty()) {
+void RadioService::ApplyAudioLeveler(int16_t* pcm, int samples) {
+    if (!pcm || samples <= 0) {
         return;
     }
 
     int peak = 0;
     int64_t abs_sum = 0;
-    for (int16_t sample : pcm) {
+    for (int i = 0; i < samples; ++i) {
+        const int16_t sample = pcm[i];
         int v = std::abs(static_cast<int>(sample));
         peak = std::max(peak, v);
         abs_sum += v;
     }
 
-    const int avg_abs = static_cast<int>(abs_sum / static_cast<int64_t>(pcm.size()));
+    const int avg_abs = static_cast<int>(abs_sum / static_cast<int64_t>(samples));
     if (avg_abs <= 0 || peak <= 0) {
         return;
     }
@@ -1344,8 +1368,8 @@ void RadioService::ApplyAudioLeveler(std::vector<int16_t>& pcm) {
         audio_gain_q12_ = (audio_gain_q12_ * 31 + desired) / 32;
     }
 
-    for (int16_t& sample : pcm) {
-        int32_t v = static_cast<int32_t>((static_cast<int64_t>(sample) * audio_gain_q12_) >> 12);
+    for (int i = 0; i < samples; ++i) {
+        int32_t v = static_cast<int32_t>((static_cast<int64_t>(pcm[i]) * audio_gain_q12_) >> 12);
         int32_t av = std::abs(v);
         if (av > 23500) {
             int32_t over = av - 23500;
@@ -1355,6 +1379,6 @@ void RadioService::ApplyAudioLeveler(std::vector<int16_t>& pcm) {
             }
             v = v < 0 ? -av : av;
         }
-        sample = Clamp16(v);
+        pcm[i] = Clamp16(v);
     }
 }

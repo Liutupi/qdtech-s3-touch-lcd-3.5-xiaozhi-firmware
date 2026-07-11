@@ -1,3 +1,16 @@
+## 2026-07-11: v1.7.94 Streaming, Touch, and Private FM Continuation
+
+- Moved compressed audio, decoder working memory, PCM, mono, and output scratch buffers to PSRAM and removed a per-output vector allocation.
+- Raised steady streaming prebuffer targets and fixed custom music remaining at the tiny startup target.
+- Removed the duplicate music URL probe, hardened generation handoff, and reject short/preview responses from actual HTTP headers.
+- Skip permanently dead station URLs and advance when every source is unavailable.
+- Serialized shared touch/BMI270 I2C access and made touch failure recovery depend on consecutive recent errors.
+- Reduced redundant hidden-page, clock, date, and battery redraws while preserving the original full-screen weather UI and animation.
+- Persist and restore per-account NetEase private-FM autoplay across NAS process restarts and reconnects.
+- Added autoplay-only UDP subnet broadcast fallback so background next-track delivery survives a changed DHCP address without duplicating the initial MCP play request.
+- ESP-IDF 5.5.2 build/merge passed: app `0x665960` with `0x9a6a0` (9%) free in the 7 MB slot; merged image `0x765960`.
+- SHA256: app `b29e7b9b4b1013aa8f7070ae2357ad3b7b8586351a86c43acfad3b4a46f1424f`; full `f39fe17031e073bdaeb1e5690c2a6899d39edb7bd58e9aa454806b4c897976c4`; ZIP `f5063aed82710c85ecbf0b78d4113731d49989b67e90bc2a4787f00ae5131850`.
+
 ## 2026-07-11: v1.7.93 Shake Lab Fortune and Desktop Recovery
 
 - Expanded Shake Lab from D6/2D6 to 1-6 dice with totals and lucky-six feedback.

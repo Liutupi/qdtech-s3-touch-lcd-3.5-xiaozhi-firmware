@@ -1,3 +1,17 @@
+## 2026-07-11 Handoff: v1.7.94 Streaming + Private FM Continuation
+
+- Firmware version is `v1.7.94`. The existing UI, weather artwork, and full-screen weather animation are preserved; the display remains on LVGL `FULL` render mode because `PARTIAL` and `DIRECT` corrupt translucent GIF composition on this panel.
+- Music and radio streaming now use PSRAM-backed compressed/decoder/output buffers, larger steady-state prebuffer targets, 4 KB reads, and an allocation-free `AudioCodec::OutputData` path. Custom music no longer remains at the small startup target.
+- Stream handoff invalidates the old generation before preparing a new URL, removes the duplicate Content-Length probe/TLS session, rejects short preview URLs using real response headers, and prevents stale responses from mutating current playback state.
+- Dead radio URLs with permanent HTTP status codes are skipped without repeated reconnect delay; stations whose sources are all permanently unavailable advance automatically.
+- Touch and BMI270 serialize complete I2C transactions. Successful status reads clear the touch failure streak, failures separated by five seconds do not accumulate into a disruptive bus reset, and BMI startup waits briefly for the shared lock.
+- Hidden XiaoZhi face updates no longer invalidate LVGL outside that page. Clock/date and battery widgets avoid redundant updates. The attempted GIF pause/resume optimization was removed after it reproduced weather-screen corruption; no UI or weather animation was replaced.
+- NAS `xiaozhi-ws-mcp.js` persists private-FM autoplay per account, restores it after container/watchdog restart, resolves the active WebSocket at timer fire time, retries after reconnect, and uses subnet broadcast as the autoplay-only fallback so DHCP address changes cannot silently send the next track to an old board IP.
+- Hardware evidence: CNR streams ran for more than 1,100/1,400 decoded frames without reconnect errors; NetEase track `故湘，风` streamed its full 5.2 MB and drained 13,584 frames cleanly. The NAS selected and scheduled later tracks, exposing the stale UDP host (`192.168.1.114` while the board was `192.168.1.112`); the broadcast fallback fixes that root cause. A complete post-fix two-track natural transition is still the first follow-up test.
+- The stable full-render image was flashed and hash-verified on `/dev/cu.usbmodem212401`. Boot, PSRAM, display, touch, BMI270, Wi-Fi, MQTT, time, and weather were observed. Minimum internal SRAM during the long music run reached 975 bytes, so future optimization should continue reducing concurrent voice/MQTT/UI pressure.
+- ESP-IDF 5.5.2 `reconfigure build merge-bin` passed with CMake reporting `1.7.94`. App size is `0x665960` / 6,707,552 bytes with `0x9a6a0` bytes (9%) free in the 7 MB slot; merged image size is `0x765960` / 7,756,128 bytes.
+- SHA256: app `b29e7b9b4b1013aa8f7070ae2357ad3b7b8586351a86c43acfad3b4a46f1424f`; full `f39fe17031e073bdaeb1e5690c2a6899d39edb7bd58e9aa454806b4c897976c4`; ZIP `f5063aed82710c85ecbf0b78d4113731d49989b67e90bc2a4787f00ae5131850`.
+
 ## 2026-07-11 Handoff: v1.7.93 Shake Lab Fortune + Weather/Radio Polish
 
 - Firmware version is `v1.7.93`. Shake Lab now offers Ask Ball, selectable 1-6 dice, and an offline Fortune Stick mode with 24 numbered fortunes, levels, poems, and interpretations.

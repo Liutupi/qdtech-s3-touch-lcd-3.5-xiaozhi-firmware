@@ -652,15 +652,24 @@ static void init_styles() {
 
 // ===== Animation callbacks =====
 void DesktopUI::ObjOpaCb(void* obj, int32_t value) {
-    lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), value, 0);
+    auto* target = static_cast<lv_obj_t*>(obj);
+    if (target && lv_obj_is_visible(target)) {
+        lv_obj_set_style_opa(target, value, 0);
+    }
 }
 
 void DesktopUI::ObjXCb(void* obj, int32_t value) {
-    lv_obj_set_x(static_cast<lv_obj_t*>(obj), value);
+    auto* target = static_cast<lv_obj_t*>(obj);
+    if (target && lv_obj_is_visible(target)) {
+        lv_obj_set_x(target, value);
+    }
 }
 
 void DesktopUI::ObjYCb(void* obj, int32_t value) {
-    lv_obj_set_y(static_cast<lv_obj_t*>(obj), value);
+    auto* target = static_cast<lv_obj_t*>(obj);
+    if (target && lv_obj_is_visible(target)) {
+        lv_obj_set_y(target, value);
+    }
 }
 
 void DesktopUI::ColonTimerCb(lv_timer_t* timer) {
@@ -4870,10 +4879,13 @@ static const char* themed_face_state_text(DeviceState state) {
 }
 
 void DesktopUI::UpdateFaceAnimation() {
+    // The face page is hidden most of the time. Updating its objects every
+    // 100 ms still invalidates LVGL and, with this panel's FULL renderer,
+    // causes an otherwise invisible 480x320 transfer on every tick.
+    if (current_page_ != DesktopPage::XIAOZHI) {
+        return;
+    }
     if (is_themed_face_gif_theme()) {
-        if (current_page_ != DesktopPage::XIAOZHI) {
-            return;
-        }
         EnsureThemedFaceGif();
         if (!themed_face_gif_) {
             return;
@@ -5099,8 +5111,7 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
 
     const bool minute_changed = hour != current_hour_ || minute != current_minute_;
     const bool date_changed = year != current_year_ || month != current_month_ || day != current_day_;
-    const bool force_main_clock = current_page_ == DesktopPage::MAIN;
-    if (!minute_changed && !date_changed && !force_main_clock) {
+    if (!minute_changed && !date_changed) {
         return;
     }
     if (minute_changed || date_changed) {
@@ -5121,7 +5132,7 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
         calendar_follow_today_ = true;
     }
 
-    if (minute_changed || force_main_clock) {
+    if (minute_changed) {
         RenderBigTime(hour, minute, false);
         for (size_t i = 0; i < sizeof(status_bar_time_labels_) / sizeof(status_bar_time_labels_[0]); ++i) {
             if (status_bar_time_labels_[i]) {
@@ -5143,7 +5154,7 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
     if (date_changed) {
         RenderCalendar();
     }
-    if (current_page_ == DesktopPage::MAIN && main_page_) {
+    if (current_page_ == DesktopPage::MAIN && main_page_ && (minute_changed || date_changed)) {
         lv_obj_invalidate(main_page_);
     }
 }
@@ -6226,7 +6237,11 @@ void DesktopUI::SetNetworkStatus(const char* status) {
 }
 
 void DesktopUI::SetBatteryStatus(int level, bool charging, bool valid) {
-    battery_level_ = valid ? std::max(0, std::min(100, level)) : -1;
+    const int next_level = valid ? std::max(0, std::min(100, level)) : -1;
+    if (battery_level_ == next_level && battery_charging_ == charging) {
+        return;
+    }
+    battery_level_ = next_level;
     battery_charging_ = charging;
 
     char text[16];

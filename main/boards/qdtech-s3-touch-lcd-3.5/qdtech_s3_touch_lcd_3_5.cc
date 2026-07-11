@@ -168,6 +168,9 @@ public:
         display_ = lv_display_create(DISPLAY_WIDTH, DISPLAY_HEIGHT);
         ESP_ERROR_CHECK(display_ ? ESP_OK : ESP_ERR_NO_MEM);
         lv_display_set_color_format(display_, LV_COLOR_FORMAT_RGB565);
+        // Keep FULL mode: LVGL's PARTIAL and DIRECT renderers do not preserve
+        // translucent animation composition through this software-rotated
+        // panel path, which corrupts the weather/card regions.
         lv_display_set_buffers(display_, frame_buffer_, nullptr, draw_pixels * sizeof(uint16_t), LV_DISPLAY_RENDER_MODE_FULL);
         lv_display_set_flush_cb(display_, FlushCallback);
         lv_display_set_user_data(display_, this);
@@ -424,7 +427,15 @@ public:
             return 0;
         }
         uint8_t touch_info = 0;
-        if (ReadReg(kTouchInfo, &touch_info, 1) != ESP_OK || !(touch_info & 0x08)) {
+        if (ReadReg(kTouchInfo, &touch_info, 1) != ESP_OK) {
+            return 0;
+        }
+        // Any successful status read proves the bus/controller recovered.
+        // Previously the counter was cleared only after a complete touch-point
+        // read, so three unrelated transient errors over many minutes caused a
+        // disruptive whole-bus reset even when no finger was down.
+        read_failures_ = 0;
+        if (!(touch_info & 0x08)) {
             return 0;
         }
 
@@ -494,6 +505,10 @@ private:
         }
         ++read_failures_;
         const int64_t now_us = esp_timer_get_time();
+        if (last_read_failure_us_ == 0 || now_us - last_read_failure_us_ > 5000000) {
+            read_failures_ = 1;
+        }
+        last_read_failure_us_ = now_us;
         read_backoff_until_us_ = now_us + 750000;
         if (read_failures_ >= 3 && bus_ && now_us - last_bus_reset_us_ > 3000000) {
             last_bus_reset_us_ = now_us;
@@ -510,6 +525,7 @@ private:
     bool initialized_ = false;
     int64_t read_backoff_until_us_ = 0;
     int64_t last_bus_reset_us_ = 0;
+    int64_t last_read_failure_us_ = 0;
 };
 
 class QdtechBatteryMonitor {
@@ -998,7 +1014,12 @@ private:
         if (!bmi270_dev_ || !data || len == 0) {
             return false;
         }
-        if (!LockSharedI2c(0)) {
+        // Touch polling starts just before BMI270 probing and may briefly own
+        // the shared bus.  A zero-timeout lock made that harmless overlap look
+        // like a missing sensor during boot.  Twenty milliseconds remains
+        // short enough for motion sampling while allowing one touch transfer
+        // to finish.
+        if (!LockSharedI2c(pdMS_TO_TICKS(20))) {
             return false;
         }
         esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &reg, 1, data, len, pdMS_TO_TICKS(100));
@@ -1267,7 +1288,7 @@ private:
                     ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kShakeLabSampleIntervalMs));
                 }
-                if (loop_ms < touch_active_until_ms_) {
+                if (loop_ms < touch_active_until_ms_.load(std::memory_order_relaxed)) {
                     if (loop_ms - last_shake_touch_skip_log_ms >= kShakeLabTouchSkipLogIntervalMs) {
                         ESP_LOGI(TAG, "Shake Lab BMI270 read skipped: touch active");
                         last_shake_touch_skip_log_ms = loop_ms;
@@ -1320,7 +1341,7 @@ private:
                 shake_sampling_was_active = false;
                 ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling disabled; restoring low-rate orientation polling");
             }
-            if (loop_ms < touch_active_until_ms_) {
+            if (loop_ms < touch_active_until_ms_.load(std::memory_order_relaxed)) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 continue;
             }
@@ -1914,9 +1935,9 @@ private:
             return;
         }
 
-        if (board->touch_cached_down_) {
-            data->point.x = board->touch_cached_x_;
-            data->point.y = board->touch_cached_y_;
+        if (board->touch_cached_down_.load(std::memory_order_acquire)) {
+            data->point.x = board->touch_cached_x_.load(std::memory_order_relaxed);
+            data->point.y = board->touch_cached_y_.load(std::memory_order_relaxed);
             data->state = LV_INDEV_STATE_PRESSED;
         } else {
             data->state = LV_INDEV_STATE_RELEASED;
@@ -1925,19 +1946,26 @@ private:
 
     void PollTouch() {
         QdtechTouch::TouchPoint points[10] = {};
+        // Touch and BMI270 share I2C0.  Serialize the complete touch
+        // transaction; concurrent transfers previously left the controller in
+        // repeated software timeouts after an otherwise normal tap.
+        if (!LockSharedI2c(pdMS_TO_TICKS(5))) {
+            return;
+        }
         const size_t point_count = touch_.ReadPoints(points, 10);
+        UnlockSharedI2c();
         const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
         if (touched) {
-            touch_active_until_ms_ = now_ms + 800;
+            touch_active_until_ms_.store(now_ms + 800, std::memory_order_relaxed);
         }
         auto* desktop_ui = GetDesktopUI();
 
-        touch_cached_down_ = touched;
         if (touched) {
-            touch_cached_x_ = points[0].x;
-            touch_cached_y_ = points[0].y;
+            touch_cached_x_.store(points[0].x, std::memory_order_relaxed);
+            touch_cached_y_.store(points[0].y, std::memory_order_relaxed);
         }
+        touch_cached_down_.store(touched, std::memory_order_release);
 
         if (desktop_ui && desktop_ui->IsFcPlayingView()) {
             uint16_t xs[10] = {};
@@ -2552,7 +2580,7 @@ private:
     int16_t bmi270_baseline_y_ = 0;
     int16_t bmi270_baseline_z_ = 0;
     int64_t bmi270_baseline_mag_sq_ = 0;
-    int64_t touch_active_until_ms_ = 0;
+    std::atomic<int64_t> touch_active_until_ms_{0};
     std::atomic<bool> shake_lab_sampling_active_{false};
     ShakeDetector shake_detector_;
     QdtechTouch touch_;
@@ -2564,9 +2592,9 @@ private:
     int64_t boot_power_press_start_ms_ = 0;
     lv_indev_t* touch_indev_ = nullptr;
     bool touch_down_ = false;
-    bool touch_cached_down_ = false;
-    uint16_t touch_cached_x_ = 0;
-    uint16_t touch_cached_y_ = 0;
+    std::atomic<bool> touch_cached_down_{false};
+    std::atomic<uint16_t> touch_cached_x_{0};
+    std::atomic<uint16_t> touch_cached_y_{0};
     int64_t touch_start_ms_ = 0;
     uint16_t touch_start_x_ = 0;
     uint16_t touch_start_y_ = 0;

@@ -55,9 +55,11 @@ private:
     void OnDeviceStateChanged(int previous_state, int current_state);
     void NextStation(int delta);
     void SetUi(const char* state, const char* detail);
-    void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate);
+    void WritePcm(const int16_t* pcm, int samples, int channels, int sample_rate,
+                  int16_t* mono_buffer, int mono_capacity,
+                  int16_t* output_buffer, int output_capacity);
     void ResetAudioLeveler();
-    void ApplyAudioLeveler(std::vector<int16_t>& pcm);
+    void ApplyAudioLeveler(int16_t* pcm, int samples);
     void LoadFavorites();
     void SaveFavorites();
     void LoadStationIndex();
@@ -80,9 +82,9 @@ private:
     bool playing_custom_url_ = false;
     bool custom_url_stream_completed_ = false;
     bool custom_url_fatal_error_ = false;
+    bool last_url_permanent_error_ = false;
+    bool skip_reconnect_once_ = false;
     TickType_t custom_url_speaking_grace_until_ = 0;
     std::atomic<uint32_t> stream_generation_{0};
-    std::vector<int16_t> pcm_mono_buf_;
-    std::vector<int16_t> pcm_output_buf_;
     int32_t audio_gain_q12_ = 4096;
 };
