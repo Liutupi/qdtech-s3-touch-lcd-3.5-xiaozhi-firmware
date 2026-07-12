@@ -1,3 +1,13 @@
+## 2026-07-12: v1.7.95 Fast Weather Startup and AFE Task Safety
+
+- Decoupled initial weather synchronization from XiaoZhi OTA/MQTT activation and fetched weather before waiting for SNTP.
+- Kept the official QDTech low-memory release configuration without local AFE/WakeNet; touch-based voice interaction remains available.
+- Moved optional AFE worker stacks to PSRAM and added explicit task-creation failure diagnostics.
+- Hardware verified weather success at 12.2 seconds after boot with no `Weather low memory`, about 9 KB stable internal SRAM, and a 6,067-byte observed minimum.
+- Preserved the existing UI, weather artwork, animation, and full render mode.
+- ESP-IDF 5.5.2 build/merge passed: app `0x665810`, slot free `0x9a7f0` (9%), merged `0x765810`.
+- SHA256: app `01c16e3ad2447860afec7ad993a9c4a8e160c97c943e3f0f3a37b723f3939d7d`; full `0f097947309f653570193a72951bc872ebc2e18261a55445e734e03010cb1ea9`; ZIP `b1300051686d44b53515f48faa340030a5c82253e9252f3017b8c13cdc27d112`.
+
 ## 2026-07-11: v1.7.94 Streaming, Touch, and Private FM Continuation
 
 - Moved compressed audio, decoder working memory, PCM, mono, and output scratch buffers to PSRAM and removed a per-output vector allocation.

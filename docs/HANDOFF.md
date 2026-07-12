@@ -1,3 +1,13 @@
+## 2026-07-12 Handoff: v1.7.95 Fast Weather Startup and AFE Task Safety
+
+- Firmware version is `v1.7.95`. The QDTech release keeps the board's official low-memory configuration with local AFE/WakeNet disabled; touch-based XiaoZhi interaction remains available. Enabling both AFE pipelines with the full UI can reduce internal SRAM below 1 KB and is not safe for this board.
+- Weather startup no longer waits for XiaoZhi OTA/MQTT activation or SNTP completion. Once Wi-Fi is available, the independent Open-Meteo request starts after a short three-second settling delay, then time synchronization follows.
+- Optional AFE builds now allocate the audio communication and wake-word detection task stacks in PSRAM and report task creation failures instead of silently feeding an AFE ring buffer with no fetch consumer.
+- Hardware verification on `/dev/cu.usbmodem3101`: weather synchronized at 12.2 seconds after boot (`33 C 中山 阴`), no `Weather low memory` appeared, stable internal SRAM was about 9 KB with a 6,067-byte observed minimum, and no reboot occurred on the official QDTech configuration.
+- The original UI, weather artwork, weather animation, and LVGL `FULL` rendering mode remain unchanged.
+- ESP-IDF 5.5.2 build/merge passed: app `0x665810` / 6,707,216 bytes with `0x9a7f0` bytes (9%) free in the 7 MB slot; merged image `0x765810` / 7,755,792 bytes.
+- SHA256: app `01c16e3ad2447860afec7ad993a9c4a8e160c97c943e3f0f3a37b723f3939d7d`; full `0f097947309f653570193a72951bc872ebc2e18261a55445e734e03010cb1ea9`; ZIP `b1300051686d44b53515f48faa340030a5c82253e9252f3017b8c13cdc27d112`.
+
 ## 2026-07-11 Handoff: v1.7.94 Streaming + Private FM Continuation
 
 - Firmware version is `v1.7.94`. The existing UI, weather artwork, and full-screen weather animation are preserved; the display remains on LVGL `FULL` render mode because `PARTIAL` and `DIRECT` corrupt translucent GIF composition on this panel.

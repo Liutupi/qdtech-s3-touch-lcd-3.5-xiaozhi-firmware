@@ -465,7 +465,9 @@ void TimeWeatherService::Task() {
     }
     ESP_LOGI(TAG, "WiFi connected, starting time weather service");
     ShowCachedWeather("Weather sync");
-    WaitApplicationReady();
+    // Weather only needs a working Wi-Fi route.  Do not wait for the XiaoZhi
+    // OTA/MQTT activation path: either remote service can be slow while the
+    // independent Open-Meteo endpoint is already reachable.
     vTaskDelay(pdMS_TO_TICKS(3000));
     StartSntp();
     
@@ -473,15 +475,8 @@ void TimeWeatherService::Task() {
         // 启动SNTP
         StartSntp();
         
-        // 等待时间同步
-        if (WaitTimeReady()) {
-            ESP_LOGI(TAG, "Time synchronized");
-            UpdateTime();
-        } else {
-            ESP_LOGW(TAG, "Time sync timeout");
-        }
-        
-        // 获取天气
+        // Weather is independent of SNTP.  Fetch it first so a slow or blocked
+        // time server cannot delay the desktop weather card.
         const int retry_limit = weather_low_memory_deferred_
                                     ? kWeatherLowMemoryRetrySeconds
                                     : WeatherRetrySeconds();
@@ -494,6 +489,14 @@ void TimeWeatherService::Task() {
             ShowCachedWeather("Weather retry");
             weather_ok = FetchWeather();
             retry_ticks = 0;
+        }
+
+        // 等待时间同步
+        if (WaitTimeReady()) {
+            ESP_LOGI(TAG, "Time synchronized");
+            UpdateTime();
+        } else {
+            ESP_LOGW(TAG, "Time sync timeout");
         }
         clock_ticks = 0;
         

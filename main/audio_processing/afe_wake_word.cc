@@ -2,6 +2,8 @@
 #include "application.h"
 
 #include <esp_log.h>
+#include <esp_heap_caps.h>
+#include <freertos/idf_additions.h>
 #include <model_path.h>
 #include <arpa/inet.h>
 #include <sstream>
@@ -70,11 +72,18 @@ void AfeWakeWord::Initialize(AudioCodec* codec) {
     afe_iface_ = esp_afe_handle_from_config(afe_config);
     afe_data_ = afe_iface_->create_from_config(afe_config);
 
-    xTaskCreate([](void* arg) {
+    BaseType_t task_result = xTaskCreateWithCaps([](void* arg) {
         auto this_ = (AfeWakeWord*)arg;
         this_->AudioDetectionTask();
         vTaskDelete(NULL);
-    }, "audio_detection", 4096, this, 3, nullptr);
+    }, "audio_detection", 4096, this, 3, nullptr,
+       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (task_result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create audio detection task in PSRAM ret=%ld free_internal=%u largest_internal=%u",
+                 static_cast<long>(task_result),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+    }
 }
 
 void AfeWakeWord::OnWakeWordDetected(std::function<void(const std::string& wake_word)> callback) {

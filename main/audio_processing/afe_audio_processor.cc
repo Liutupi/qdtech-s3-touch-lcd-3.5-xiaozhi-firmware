@@ -1,5 +1,7 @@
 #include "afe_audio_processor.h"
+#include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <freertos/idf_additions.h>
 
 #define PROCESSOR_RUNNING 0x01
 
@@ -58,11 +60,18 @@ void AfeAudioProcessor::Initialize(AudioCodec* codec) {
     afe_iface_ = esp_afe_handle_from_config(afe_config);
     afe_data_ = afe_iface_->create_from_config(afe_config);
     
-    xTaskCreate([](void* arg) {
+    BaseType_t task_result = xTaskCreateWithCaps([](void* arg) {
         auto this_ = (AfeAudioProcessor*)arg;
         this_->AudioProcessorTask();
         vTaskDelete(NULL);
-    }, "audio_communication", 4096, this, 3, NULL);
+    }, "audio_communication", 4096, this, 3, NULL,
+       MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (task_result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create audio communication task in PSRAM ret=%ld free_internal=%u largest_internal=%u",
+                 static_cast<long>(task_result),
+                 static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                 static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+    }
 }
 
 AfeAudioProcessor::~AfeAudioProcessor() {
@@ -147,6 +156,10 @@ void AfeAudioProcessor::AudioProcessorTask() {
 }
 
 void AfeAudioProcessor::EnableDeviceAec(bool enable) {
+    if (afe_data_ == nullptr) {
+        ESP_LOGI(TAG, "Deferring AEC mode until audio processor initialization");
+        return;
+    }
     if (enable) {
 #if CONFIG_USE_DEVICE_AEC
         afe_iface_->disable_vad(afe_data_);
