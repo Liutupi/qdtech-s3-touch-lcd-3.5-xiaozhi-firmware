@@ -340,9 +340,6 @@ private:
     lv_obj_t* hourglass_status_label_ = nullptr;
     lv_obj_t* hourglass_top_sand_ = nullptr;
     lv_obj_t* hourglass_bottom_sand_ = nullptr;
-    lv_obj_t* hourglass_top_sand_strips_[16] = {};
-    lv_obj_t* hourglass_bottom_sand_strips_[22] = {};
-    lv_obj_t* hourglass_falling_dots_[12] = {};
     lv_obj_t* hourglass_preset_buttons_[4] = {};
     lv_obj_t* hourglass_preset_labels_[4] = {};
     lv_timer_t* hourglass_tick_timer_ = nullptr;
@@ -544,6 +541,7 @@ private:
     static void FocusTimerCb(lv_timer_t* timer);
     static void HourglassTickCb(lv_timer_t* timer);
     static void HourglassAnimCb(lv_timer_t* timer);
+    static void HourglassSandDrawCb(lv_event_t* event);
     static void ShakeLabAnimCb(lv_timer_t* timer);
     static void DailyCardBreathCb(lv_timer_t* timer);
     static void ClockShadowCb(lv_timer_t* timer);

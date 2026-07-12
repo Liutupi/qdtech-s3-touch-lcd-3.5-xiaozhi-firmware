@@ -1,3 +1,13 @@
+## 2026-07-13 Handoff: v1.7.97 Particle Hourglass Animation
+
+- Firmware version is `v1.7.97`. The existing hourglass frame, portrait layout, controls, timer behavior, completion sound, weather artwork, and all other UI remain unchanged.
+- Replaced the upper and lower horizontal sand strips with individually rendered 4-5 px yellow grains. The upper pile drains from its uneven surface toward the neck while the lower pile fills from the floor upward and spreads centre-out across each row.
+- Eight independently phased grains accelerate through the neck. At impact they fan outward with a short fade, producing a small bounce/spread instead of a rigid falling line.
+- The grains are drawn through one custom LVGL layer rather than more than one hundred child objects. Only that sand layer is invalidated by the 100 ms animation timer, limiting object memory and layout work on this low-SRAM board.
+- ESP-IDF 5.5.2 compilation and link passed with CMake reporting `1.7.97`. App size is 6,708,528 bytes with 631,504 bytes (9%) free; merged recovery image size is 7,757,104 bytes.
+- The App image was flashed to `/dev/cu.usbmodem212401` at `0x100000`; esptool verified the written hash and the board restarted normally with BMI270 polling active. Final visual acceptance of grain placement remains a physical screen check after the 75-second hourglass startup guard.
+- SHA256: app `1b8566d3fa9a70fd44c207a0eaea2068b51a914cb6ba1cbe21b95d91da85de24`; full `7ac3894cfb34186e4d2aec44266b0327f6f3c99e356b6f16caf743aa97fba494`; ZIP `1d11df95ab2575b3ece4355529342b080d1c00898b8004ced4e0b54030e441a4`.
+
 ## 2026-07-13 Handoff: v1.7.96 Music Playback and Lyric Compatibility
 
 - Firmware version is `v1.7.96`. The original UI, weather artwork, weather animation, lyric panel geometry, and LVGL `FULL` rendering mode are preserved.

@@ -778,34 +778,130 @@ void DesktopUI::HourglassAnimCb(lv_timer_t* timer) {
         return;
     }
     self->hourglass_anim_tick_++;
-    static constexpr int16_t kStreamX[7] = {159, 156, 161, 158, 162, 157, 160};
-    for (int i = 0; i < 7; ++i) {
-        lv_obj_t* dot = self->hourglass_falling_dots_[i];
-        if (!dot) {
-            continue;
-        }
-        const int phase = (self->hourglass_anim_tick_ * 8 + i * 17) % 96;
-        const lv_opa_t opa = phase < 78 ? static_cast<lv_opa_t>(LV_OPA_70 + ((i % 3) * 10))
-                                        : static_cast<lv_opa_t>(LV_OPA_TRANSP);
-        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, kStreamX[i], 191 + phase);
-        lv_obj_set_style_bg_opa(dot, opa, 0);
-        lv_obj_set_style_shadow_opa(dot, opa > LV_OPA_50 ? LV_OPA_30 : LV_OPA_TRANSP, 0);
+    if (self->hourglass_top_sand_) {
+        lv_obj_invalidate(self->hourglass_top_sand_);
+    }
+}
+
+void DesktopUI::HourglassSandDrawCb(lv_event_t* event) {
+    auto* self = static_cast<DesktopUI*>(lv_event_get_user_data(event));
+    lv_obj_t* obj = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_layer_t* layer = lv_event_get_layer(event);
+    if (!self || !obj || !layer) {
+        return;
     }
 
-    static constexpr int16_t kSparkleX[5] = {126, 141, 175, 191, 207};
-    static constexpr int16_t kSparkleY[5] = {307, 295, 284, 301, 311};
-    for (int i = 7; i < 12; ++i) {
-        lv_obj_t* dot = self->hourglass_falling_dots_[i];
-        if (!dot) {
-            continue;
+    lv_area_t obj_area;
+    lv_obj_get_coords(obj, &obj_area);
+    const int ox = obj_area.x1;
+    const int oy = obj_area.y1;
+    const lv_color_t sand = LV_COLOR_MAKE(0xf6, 0xb2, 0x3f);
+    const lv_color_t light = LV_COLOR_MAKE(0xff, 0xd1, 0x67);
+
+    auto draw_particle = [&](int x, int y, int size, lv_color_t color, lv_opa_t opa) {
+        lv_draw_rect_dsc_t dsc;
+        lv_draw_rect_dsc_init(&dsc);
+        dsc.bg_color = color;
+        dsc.bg_opa = opa;
+        dsc.radius = LV_RADIUS_CIRCLE;
+        lv_area_t area = {ox + x, oy + y, ox + x + size - 1, oy + y + size - 1};
+        lv_draw_rect(layer, &dsc, &area);
+    };
+
+    const uint32_t elapsed = self->hourglass_total_sec_ > self->hourglass_remaining_sec_
+        ? self->hourglass_total_sec_ - self->hourglass_remaining_sec_
+        : 0;
+    const uint32_t progress = self->hourglass_total_sec_ == 0
+        ? 0
+        : std::min<uint32_t>(1000, elapsed * 1000 / self->hourglass_total_sec_);
+
+    // The upper pile drains from its irregular surface down toward the neck.
+    int top_total = 0;
+    for (int row = 0; row < 10; ++row) {
+        top_total += std::max(3, (158 - row * 14) / 9);
+    }
+    const int top_visible = self->hourglass_done_
+        ? 0
+        : std::max(1, static_cast<int>((top_total * (1000 - progress) + 999) / 1000));
+    const int top_removed = top_total - top_visible;
+    int particle_index = 0;
+    for (int row = 0; row < 10; ++row) {
+        const int width = 158 - row * 14;
+        const int count = std::max(3, width / 9);
+        const int start_x = 110 - ((count - 1) * 9) / 2;
+        for (int col = 0; col < count; ++col, ++particle_index) {
+            if (particle_index < top_removed) {
+                continue;
+            }
+            const int jitter_x = ((row * 11 + col * 7) % 5) - 2;
+            const int jitter_y = ((row * 3 + col * 5) % 3) - 1;
+            const int size = 4 + ((row + col * 2) % 2);
+            draw_particle(start_x + col * 9 + jitter_x, 13 + row * 5 + jitter_y,
+                          size, ((row + col) % 4 == 0) ? light : sand,
+                          static_cast<lv_opa_t>(LV_OPA_80 + ((row + col) % 3) * 8));
         }
-        const int j = i - 7;
-        const int pulse = (self->hourglass_anim_tick_ * 9 + j * 31) % 120;
-        const lv_opa_t opa = pulse < 60 ? static_cast<lv_opa_t>(LV_OPA_30 + pulse / 2)
-                                        : static_cast<lv_opa_t>(LV_OPA_60 - (pulse - 60) / 2);
-        lv_obj_align(dot, LV_ALIGN_TOP_LEFT, kSparkleX[j] + ((pulse / 30) & 1), kSparkleY[j]);
-        lv_obj_set_style_bg_opa(dot, opa, 0);
-        lv_obj_set_style_shadow_opa(dot, LV_OPA_20, 0);
+    }
+
+    // The lower pile fills from the floor upward. Each row grows from its centre
+    // toward both sides before the next row starts, giving a spreading landing.
+    int bottom_total = 0;
+    for (int row = 0; row < 12; ++row) {
+        bottom_total += std::max(2, (174 - row * 14) / 9);
+    }
+    const int bottom_visible = std::min(bottom_total,
+        5 + static_cast<int>((bottom_total - 5) * progress / 1000));
+    particle_index = 0;
+    int filled_rows = 0;
+    for (int row = 0; row < 12; ++row) {
+        const int width = 174 - row * 14;
+        const int count = std::max(2, width / 9);
+        const int start_x = 110 - ((count - 1) * 9) / 2;
+        int drawn_in_row = 0;
+        for (int step = 0; step < count; ++step, ++particle_index) {
+            if (particle_index >= bottom_visible) {
+                break;
+            }
+            const int col = (step & 1)
+                ? count / 2 + step / 2
+                : (count - 1) / 2 - step / 2;
+            const int jitter_x = ((row * 13 + col * 3) % 5) - 2;
+            const int jitter_y = ((row * 7 + col * 5) % 3) - 1;
+            const int size = 4 + ((row * 2 + col) % 2);
+            draw_particle(start_x + col * 9 + jitter_x, 190 - row * 5 + jitter_y,
+                          size, ((row + col) % 5 == 0) ? light : sand,
+                          static_cast<lv_opa_t>(LV_OPA_80 + ((row + col) % 3) * 8));
+            drawn_in_row++;
+        }
+        if (drawn_in_row == count) {
+            filled_rows = row + 1;
+        }
+        if (particle_index >= bottom_visible) {
+            break;
+        }
+    }
+
+    if (!self->hourglass_running_) {
+        return;
+    }
+
+    // Independent grains accelerate through the neck. Near the pile they fan
+    // out and fade, so the impact reads as a tiny bounce rather than a rigid line.
+    const int landing_y = std::max(126, 187 - filled_rows * 5);
+    static constexpr int8_t kDrift[8] = {-2, 1, 0, 2, -1, 1, -2, 0};
+    for (int i = 0; i < 8; ++i) {
+        const int phase = (self->hourglass_anim_tick_ * 9 + i * 17) % 108;
+        if (phase < 82) {
+            const int y = 62 + (phase * phase * (landing_y - 62)) / (82 * 82);
+            const int x = 108 + kDrift[i] + ((phase / 22 + i) % 3) - 1;
+            draw_particle(x, y, 4 + (i % 2), (i % 3 == 0) ? light : sand,
+                          static_cast<lv_opa_t>(LV_OPA_70 + (i % 3) * 10));
+        } else if (phase < 102) {
+            const int spread = phase - 82;
+            const int direction = (i & 1) ? 1 : -1;
+            draw_particle(108 + direction * (2 + spread), landing_y + std::min(5, spread / 4),
+                          4, (i % 3 == 0) ? light : sand,
+                          static_cast<lv_opa_t>(LV_OPA_70 - spread * 3));
+        }
     }
 }
 
@@ -3725,9 +3821,6 @@ void DesktopUI::CreateHourglassPage(lv_obj_t* root) {
     lv_obj_clear_flag(hourglass_portrait_, LV_OBJ_FLAG_SCROLLABLE);
 
     const lv_color_t brown = LV_COLOR_MAKE(0x4b, 0x2d, 0x16);
-    const lv_color_t sand_line = LV_COLOR_MAKE(0xf6, 0xb2, 0x3f);
-    const lv_color_t sand_soft = LV_COLOR_MAKE(0xff, 0xd1, 0x67);
-
     auto rounded = [](lv_obj_t* parent, int x, int y, int w, int h, int radius,
                       lv_color_t bg, lv_opa_t opa, lv_color_t border, int border_w) {
         lv_obj_t* obj = lv_obj_create(parent);
@@ -3747,29 +3840,12 @@ void DesktopUI::CreateHourglassPage(lv_obj_t* root) {
     lv_image_set_src(body, &qd_hourglass_body);
     lv_obj_align(body, LV_ALIGN_TOP_LEFT, 0, 0);
 
-    for (int i = 0; i < 16; ++i) {
-        const int y = 143 + i * 3;
-        const int width = std::max(12, 166 - i * 9);
-        const int x = 160 - width / 2 + ((i % 3) - 1);
-        const lv_color_t color = (i % 3 == 0) ? sand_soft : sand_line;
-        hourglass_top_sand_strips_[i] = rounded(hourglass_portrait_, x, y, width, 4, 2,
-                                                color, LV_OPA_80, color, 0);
-    }
-    for (int i = 0; i < 22; ++i) {
-        const int width = std::min(184, 24 + i * 8);
-        const int x = 160 - width / 2 + ((i % 2) ? 1 : -1);
-        const int y = 323 - i * 3;
-        const lv_color_t color = (i % 4 == 0) ? sand_soft : sand_line;
-        hourglass_bottom_sand_strips_[i] = rounded(hourglass_portrait_, x, y, width, 4, 2,
-                                                   color, LV_OPA_TRANSP, color, 0);
-    }
-    for (int i = 0; i < 12; ++i) {
-        const int size = i < 7 ? (i % 2 ? 6 : 7) : (i % 2 ? 5 : 6);
-        hourglass_falling_dots_[i] = circle(hourglass_portrait_, size, i < 7 ? sand_line : sand_soft, LV_OPA_TRANSP);
-        lv_obj_set_style_shadow_width(hourglass_falling_dots_[i], 4, 0);
-        lv_obj_set_style_shadow_color(hourglass_falling_dots_[i], sand_soft, 0);
-        lv_obj_set_style_shadow_opa(hourglass_falling_dots_[i], LV_OPA_30, 0);
-    }
+    hourglass_top_sand_ = lv_obj_create(hourglass_portrait_);
+    lv_obj_remove_style_all(hourglass_top_sand_);
+    lv_obj_set_size(hourglass_top_sand_, 220, 210);
+    lv_obj_align(hourglass_top_sand_, LV_ALIGN_TOP_LEFT, 50, 130);
+    lv_obj_clear_flag(hourglass_top_sand_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(hourglass_top_sand_, HourglassSandDrawCb, LV_EVENT_DRAW_MAIN, this);
 
     lv_obj_t* time_panel = rounded(hourglass_portrait_, 34, 366, 252, 66, 14,
                                    LV_COLOR_MAKE(0xff, 0xfb, 0xf3), LV_OPA_COVER,
@@ -5625,9 +5701,6 @@ void DesktopUI::ReloadUserProfile() {
     hourglass_status_label_ = nullptr;
     hourglass_top_sand_ = nullptr;
     hourglass_bottom_sand_ = nullptr;
-    memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
-    memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
-    memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
     memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
     memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
     xiaozhi_page_ = nullptr;
@@ -5691,9 +5764,6 @@ void DesktopUI::CycleTheme() {
     hourglass_status_label_ = nullptr;
     hourglass_top_sand_ = nullptr;
     hourglass_bottom_sand_ = nullptr;
-    memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
-    memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
-    memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
     memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
     memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
     xiaozhi_page_ = nullptr;
@@ -5887,9 +5957,6 @@ void DesktopUI::ExitHourglassMode() {
         hourglass_status_label_ = nullptr;
         hourglass_top_sand_ = nullptr;
         hourglass_bottom_sand_ = nullptr;
-        memset(hourglass_top_sand_strips_, 0, sizeof(hourglass_top_sand_strips_));
-        memset(hourglass_bottom_sand_strips_, 0, sizeof(hourglass_bottom_sand_strips_));
-        memset(hourglass_falling_dots_, 0, sizeof(hourglass_falling_dots_));
         memset(hourglass_preset_buttons_, 0, sizeof(hourglass_preset_buttons_));
         memset(hourglass_preset_labels_, 0, sizeof(hourglass_preset_labels_));
         ESP_LOGI(TAG, "Hourglass page released");
@@ -5986,37 +6053,8 @@ void DesktopUI::UpdateHourglassUI() {
                           hourglass_done_ ? "时间到" : (paused_midway ? "暂停中" : "倒计时中"));
     }
 
-    const uint32_t elapsed = hourglass_total_sec_ > hourglass_remaining_sec_
-        ? hourglass_total_sec_ - hourglass_remaining_sec_
-        : 0;
-    const uint32_t progress = hourglass_total_sec_ == 0 ? 0 : (elapsed * 1000) / hourglass_total_sec_;
-    const int top_visible = hourglass_done_ ? 0 : std::max(1, 16 - static_cast<int>(progress * 15 / 1000));
-    const int bottom_visible = std::min(22, 4 + static_cast<int>(progress * 18 / 1000));
-    for (int i = 0; i < 16; ++i) {
-        lv_obj_t* strip = hourglass_top_sand_strips_[i];
-        if (!strip) {
-            continue;
-        }
-        const bool visible = i >= (16 - top_visible);
-        const lv_opa_t opa = visible ? static_cast<lv_opa_t>(LV_OPA_70 + (i % 3) * 10)
-                                     : static_cast<lv_opa_t>(LV_OPA_TRANSP);
-        lv_obj_set_style_bg_opa(strip, opa, 0);
-    }
-    for (int i = 0; i < 22; ++i) {
-        lv_obj_t* strip = hourglass_bottom_sand_strips_[i];
-        if (!strip) {
-            continue;
-        }
-        const bool visible = i < bottom_visible;
-        const lv_opa_t opa = visible ? static_cast<lv_opa_t>(LV_OPA_70 + (i % 4) * 6)
-                                     : static_cast<lv_opa_t>(LV_OPA_TRANSP);
-        lv_obj_set_style_bg_opa(strip, opa, 0);
-    }
-    for (auto* dot : hourglass_falling_dots_) {
-        if (dot) {
-            lv_obj_set_style_bg_opa(dot, hourglass_running_ ? LV_OPA_70 : LV_OPA_TRANSP, 0);
-            lv_obj_set_style_shadow_opa(dot, hourglass_running_ ? LV_OPA_20 : LV_OPA_TRANSP, 0);
-        }
+    if (hourglass_top_sand_) {
+        lv_obj_invalidate(hourglass_top_sand_);
     }
     UpdateHourglassButtons();
 }
