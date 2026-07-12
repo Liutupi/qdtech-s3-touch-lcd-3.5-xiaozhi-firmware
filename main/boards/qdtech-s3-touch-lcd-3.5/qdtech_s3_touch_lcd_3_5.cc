@@ -979,6 +979,48 @@ private:
         }
     }
 
+    // MCP song providers sometimes return a JSON-shaped string containing
+    // literal "\\n" escapes or unescaped newlines.  cJSON rejects the latter
+    // and the regular LRC parser cannot see timestamps hidden behind the JSON
+    // prefix.  Recover the embedded LRC without requiring another network
+    // request.
+    static void AppendLooseLrcText(const std::string& input,
+                                   std::vector<ScheduledLyricLine>& lines) {
+        std::string normalized;
+        normalized.reserve(input.size());
+        for (size_t i = 0; i < input.size(); ++i) {
+            if (input[i] == '\\' && i + 1 < input.size()) {
+                const char next = input[i + 1];
+                if (next == 'n' || next == 'r') {
+                    normalized.push_back('\n');
+                    ++i;
+                    continue;
+                }
+                if (next == '\\' || next == '"' || next == '/') {
+                    normalized.push_back(next);
+                    ++i;
+                    continue;
+                }
+            }
+            normalized.push_back(input[i]);
+        }
+
+        size_t lrc_start = std::string::npos;
+        for (size_t i = 0; i + 3 < normalized.size(); ++i) {
+            if (normalized[i] == '[' &&
+                std::isdigit(static_cast<unsigned char>(normalized[i + 1])) &&
+                normalized.find(':', i + 2) != std::string::npos) {
+                lrc_start = i;
+                break;
+            }
+        }
+        if (lrc_start != std::string::npos) {
+            AppendLrcText(normalized.c_str() + lrc_start, lines);
+        } else {
+            AppendLrcText(normalized.c_str(), lines);
+        }
+    }
+
     void InitializeI2c() {
         i2c_master_bus_config_t i2c_bus_cfg = {
             .i2c_port = I2C_NUM_0,
@@ -1589,7 +1631,7 @@ private:
 
         cJSON* root = cJSON_Parse(lyrics_json.c_str());
         if (!root) {
-            AppendLrcText(lyrics_json.c_str(), lines);
+            AppendLooseLrcText(lyrics_json, lines);
             ESP_LOGI(TAG, "ParseLyricsJson raw_lrc bytes=%u lines=%u",
                      static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
             return lines;
@@ -1604,7 +1646,7 @@ private:
                 root = nested_root;
                 lyric_source = root;
             } else {
-                AppendLrcText(nested.c_str(), lines);
+                AppendLooseLrcText(nested, lines);
                 ESP_LOGI(TAG, "ParseLyricsJson nested_lrc bytes=%u lines=%u",
                          static_cast<unsigned>(lyrics_json.size()), static_cast<unsigned>(lines.size()));
                 return lines;

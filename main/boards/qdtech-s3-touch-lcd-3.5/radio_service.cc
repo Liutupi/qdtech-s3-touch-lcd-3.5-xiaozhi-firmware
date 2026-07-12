@@ -396,18 +396,23 @@ void RadioService::Start(DesktopUI* desktop_ui) {
     ESP_LOGI(TAG, "radio task create free_internal=%u largest_internal=%u",
              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
              static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
-    BaseType_t ret = xTaskCreateWithCaps([](void* arg) {
+    // Keep decode/I2S feeding ahead of LVGL's full-screen RGB transfers.  At
+    // the same priority an occasional 40-50 ms display flush can starve the
+    // codec long enough to make high-bitrate music audibly stutter.
+    constexpr UBaseType_t kAudioTaskPriority = 6;
+    constexpr BaseType_t kAudioTaskCore = 1;
+    BaseType_t ret = xTaskCreatePinnedToCoreWithCaps([](void* arg) {
         static_cast<RadioService*>(arg)->Task();
-    }, "radio_service", kTaskStackBytes, this, 4, &task_handle_,
+    }, "radio_service", kTaskStackBytes, this, kAudioTaskPriority, &task_handle_, kAudioTaskCore,
        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     task_stack_internal_ = false;
     if (ret != pdPASS) {
         ESP_LOGW(TAG, "radio PSRAM task create failed ret=%ld, trying internal memory",
                  static_cast<long>(ret));
         task_handle_ = nullptr;
-        ret = xTaskCreate([](void* arg) {
+        ret = xTaskCreatePinnedToCore([](void* arg) {
             static_cast<RadioService*>(arg)->Task();
-        }, "radio_service", kTaskStackBytes, this, 4, &task_handle_);
+        }, "radio_service", kTaskStackBytes, this, kAudioTaskPriority, &task_handle_, kAudioTaskCore);
         task_stack_internal_ = (ret == pdPASS);
     }
     if (ret != pdPASS) {

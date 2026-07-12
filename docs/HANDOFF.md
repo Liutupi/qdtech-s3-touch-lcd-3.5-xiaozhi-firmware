@@ -1,3 +1,14 @@
+## 2026-07-13 Handoff: v1.7.96 Music Playback and Lyric Compatibility
+
+- Firmware version is `v1.7.96`. The original UI, weather artwork, weather animation, lyric panel geometry, and LVGL `FULL` rendering mode are preserved.
+- Music playback no longer lets a tap anywhere on the XiaoZhi page start voice interaction and steal audio focus; only the explicit talk control toggles chat.
+- The radio/music task runs at priority 6 pinned to core 1 so full-screen LCD transfers are less likely to starve MP3 decoding and I2S output. Hidden radio-spectrum and music-cover timers are paused outside their own pages, and duplicate lyric lines no longer trigger redundant UI updates.
+- Lyric parsing now recovers LRC timestamps from provider payloads containing literal newline escapes, JSON-shaped wrappers, or malformed/unescaped newlines. Hardware logs confirmed a previously rejected 1,945-byte payload parsed into 41 scheduled lyric lines and displayed normally.
+- Larger 20/24 px lyric experiments and experimental burst buffering/resampling changes were rolled back after hardware testing reproduced audible stutter. The release keeps the earlier broad-coverage 16 px lyric font and the playback parameters the user identified as smoother.
+- Hardware testing used `/dev/cu.usbmodem212401`. Music, MQTT, weather, daily quote, lyric scheduling, touch, and audio output all ran; the official low-memory AFE/WakeNet-disabled configuration remains required.
+- ESP-IDF 5.5.2 build passed with CMake reporting `1.7.96`. App size is 6,708,368 bytes with 631,664 bytes (9%) free; merged image size is 7,756,944 bytes.
+- SHA256: app `b972d5d95f6528b18d5f6f610772c24a2e90f2de1528c422646012ac6de39043`; full `d110a8063636048c14a8479e2c292498244d7b32bc924de94bb4546dc7df6807`; ZIP `6688e7fca6fd8c924af2fad0301bcecef55bacf3d1ad6ee07aad53741f841f30`.
+
 ## 2026-07-12 Handoff: v1.7.95 Fast Weather Startup and AFE Task Safety
 
 - Firmware version is `v1.7.95`. The QDTech release keeps the board's official low-memory configuration with local AFE/WakeNet disabled; touch-based XiaoZhi interaction remains available. Enabling both AFE pipelines with the full UI can reduce internal SRAM below 1 KB and is not safe for this board.

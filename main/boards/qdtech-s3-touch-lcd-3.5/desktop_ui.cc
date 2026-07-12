@@ -1440,12 +1440,6 @@ static void main_gesture_cb(lv_event_t* event) {
     }
 }
 
-static void xiaozhi_toggle_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-        Application::GetInstance().ToggleChatState();
-    }
-}
-
 // ===== DesktopUI implementation =====
 void DesktopUI::Create() {
     g_desktop_ui = this;
@@ -1653,6 +1647,24 @@ void DesktopUI::ShowPage(DesktopPage page) {
     // They are resumed by ApplyWeatherVisual when the main-page weather is updated.
     if (weather_particle_timer_ && page != DesktopPage::MAIN) {
         lv_timer_pause(weather_particle_timer_);
+    }
+
+    // Hidden media pages must not keep mutating dozens of LVGL objects.  The
+    // radio spectrum alone touched 16 bars every 100 ms and competed with the
+    // MP3 decoder even while XiaoZhi's lyric page covered it.
+    if (radio_anim_timer_) {
+        if (page == DesktopPage::RADIO) {
+            lv_timer_resume(radio_anim_timer_);
+        } else {
+            lv_timer_pause(radio_anim_timer_);
+        }
+    }
+    if (music_cover_timer_) {
+        if (page == DesktopPage::MUSIC) {
+            lv_timer_resume(music_cover_timer_);
+        } else {
+            lv_timer_pause(music_cover_timer_);
+        }
     }
 
     if (was_shake_lab && page != DesktopPage::SHAKE_LAB) {
@@ -3807,7 +3819,6 @@ void DesktopUI::CreateXiaozhiPage(lv_obj_t* root) {
     lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_event_cb(xiaozhi_page_, xiaozhi_gesture_cb, LV_EVENT_GESTURE, NULL);
-    lv_obj_add_event_cb(xiaozhi_page_, xiaozhi_toggle_cb, LV_EVENT_CLICKED, NULL);
 
     // 全屏黑色背景，只有面部
     CreateFaceUI(xiaozhi_page_);
@@ -6808,8 +6819,14 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
         clean_line = state;
     }
 
-    music_title_ = clean_subtitle_text(title && title[0] ? title : "Music", 32);
-    music_artist_ = clean_artist.empty() ? "Music URL playback" : clean_artist;
+    const std::string next_title = clean_subtitle_text(title && title[0] ? title : "Music", 32);
+    const std::string next_artist = clean_artist.empty() ? "Music URL playback" : clean_artist;
+    if (music_title_ == next_title && music_artist_ == next_artist && music_line_ == clean_line) {
+        return;
+    }
+
+    music_title_ = next_title;
+    music_artist_ = next_artist;
     music_line_ = clean_line;
     if (music_title_label_) {
         lv_label_set_text(music_title_label_, music_title_.c_str());
