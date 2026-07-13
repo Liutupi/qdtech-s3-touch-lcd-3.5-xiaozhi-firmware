@@ -1,3 +1,14 @@
+## 2026-07-13 Handoff: v1.7.99 Low-Memory Weather + Manual Phone Web Hotfix
+
+- Firmware version remains `1.7.99`; this is a hotfix on the QDTech 3.5-inch line, not a feature-version bump.
+- Weather low-memory handling was hardened for the Windows/COM3 board: the Open-Meteo response buffer now allocates in PSRAM, low-memory retry backs off to 300 seconds, and the weather gate requires about 7 KB free internal SRAM / 5 KB largest internal block before starting a request. Low-memory deferrals now increment the weather failure counter for clearer diagnosis.
+- Boot no longer starts the lyric UDP service or the phone web config server by default. This protects the small internal heap budget needed by Wi-Fi, MQTT, weather, and audio.
+- Settings now separates two actions: `Open Web` starts the QDTech phone web page on demand and shows `Phone Web: http://<device-ip>/`; `Reconfig` sets a one-shot flag, reboots into XiaoZhi Wi-Fi provisioning, and opens the phone web page once after the new Wi-Fi connects.
+- `Open Web` has two crash guards after a physical deadlock report: a 5-second UI click lock and a 30-second board-level HTTP startup cooldown. If the web server is already running, repeated taps only redisplay the existing URL and do not recreate the HTTP server.
+- The current Windows ESP-IDF 5.5 build directory is `build-qdtech-v1.7.99-lowmem`. Build and `merge-bin` passed. App size is `0x665860` / 6,707,296 bytes with `0x9a7a0` / 632,736 bytes (9%) free; merged image size is `0x765860` / 7,755,872 bytes.
+- The latest App image was flashed to COM3; esptool verified all written hashes and hard-reset the ESP32-S3. The user later reported weather still not syncing, but the serial weather follow-up was interrupted before a filtered log was captured, so the next handoff should start with COM3 monitoring around `TimeWeather`, `QdEspMqtt`, `WiFi`, and `low memory`.
+- Release SHA256: app `ead7e3d6ac434b8b3a387d09b1866ddd9210a23d5c52de4e64ee0eb99f27e22f`; full `64a9da65b29195836cfd31730a4192056e1b28a39ebef9482e47a96b97b041a1`; ZIP `d30eb8b0fd8aeb9649715efb129ad942ad7ed03d43fa238023dd96b8331bba27`.
+
 ## 2026-07-13 Handoff: v1.7.99 Post-Music Weather Recovery
 
 - Firmware version is `v1.7.99`, based on the latest `main` after PRs #7 and #8. The diagnostics long-press fix from `main` is retained; LVGL `FULL` rendering, weather artwork, touch/BMI270 behavior, pins, partitions, and the low-memory AFE/WakeNet-disabled configuration are unchanged.

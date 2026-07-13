@@ -1,3 +1,15 @@
+## 2026-07-13: v1.7.99 Low-Memory Weather and Manual Phone Web Hotfix
+
+- Kept the QDTech firmware version at `1.7.99` and published a hotfix build for the Windows/COM3 board.
+- Moved the weather HTTP response buffer to PSRAM and raised weather low-memory guards to reduce crashes while keeping retry behavior observable.
+- Disabled lyric UDP and phone web startup by default to preserve internal SRAM for Wi-Fi/MQTT/weather/audio.
+- Added Settings -> `Open Web` to start the phone web config page on demand and show the device URL, plus Settings -> `Reconfig` to reboot into XiaoZhi Wi-Fi provisioning.
+- After `Reconfig`, the board sets a one-shot flag so the phone web page opens once when the new Wi-Fi connection is established.
+- Added `Open Web` crash guards: 5-second UI click debounce, 30-second board-level startup cooldown, and an already-running path that only redisplays the current URL.
+- ESP-IDF 5.5 build and merge-bin passed: app `0x665860` / 6,707,296 bytes, slot free `0x9a7a0` / 632,736 bytes (9%), merged image `0x765860` / 7,755,872 bytes.
+- Flashed to COM3 with esptool hash verification. Weather re-check still needs a fresh serial capture because the follow-up monitor was interrupted.
+- SHA256: app `ead7e3d6ac434b8b3a387d09b1866ddd9210a23d5c52de4e64ee0eb99f27e22f`; full `64a9da65b29195836cfd31730a4192056e1b28a39ebef9482e47a96b97b041a1`; ZIP `d30eb8b0fd8aeb9649715efb129ad942ad7ed03d43fa238023dd96b8331bba27`.
+
 ## 2026-07-13: v1.7.99 Post-Music Weather Recovery
 
 - Fixed weather refresh being permanently deferred after music when total internal SRAM recovered but the largest contiguous block remained near 3,456 bytes.

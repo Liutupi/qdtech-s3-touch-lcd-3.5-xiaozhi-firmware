@@ -24,10 +24,10 @@
 
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 2048;
-static constexpr size_t kWeatherMinInternalFree = 6 * 1024;
+static constexpr size_t kWeatherMinInternalFree = 7 * 1024;
 // HTTP weather uses small PSRAM-backed buffers; keep enough contiguous internal
 // memory for lwIP bookkeeping without blocking forever after a long music stream.
-static constexpr size_t kWeatherMinLargestInternalBlock = 3 * 1024;
+static constexpr size_t kWeatherMinLargestInternalBlock = 5 * 1024;
 
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
     char* end = nullptr;
@@ -453,7 +453,7 @@ void TimeWeatherService::TaskWrapper(void* arg) {
 
 void TimeWeatherService::Task() {
     static constexpr int kWeatherRefreshSeconds = 3600;
-    static constexpr int kWeatherLowMemoryRetrySeconds = 20;
+    static constexpr int kWeatherLowMemoryRetrySeconds = 300;
     static constexpr int kClockRefreshSeconds = 5;
     int weather_ticks = kWeatherRefreshSeconds;
     int retry_ticks = WeatherRetrySeconds();
@@ -675,6 +675,7 @@ bool TimeWeatherService::FetchWeather() {
     if (state == kDeviceStateStarting) {
         ESP_LOGW(TAG, "defer weather fetch, application state=%d", state);
         weather_low_memory_deferred_ = true;
+        ++weather_failure_count_;
         ShowCachedWeather("Weather wait");
         return false;
     }
@@ -687,6 +688,7 @@ bool TimeWeatherService::FetchWeather() {
                  static_cast<unsigned>(free_internal),
                  static_cast<unsigned>(largest_internal));
         weather_low_memory_deferred_ = true;
+        ++weather_failure_count_;
         ShowCachedWeather("Weather low memory");
         return false;
     }
@@ -701,7 +703,14 @@ bool TimeWeatherService::FetchWeather() {
              "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
              latitude, longitude);
     
-    char response[WEATHER_RESPONSE_SIZE] = {};
+    char* response = static_cast<char*>(heap_caps_calloc(1, WEATHER_RESPONSE_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!response) {
+        ESP_LOGW(TAG, "weather response buffer alloc failed");
+        weather_low_memory_deferred_ = true;
+        ++weather_failure_count_;
+        ShowCachedWeather("Weather no memory");
+        return false;
+    }
     esp_http_client_config_t config = {};
     config.url = url;
     config.timeout_ms = 6000;
@@ -753,6 +762,8 @@ bool TimeWeatherService::FetchWeather() {
         char fail_text[40];
         snprintf(fail_text, sizeof(fail_text), "Weather fail %d", status);
         ShowCachedWeather(fail_text);
+        ++weather_failure_count_;
+        heap_caps_free(response);
         return false;
     }
     
@@ -765,6 +776,8 @@ bool TimeWeatherService::FetchWeather() {
         ESP_LOGW(TAG, "weather parse failed: %.96s", response);
         cJSON_Delete(root);
         ShowCachedWeather("Weather parse");
+        ++weather_failure_count_;
+        heap_caps_free(response);
         return false;
     }
 
@@ -802,6 +815,8 @@ bool TimeWeatherService::FetchWeather() {
     SetWeatherSafe(temp_text, summary, refined_code);
     
     cJSON_Delete(root);
+    heap_caps_free(response);
+    weather_failure_count_ = 0;
     ESP_LOGI(TAG, "weather ok %s %s raw=%d refined=%d rain=%.2f cloud=%d humidity=%d updated=%s",
              temp_text, summary, raw_code, refined_code, fmax(precipitation, fmax(rain, showers)),
              cloud_cover, humidity, last_update_);

@@ -86,6 +86,9 @@ public:
     void UpdateShakeLabDetector(const ShakeDetector::Result& result);
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
+    void OpenPhoneWeb();
+    void ReconfigureWifi();
+    void SetPhoneWebAction(std::function<void()> callback);
     void SetWifiConfigStatus(const char* status);
     void SetBluetoothConfigStatus(const char* status);
     void ReloadUserProfile();
@@ -139,6 +142,7 @@ public:
     std::function<void()> fc_stop_;
     std::function<void()> fc_next_;
     std::function<void()> fc_prev_;
+    std::function<void()> phone_web_start_;
     std::function<void(uint8_t)> fc_controller_cb_;
     std::function<void()> fc_stop_other_media_;
     std::function<void(const std::string& title, const std::string& artist,
@@ -413,11 +417,16 @@ private:
     lv_obj_t* settings_profile_logo_value_ = nullptr;
     lv_obj_t* settings_profile_owner_value_ = nullptr;
     lv_obj_t* settings_weather_value_ = nullptr;
+    lv_obj_t* settings_phone_web_button_ = nullptr;
+    lv_obj_t* settings_phone_web_button_label_ = nullptr;
+    lv_obj_t* settings_reconfigure_wifi_button_ = nullptr;
+    lv_obj_t* settings_reconfigure_wifi_button_label_ = nullptr;
     lv_obj_t* settings_wifi_config_status_label_ = nullptr;
     lv_obj_t* settings_ble_status_label_ = nullptr;
     std::string settings_wifi_config_status_ = "WiFi config idle";
     std::string settings_ble_status_ = "BLE idle";
     std::string firmware_update_status_ = "Not checked";
+    int64_t phone_web_click_lock_until_ms_ = 0;
     bool firmware_update_available_ = false;
     bool firmware_update_busy_ = false;
     int firmware_update_progress_ = -1;

@@ -4,8 +4,10 @@
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
+#include "boards/common/wifi_board.h"
 #include "firmware_update_service.h"
 #include "qd_user_config.h"
+#include "settings.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -1520,6 +1522,18 @@ static void settings_volume_cb(lv_event_t* event) {
 static void settings_firmware_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
         FirmwareUpdateService::GetInstance().HandleButton();
+    }
+}
+
+static void settings_phone_web_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->OpenPhoneWeb();
+    }
+}
+
+static void settings_reconfigure_wifi_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
+        g_desktop_ui->ReconfigureWifi();
     }
 }
 
@@ -4371,19 +4385,54 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_t* wifi_sync_label = label_en(wifi_sync_row, "Phone Web", &style_en);
     lv_obj_align(wifi_sync_label, LV_ALIGN_TOP_LEFT, 14, 8);
     settings_wifi_config_status_label_ = label_en(wifi_sync_row, settings_wifi_config_status_.c_str(), &style_muted);
-    lv_obj_set_width(settings_wifi_config_status_label_, 260);
+    lv_obj_set_width(settings_wifi_config_status_label_, 210);
     lv_label_set_long_mode(settings_wifi_config_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_font(settings_wifi_config_status_label_, &lv_font_montserrat_12, 0);
     lv_obj_align(settings_wifi_config_status_label_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_phone_web_button_ = lv_btn_create(wifi_sync_row);
+    lv_obj_set_size(settings_phone_web_button_, 104, 30);
+    lv_obj_set_style_radius(settings_phone_web_button_, 15, 0);
+    lv_obj_set_style_bg_color(settings_phone_web_button_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_border_color(settings_phone_web_button_, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(settings_phone_web_button_, 1, 0);
+    lv_obj_add_event_cb(settings_phone_web_button_, settings_phone_web_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(settings_phone_web_button_, LV_ALIGN_RIGHT_MID, -14, 0);
+    settings_phone_web_button_label_ = label_en(settings_phone_web_button_, "Open Web", &style_en);
+    lv_obj_set_style_text_font(settings_phone_web_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_center(settings_phone_web_button_label_);
+
+    lv_obj_t* wifi_setup_row = lv_obj_create(settings_content_);
+    lv_obj_add_style(wifi_setup_row, &style_panel, 0);
+    lv_obj_set_size(wifi_setup_row, 414, 58);
+    lv_obj_align(wifi_setup_row, LV_ALIGN_TOP_LEFT, 0, 524);
+    lv_obj_clear_flag(wifi_setup_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* wifi_setup_label = label_en(wifi_setup_row, "WiFi Setup", &style_en);
+    lv_obj_align(wifi_setup_label, LV_ALIGN_TOP_LEFT, 14, 8);
+    lv_obj_t* wifi_setup_hint = label_en(wifi_setup_row, "Restart to pairing hotspot", &style_muted);
+    lv_obj_set_width(wifi_setup_hint, 210);
+    lv_label_set_long_mode(wifi_setup_hint, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(wifi_setup_hint, &lv_font_montserrat_12, 0);
+    lv_obj_align(wifi_setup_hint, LV_ALIGN_BOTTOM_LEFT, 14, -9);
+    settings_reconfigure_wifi_button_ = lv_btn_create(wifi_setup_row);
+    lv_obj_set_size(settings_reconfigure_wifi_button_, 104, 30);
+    lv_obj_set_style_radius(settings_reconfigure_wifi_button_, 15, 0);
+    lv_obj_set_style_bg_color(settings_reconfigure_wifi_button_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_border_color(settings_reconfigure_wifi_button_, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(settings_reconfigure_wifi_button_, 1, 0);
+    lv_obj_add_event_cb(settings_reconfigure_wifi_button_, settings_reconfigure_wifi_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_align(settings_reconfigure_wifi_button_, LV_ALIGN_RIGHT_MID, -14, 0);
+    settings_reconfigure_wifi_button_label_ = label_en(settings_reconfigure_wifi_button_, "Reconfig", &style_en);
+    lv_obj_set_style_text_font(settings_reconfigure_wifi_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_center(settings_reconfigure_wifi_button_label_);
 
     lv_obj_t* firmware_title = label_en(settings_content_, "Firmware", &style_gold);
     lv_obj_set_style_text_font(firmware_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 550);
+    lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 616);
 
     lv_obj_t* firmware_row = lv_obj_create(settings_content_);
     lv_obj_add_style(firmware_row, &style_panel, 0);
     lv_obj_set_size(firmware_row, 414, 74);
-    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 576);
+    lv_obj_align(firmware_row, LV_ALIGN_TOP_LEFT, 0, 642);
     lv_obj_clear_flag(firmware_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* version_label = label_en(firmware_row, "Version", &style_en);
     lv_obj_align(version_label, LV_ALIGN_TOP_LEFT, 14, 9);
@@ -5648,6 +5697,36 @@ void DesktopUI::SetSystemVolume(int value) {
     codec->SetOutputVolume(value);
     ESP_LOGI(TAG, "Settings volume=%d", value);
     RefreshSettingsControls();
+}
+
+void DesktopUI::SetPhoneWebAction(std::function<void()> callback) {
+    phone_web_start_ = std::move(callback);
+}
+
+void DesktopUI::OpenPhoneWeb() {
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    if (now_ms < phone_web_click_lock_until_ms_) {
+        SetWifiConfigStatus("Phone web already requested");
+        return;
+    }
+    phone_web_click_lock_until_ms_ = now_ms + 5000;
+    SetWifiConfigStatus("Opening phone web");
+    if (phone_web_start_) {
+        phone_web_start_();
+    } else {
+        SetWifiConfigStatus("Phone web unavailable");
+    }
+}
+
+void DesktopUI::ReconfigureWifi() {
+    {
+        Settings settings("wifi", true);
+        settings.SetInt("qd_web_once", 1);
+    }
+    SetWifiConfigStatus("Restarting to WiFi setup");
+    ESP_LOGI(TAG, "Settings requested WiFi reconfiguration");
+    auto& board = static_cast<WifiBoard&>(Board::GetInstance());
+    board.ResetWifiConfiguration();
 }
 
 void DesktopUI::SetBluetoothConfigStatus(const char* status) {

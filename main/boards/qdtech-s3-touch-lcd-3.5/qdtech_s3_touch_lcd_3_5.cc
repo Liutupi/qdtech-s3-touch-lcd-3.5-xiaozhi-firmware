@@ -13,6 +13,7 @@
 #include "qd_esp_mqtt.h"
 #include "qd_wifi_config_server.h"
 #include "radio_service.h"
+#include "settings.h"
 #include "time_weather_service.h"
 
 #include <algorithm>
@@ -726,8 +727,8 @@ public:
     void StartNetwork() override {
         EnsureStrongestBssidDefault();
         WifiBoard::StartNetwork();
-        StartLyricUdpServer();
-        ScheduleDeferredNetworkServices();
+        const bool open_phone_web_after_setup = ConsumePhoneWebAfterSetupFlag();
+        ESP_LOGI(TAG, "Lyric UDP and phone web config kept off by default to protect weather memory");
         
         // WiFi 连接后启动时间天气服�?
         if (!time_weather_started_ && display_) {
@@ -735,6 +736,9 @@ public:
             time_weather_service_.Start(qd_display->GetDesktopUI());
             time_weather_started_ = true;
             ESP_LOGI(TAG, "Time weather service started");
+        }
+        if (open_phone_web_after_setup) {
+            StartPhoneWebFromSettings();
         }
     }
 
@@ -2485,6 +2489,9 @@ private:
         desktop_ui->SetMainPageCallback([this]() {
             time_weather_service_.RequestRefresh(true);
         });
+        desktop_ui->SetPhoneWebAction([this]() {
+            StartPhoneWebFromSettings();
+        });
         desktop_ui->SetFcExitCallback([this]() {
             time_weather_service_.RequestRefresh(true);
         });
@@ -2517,6 +2524,54 @@ private:
         wifi_config_server_.Start(desktop_ui, &time_weather_service_);
     }
 
+    bool ConsumePhoneWebAfterSetupFlag() {
+        Settings settings("wifi", true);
+        if (settings.GetInt("qd_web_once", 0) != 1) {
+            return false;
+        }
+        settings.SetInt("qd_web_once", 0);
+        ESP_LOGI(TAG, "Phone web one-shot requested after WiFi setup");
+        return true;
+    }
+
+    void StartPhoneWebFromSettings() {
+        if (!display_) {
+            return;
+        }
+        const int64_t now_us = esp_timer_get_time();
+        if (wifi_config_server_.IsRunning()) {
+            const std::string status = wifi_config_server_.Status();
+            if (now_us - phone_web_last_notice_us_ > 5000000) {
+                phone_web_last_notice_us_ = now_us;
+                display_->ShowNotification("Phone Web: " + status, 30000);
+            }
+            ESP_LOGI(TAG, "Phone web already running: %s", status.c_str());
+            return;
+        }
+        if (now_us - phone_web_last_start_us_ < 30000000) {
+            if (now_us - phone_web_last_notice_us_ > 5000000) {
+                phone_web_last_notice_us_ = now_us;
+                display_->ShowNotification("Phone Web waiting: retry soon", 8000);
+            }
+            ESP_LOGW(TAG, "Phone web start ignored during cooldown");
+            return;
+        }
+        phone_web_last_start_us_ = now_us;
+        InitializeWifiConfigServer();
+        const std::string status = wifi_config_server_.Status();
+        if (wifi_config_server_.IsRunning()) {
+            network_services_started_ = true;
+            phone_web_last_notice_us_ = now_us;
+            display_->ShowNotification("Phone Web: " + status, 30000);
+            ESP_LOGI(TAG, "Phone web opened manually: %s", status.c_str());
+        } else {
+            phone_web_last_notice_us_ = now_us;
+            display_->ShowNotification("Phone Web waiting: " + status, 30000);
+            ScheduleDeferredNetworkServices(30000000);
+            ESP_LOGW(TAG, "Phone web not ready, retry scheduled: %s", status.c_str());
+        }
+    }
+
     void EnsureStrongestBssidDefault() {
         nvs_handle_t nvs;
         esp_err_t err = nvs_open("wifi", NVS_READWRITE, &nvs);
@@ -2543,7 +2598,7 @@ private:
         nvs_close(nvs);
     }
 
-    void ScheduleDeferredNetworkServices() {
+    void ScheduleDeferredNetworkServices(int64_t delay_us = 180000000) {
         if (network_services_started_) {
             return;
         }
@@ -2562,8 +2617,9 @@ private:
         if (esp_timer_is_active(network_services_timer_)) {
             ESP_ERROR_CHECK(esp_timer_stop(network_services_timer_));
         }
-        ESP_ERROR_CHECK(esp_timer_start_once(network_services_timer_, 25000000));
-        ESP_LOGI(TAG, "Deferred phone config services scheduled");
+        ESP_ERROR_CHECK(esp_timer_start_once(network_services_timer_, delay_us));
+        ESP_LOGI(TAG, "Deferred phone config services scheduled in %d sec",
+                 static_cast<int>(delay_us / 1000000));
     }
 
     void StartDeferredNetworkServices() {
@@ -2676,6 +2732,8 @@ private:
     bool time_weather_started_ = false;
     bool network_services_started_ = false;
     bool lyric_udp_started_ = false;
+    int64_t phone_web_last_start_us_ = -30000000;
+    int64_t phone_web_last_notice_us_ = -5000000;
     std::atomic<int> lyric_generation_{0};
     portMUX_TYPE lyric_lock_ = portMUX_INITIALIZER_UNLOCKED;
     char current_lyric_title_[96] = {};
