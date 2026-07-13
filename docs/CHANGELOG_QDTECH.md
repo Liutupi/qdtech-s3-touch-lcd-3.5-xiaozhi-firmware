@@ -1,3 +1,15 @@
+## 2026-07-13: v1.7.99 Post-Music Weather Recovery
+
+- Fixed weather refresh being permanently deferred after music when total internal SRAM recovered but the largest contiguous block remained near 3,456 bytes.
+- Switched the small Open-Meteo request to direct HTTP, reduced its receive buffer to 1 KB, closed the connection explicitly, and lowered the largest-block gate from 4 KB to 3 KB while retaining the 6 KB total-free guard.
+- Added playback-resource release notification so stale lyric tasks are cancelled, lyric UI is cleared, and weather refresh starts only after the MP3 decoder/HTTP resources are freed.
+- Made scheduled lyric waits cancellation-responsive within 200 ms and reduced the decorative Radio spectrum timer from 10 Hz to 4 Hz without changing LVGL `FULL` rendering.
+- Integrated latest `main`, including the diagnostics long-press fix and Codex stability documentation.
+- Hardware verification on COM3 captured a complete 8.9 MB MP3 drain through 13,981 frames, resource release, and an immediate weather HTTP 200 at only 6,463 bytes free / 3,456-byte largest internal block. The user confirmed the LAN source played smoothly; no low-memory, panic, watchdog, or decoder error appeared.
+- Final integrated ESP-IDF 5.5 build/merge passed: app `0x6655c0` / 6,706,624 bytes, slot free `0x9aa40` / 633,408 bytes (9%), merged image `0x7655c0` / 7,755,200 bytes.
+- Final App image was flashed to COM3 at `0x100000` with esptool hash verification. Boot monitor confirmed version 1.7.99, 8 MB PSRAM, QDTech SKU, touch, BMI270, Wi-Fi, MQTT, idle, and weather HTTP 200.
+- SHA256: app `a8e5ac4183eafc01941024b2dea776ce163659fc223f0946e9dd30a0d328c290`; full `add02d353575931554935e2f40d206d177420f0c06d767d93ed2dd8490b3444e`; ZIP `55121e88712bf44fa0b07167f386ee95ec83eeffbe721d71dffbbaf42f5a3f21`.
+
 ## 2026-07-12: v1.7.95 Fast Weather Startup and AFE Task Safety
 
 - Decoupled initial weather synchronization from XiaoZhi OTA/MQTT activation and fetched weather before waiting for SNTP.

@@ -1,3 +1,15 @@
+## 2026-07-13 Handoff: v1.7.99 Post-Music Weather Recovery
+
+- Firmware version is `v1.7.99`, based on the latest `main` after PRs #7 and #8. The diagnostics long-press fix from `main` is retained; LVGL `FULL` rendering, weather artwork, touch/BMI270 behavior, pins, partitions, and the low-memory AFE/WakeNet-disabled configuration are unchanged.
+- Root cause of the reported post-music weather failure was internal-heap fragmentation: after a full song the board still had roughly 6.5-7.4 KB free, but the largest contiguous block remained near 3,456 bytes, below the old 4 KB weather gate.
+- Weather now uses Open-Meteo's direct HTTP endpoint with a 1 KB receive buffer, `Connection: close`, a 3 KB largest-block gate, and start/done heap diagnostics. This avoids opening a second TLS session immediately after music releases its decoder and stream resources.
+- `RadioService` now notifies the board only after playback resources are released. The callback cancels stale lyric scheduling, clears the lyric UI, and requests an immediate weather refresh. Lyric waits check cancellation at most every 200 ms.
+- The decorative Radio spectrum timer was reduced from 10 Hz to 4 Hz. This preserves the animation while reducing 40-50 ms full-screen transfers that can compete with MP3/I2S work.
+- Hardware evidence on COM3: a full 8.9 MB 44.1 kHz stereo MP3 drained 13,981 frames, playback resources released at `free_internal=7355`, `largest_internal=3456`, and the following weather request succeeded with `ESP_OK` / HTTP 200 at `free_internal=6463`, `largest_internal=3456`. No `low memory`, panic, watchdog, or decoder error occurred. The user confirmed the LAN-served song was audibly smooth; the earlier SoundHelix stutter was source-bandwidth-limited.
+- The final integrated ESP-IDF 5.5 build reports `1.7.99`. App size is `0x6655c0` / 6,706,624 bytes with `0x9aa40` / 633,408 bytes (9%) free; merged recovery image size is `0x7655c0` / 7,755,200 bytes.
+- The final integrated App image was flashed to COM3 at `0x100000`; esptool verified the written hash. A forced-reset monitor confirmed `App version: 1.7.99`, 8 MB PSRAM, QDTech SKU, five-point touch, BMI270, Wi-Fi IP `192.168.4.214`, MQTT connected, idle state, and Open-Meteo HTTP 200 with no panic or low-memory error.
+- Release SHA256: app `a8e5ac4183eafc01941024b2dea776ce163659fc223f0946e9dd30a0d328c290`; full `add02d353575931554935e2f40d206d177420f0c06d767d93ed2dd8490b3444e`; ZIP `55121e88712bf44fa0b07167f386ee95ec83eeffbe721d71dffbbaf42f5a3f21`.
+
 ## 2026-07-13 Handoff: v1.7.97 Particle Hourglass Animation
 
 - Firmware version is `v1.7.97`. The existing hourglass frame, portrait layout, controls, timer behavior, completion sound, weather artwork, and all other UI remain unchanged.

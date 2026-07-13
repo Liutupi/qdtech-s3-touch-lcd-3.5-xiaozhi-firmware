@@ -1,3 +1,12 @@
+# 2026-07-13 Project Status: v1.7.99 Post-Music Weather Recovery
+
+- Latest release target is `v1.7.99` on current `main`, retaining the diagnostics long-press fix and the v1.7.97 particle hourglass baseline.
+- Post-music weather refresh now succeeds with a fragmented internal heap by avoiding a second TLS session, using a 1 KB HTTP buffer, and accepting a 3 KB largest free block while still requiring 6 KB total internal SRAM.
+- Playback release cancels stale lyrics, clears the lyric UI, and requests weather only after stream/decoder resources are freed. The Radio decoration runs at 4 Hz to reduce full-screen flush contention.
+- COM3 hardware logs captured a complete 8.9 MB MP3, 13,981 decoded frames, clean resource release, and weather HTTP 200 with 6,463 bytes free / 3,456-byte largest block. The user confirmed smooth LAN playback and no `low memory` occurred.
+- Final integrated build: app `0x6655c0` / 6,706,624 bytes, free `0x9aa40` / 633,408 bytes (9%); merged `0x7655c0` / 7,755,200 bytes.
+- Final integrated App image was flashed and hash-verified on COM3. Boot confirmed version 1.7.99, 8 MB PSRAM, QDTech SKU, touch, BMI270, Wi-Fi, MQTT, idle, and weather HTTP 200.
+
 # 2026-07-10 Project Status: v1.7.92 Shake Lab MVP
 
 - Apps -> More exposes Shake Lab with Ask Ball and D6/2D6 Dice. It uses LVGL primitives, existing themes, and no new bitmap/GIF/BLE resources.

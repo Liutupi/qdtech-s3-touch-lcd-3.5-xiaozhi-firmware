@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <atomic>
+#include <functional>
 #include <vector>
 
 #include <freertos/FreeRTOS.h>
@@ -19,6 +20,7 @@ public:
     void Stop();
     void Next();
     void Prev();
+    void SetPlaybackReleasedCallback(std::function<void()> callback);
     std::string PlayUrlFromTool(const std::string& title, const std::string& artist, const std::string& url);
     std::string GetStatusJson() const;
     std::string SelectStation(const std::string& station);
@@ -64,6 +66,7 @@ private:
     void SaveFavorites();
     void LoadStationIndex();
     void SaveStationIndex();
+    void NotifyPlaybackReleased();
 
     DesktopUI* desktop_ui_ = nullptr;
     void* queue_ = nullptr;
@@ -73,6 +76,8 @@ private:
     std::atomic<bool> play_requested_{false};
     std::atomic<bool> stop_requested_{false};
     std::atomic<bool> audio_focus_blocked_{false};
+    std::atomic<bool> playback_release_pending_{false};
+    std::function<void()> playback_released_callback_;
     bool focus_pause_logged_ = false;
     int reconnect_attempt_ = 0;
     std::vector<int> last_success_url_;
