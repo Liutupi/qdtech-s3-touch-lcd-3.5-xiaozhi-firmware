@@ -907,6 +907,7 @@ void DesktopUI::HourglassSandDrawCb(lv_event_t* event) {
 
 // ===== Page navigation =====
 static DesktopUI* g_desktop_ui = nullptr;
+static bool g_settings_long_press_handled = false;
 
 static void navigate_back_cb(lv_event_t* event) {
     if (lv_event_get_code(event) == LV_EVENT_CLICKED && g_desktop_ui) {
@@ -1085,7 +1086,14 @@ static void network_card_cb(lv_event_t* event) {
 }
 
 static void settings_card_cb(lv_event_t* event) {
-    if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_PRESSED) {
+        g_settings_long_press_handled = false;
+    } else if (code == LV_EVENT_CLICKED) {
+        if (g_settings_long_press_handled) {
+            g_settings_long_press_handled = false;
+            return;
+        }
         open_app_card(7);
     }
 }
@@ -1518,6 +1526,9 @@ static void settings_firmware_cb(lv_event_t* event) {
 static void diagnostics_open_cb(lv_event_t* event) {
     if ((lv_event_get_code(event) == LV_EVENT_LONG_PRESSED ||
          lv_event_get_code(event) == LV_EVENT_CLICKED) && g_desktop_ui) {
+        if (lv_event_get_code(event) == LV_EVENT_LONG_PRESSED) {
+            g_settings_long_press_handled = true;
+        }
         g_desktop_ui->ShowPage(DesktopPage::DIAGNOSTICS);
     }
 }
@@ -2631,6 +2642,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
             lv_obj_add_event_cb(tile, apps[i].cb, LV_EVENT_CLICKED, NULL);
         }
         if (i == 7) {
+            lv_obj_add_event_cb(tile, settings_card_cb, LV_EVENT_PRESSED, NULL);
             lv_obj_add_event_cb(tile, diagnostics_open_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
     }
