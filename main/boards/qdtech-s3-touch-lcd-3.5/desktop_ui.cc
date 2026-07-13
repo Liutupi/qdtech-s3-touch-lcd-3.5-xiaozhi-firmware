@@ -6,6 +6,9 @@
 #include "boards/common/board.h"
 #include "firmware_update_service.h"
 #include "qd_user_config.h"
+#if CONFIG_QDTECH_EXPERIMENT_RESOURCE_TELEMETRY
+#include "resource_telemetry.h"
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -4132,10 +4135,14 @@ void DesktopUI::RefreshDiagnostics() {
     auto& wifi = WifiStation::GetInstance();
     auto ssid_list = SsidManager::GetInstance().GetSsidList();
 
+#if CONFIG_QDTECH_EXPERIMENT_RESOURCE_TELEMETRY
+    const QdResourceSnapshot resources = qd_take_resource_snapshot();
+#else
     const size_t free_internal = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     const size_t largest_internal = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     const size_t free_psram = heap_caps_get_free_size(MALLOC_CAP_SPIRAM);
     const size_t largest_psram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
+#endif
 
     char rows[10][128] = {};
     snprintf(rows[0], sizeof(rows[0]), "Version: %s  Board: %s",
@@ -4161,12 +4168,23 @@ void DesktopUI::RefreshDiagnostics() {
                      ? firmware_update_partition_size_
                      : (next ? next->size : 0)) / 1024));
     }
+#if CONFIG_QDTECH_EXPERIMENT_RESOURCE_TELEMETRY
+    snprintf(rows[4], sizeof(rows[4]), "Internal: free=%uKB min=%uKB max=%uKB",
+             static_cast<unsigned>(resources.internal_free_current / 1024),
+             static_cast<unsigned>(resources.internal_free_min / 1024),
+             static_cast<unsigned>(resources.internal_largest_block / 1024));
+    snprintf(rows[5], sizeof(rows[5]), "PSRAM: free=%uKB max=%uKB Tasks=%u",
+             static_cast<unsigned>(resources.psram_free_current / 1024),
+             static_cast<unsigned>(resources.psram_largest_block / 1024),
+             static_cast<unsigned>(resources.task_count));
+#else
     snprintf(rows[4], sizeof(rows[4]), "Internal heap: free=%uKB largest=%uKB",
              static_cast<unsigned>(free_internal / 1024),
              static_cast<unsigned>(largest_internal / 1024));
     snprintf(rows[5], sizeof(rows[5]), "PSRAM: free=%uKB largest=%uKB",
              static_cast<unsigned>(free_psram / 1024),
              static_cast<unsigned>(largest_psram / 1024));
+#endif
     if (wifi.IsConnected()) {
         snprintf(rows[6], sizeof(rows[6]), "WiFi: %s  %s  RSSI=%ddBm",
                  wifi.GetSsid().c_str(), wifi.GetIpAddress().c_str(), wifi.GetRssi());

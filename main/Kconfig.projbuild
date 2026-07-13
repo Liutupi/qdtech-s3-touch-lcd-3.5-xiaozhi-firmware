@@ -276,6 +276,15 @@ choice BOARD_TYPE
         select LV_GIF_CACHE_DECODE_DATA
 endchoice
 
+config QDTECH_EXPERIMENT_RESOURCE_TELEMETRY
+    bool "Enable experimental QDTech resource snapshots"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Experimental resource snapshots for the QDTech Diagnostics page only.
+        This option is disabled by default and should not be enabled in release
+        builds. It does not add tasks or timers.
+
 choice ESP_S3_LCD_EV_Board_Version_TYPE
     depends on BOARD_TYPE_ESP_S3_LCD_EV_Board
     prompt "EV_BOARD Type"
