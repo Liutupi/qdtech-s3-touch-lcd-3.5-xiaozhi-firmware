@@ -10,7 +10,6 @@
 
 #include "cJSON.h"
 #include "application.h"
-#include "esp_crt_bundle.h"
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
@@ -26,7 +25,9 @@
 static const char* TAG = "TimeWeather";
 static constexpr size_t WEATHER_RESPONSE_SIZE = 2048;
 static constexpr size_t kWeatherMinInternalFree = 6 * 1024;
-static constexpr size_t kWeatherMinLargestInternalBlock = 4 * 1024;
+// HTTP weather uses small PSRAM-backed buffers; keep enough contiguous internal
+// memory for lwIP bookkeeping without blocking forever after a long music stream.
+static constexpr size_t kWeatherMinLargestInternalBlock = 3 * 1024;
 
 static bool ParseCoordinate(const std::string& text, double min_value, double max_value, double* value) {
     char* end = nullptr;
@@ -697,7 +698,7 @@ bool TimeWeatherService::FetchWeather() {
     
     char url[256];
     snprintf(url, sizeof(url),
-             "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
+             "http://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,precipitation,rain,showers,weather_code,cloud_cover,is_day&timezone=Asia%%2FShanghai&forecast_days=1",
              latitude, longitude);
     
     char response[WEATHER_RESPONSE_SIZE] = {};
@@ -706,9 +707,10 @@ bool TimeWeatherService::FetchWeather() {
     config.timeout_ms = 6000;
     config.event_handler = HttpEventHandler;
     config.user_data = response;
-    config.buffer_size = 1536;
+    // Open-Meteo serves HTTP directly. Avoiding a second TLS session after music
+    // playback materially reduces internal-heap fragmentation on this board.
+    config.buffer_size = 1024;
     config.buffer_size_tx = 512;
-    config.crt_bundle_attach = esp_crt_bundle_attach;
     config.disable_auto_redirect = false;
     config.max_redirection_count = 3;
     
@@ -723,9 +725,18 @@ bool TimeWeatherService::FetchWeather() {
             err = ESP_ERR_NO_MEM;
         } else {
             esp_http_client_set_header(client, "Accept", "application/json");
+            esp_http_client_set_header(client, "Connection", "close");
+            ESP_LOGI(TAG, "weather request start attempt=%d free_internal=%u largest_internal=%u",
+                     attempt + 1,
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
             err = esp_http_client_perform(client);
             status = esp_http_client_get_status_code(client);
             esp_http_client_cleanup(client);
+            ESP_LOGI(TAG, "weather request done attempt=%d err=%s status=%d free_internal=%u largest_internal=%u",
+                     attempt + 1, esp_err_to_name(err), status,
+                     static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+                     static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
         }
 
         if (err == ESP_OK && status >= 200 && status < 300 && response[0] != 0) {

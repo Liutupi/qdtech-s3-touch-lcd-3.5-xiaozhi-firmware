@@ -3297,7 +3297,10 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     }
 
     // 启动动画定时器
-    radio_anim_timer_ = lv_timer_create(RadioAnimTimerCb, 100, this);
+    // LVGL uses FULL rendering on this panel, so each decorative spectrum tick
+    // can trigger a 40-50 ms full-screen transfer. Four updates per second keep
+    // the animation visible without continuously starving MP3/I2S work.
+    radio_anim_timer_ = lv_timer_create(RadioAnimTimerCb, 250, this);
 
     // 提示文字
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);

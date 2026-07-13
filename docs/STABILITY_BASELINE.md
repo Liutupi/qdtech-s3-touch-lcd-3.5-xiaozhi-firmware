@@ -8,30 +8,28 @@ checkout, reset, flash, OTA update, commit, push, or release operation.
 
 **CURRENT HARDWARE BASELINE — PARTIAL HARDWARE VERIFICATION**
 
-- Firmware: `v1.7.97`
-- Commit: `019b6c13c570f2eaf4a816c954a372e973e02bae`
-- Build environment: ESP-IDF `5.5.2`
-- App image size: `6,708,528` bytes
-- Free space in the 7 MB app slot: `631,504` bytes (`9%`)
+- Firmware: `v1.7.99`
+- Commit: release tag `v1.7.99`
+- Build environment: ESP-IDF `5.5`
+- App image size: `6,706,624` bytes
+- Free space in the 7 MB app slot: `633,408` bytes (`9%`)
 
 Verified:
 
-- Firmware compiled and linked as `1.7.97`.
-- App image was flashed at offset `0x100000`.
-- esptool verified the written image hash.
-- The board restarted normally.
-- Serial reported `App version: 1.7.97`.
-- OTA reported `Current version: 1.7.97`.
-- Desktop UI creation completed.
-- BMI270 polling remained active after boot.
+- Firmware compiled and linked as `1.7.99` with the official QDTech low-memory defaults.
+- The final integrated App image was flashed to COM3 at offset `0x100000`, and esptool verified the written image hash.
+- A forced-reset monitor confirmed `App version: 1.7.99`, OTA current version 1.7.99, 8 MB PSRAM, QDTech SKU, five-point touch, BMI270, Wi-Fi, MQTT, idle state, and weather HTTP 200.
+- A complete 8.9 MB MP3 drained 13,981 frames and released playback resources without panic, watchdog, or decoder errors.
+- The user confirmed the LAN-served song was audibly smooth.
+- Weather immediately refreshed with HTTP 200 at only 6,463 bytes free and a 3,456-byte largest internal block; the prior `low memory` loop did not recur.
 
 Not yet verified:
 
-- Wait at least 75 seconds after boot, rotate the board 90 degrees, and confirm
-  entry into the particle hourglass.
-- Confirm upper-grain placement, falling-grain motion, landing spread, lower-pile
-  geometry, clipping, frame pacing, and overall physical-screen appearance.
+- Wait at least 75 seconds after boot, rotate the board 90 degrees, and confirm entry into the particle hourglass.
+- Confirm upper-grain placement, falling-grain motion, landing spread, lower-pile geometry, clipping, frame pacing, and overall physical-screen appearance.
 - Confirm return from Hourglass to Main still preserves weather refresh and touch.
+
+Recovery reference: `v1.7.97` commit `019b6c13c570f2eaf4a816c954a372e973e02bae` remains the pre-v1.7.99 current-main fallback. The media-verified fallback below remains `v1.7.96`.
 
 Do not describe the particle-hourglass visuals as hardware-verified until these
 checks have been completed on the physical panel.

@@ -7,6 +7,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "application.h"
@@ -551,9 +552,24 @@ void RadioService::Pause() {
 
 void RadioService::Stop() {
     ESP_LOGI(TAG, "Stop requested");
+    playback_release_pending_.store(true, std::memory_order_relaxed);
     stop_requested_ = true;
     stream_generation_.fetch_add(1, std::memory_order_relaxed);
     PostCommand(Command::STOP);
+}
+
+void RadioService::SetPlaybackReleasedCallback(std::function<void()> callback) {
+    playback_released_callback_ = std::move(callback);
+}
+
+void RadioService::NotifyPlaybackReleased() {
+    ESP_LOGI(TAG, "playback resources released free_internal=%u largest_internal=%u minimum_internal=%u",
+             static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)),
+             static_cast<unsigned>(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)));
+    if (playback_released_callback_) {
+        playback_released_callback_();
+    }
 }
 
 void RadioService::Next() {
@@ -601,6 +617,7 @@ std::string RadioService::PlayUrlFromTool(const std::string& title, const std::s
     // client. The old implementation probed Content-Length with a separate
     // connection while the previous stream was still retrying, briefly
     // driving internal SRAM down to a few hundred bytes.
+    playback_release_pending_.store(false, std::memory_order_relaxed);
     stream_generation_.fetch_add(1, std::memory_order_relaxed);
     stop_requested_ = true;
     Application::GetInstance().PrepareExternalAudioPlayback();
@@ -672,6 +689,9 @@ void RadioService::Task() {
 
         if (!play_requested_) {
             reconnect_attempt_ = 0;
+            if (playback_release_pending_.exchange(false, std::memory_order_relaxed)) {
+                NotifyPlaybackReleased();
+            }
             continue;
         }
         if (audio_focus_blocked_.load(std::memory_order_relaxed)) {
@@ -722,6 +742,7 @@ void RadioService::Task() {
             }
             play_requested_ = false;
             stop_requested_ = true;
+            playback_release_pending_.store(true, std::memory_order_relaxed);
             reconnect_attempt_ = 0;
             Application::GetInstance().SetExternalAudioActive(false);
             SetUi("Stopped", custom_url_fatal_error_ ? "Music unavailable" : "Music interrupted");
@@ -966,6 +987,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
             custom_url_fatal_error_ = true;
             play_requested_ = false;
             stop_requested_ = true;
+            playback_release_pending_.store(true, std::memory_order_relaxed);
             Application::GetInstance().SetExternalAudioActive(false);
             SetUi("Error", status == 403 ? "Music URL rejected" : "Music URL unavailable");
         }
@@ -980,6 +1002,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
         custom_url_fatal_error_ = true;
         play_requested_ = false;
         stop_requested_ = true;
+        playback_release_pending_.store(true, std::memory_order_relaxed);
         Application::GetInstance().SetExternalAudioActive(false);
         SetUi("Error", "Need full song URL");
         esp_http_client_close(client);
@@ -1098,6 +1121,7 @@ bool RadioService::PlayUrl(const std::string& url, int url_index, uint32_t strea
                 custom_url_stream_completed_ = true;
                 play_requested_ = false;
                 stop_requested_ = true;
+                playback_release_pending_.store(true, std::memory_order_relaxed);
                 SetUi("Stopped", "Music ended");
             }
             break;

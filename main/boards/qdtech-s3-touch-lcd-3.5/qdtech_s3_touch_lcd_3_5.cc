@@ -1770,8 +1770,18 @@ private:
             last_text = line.text;
             const int64_t now_ms = esp_timer_get_time() / 1000;
             const int64_t target_ms = start_ms + 800 + line.time_ms;
-            if (target_ms > now_ms) {
-                vTaskDelay(pdMS_TO_TICKS(target_ms - now_ms));
+            int64_t wait_ms = target_ms - now_ms;
+            // Preserve lyric timing while allowing Stop/Next/new-song to
+            // release the task and its strings promptly.
+            while (wait_ms > 0) {
+                if (args->generation != lyric_generation_.load()) {
+                    ESP_LOGI(TAG, "play_url lyric task cancelled while waiting generation=%d current=%d",
+                             args->generation, lyric_generation_.load());
+                    return;
+                }
+                const int delay_ms = static_cast<int>(std::min<int64_t>(wait_ms, 200));
+                vTaskDelay(pdMS_TO_TICKS(delay_ms));
+                wait_ms = target_ms - (esp_timer_get_time() / 1000);
             }
             if (args->generation != lyric_generation_.load()) {
                 ESP_LOGI(TAG, "play_url lyric task exit after wait generation=%d current=%d",
@@ -2421,6 +2431,17 @@ private:
                 StartLyricsFromPlayUrl(title, artist, lyrics_json);
             } else {
                 ShowMusicPlayFailure(title, artist, result);
+            }
+        });
+        radio_service_.SetPlaybackReleasedCallback([this]() {
+            lyric_generation_.fetch_add(1);
+            SetCurrentLyricSong("", "", 0);
+            time_weather_service_.RequestRefresh(true);
+            if (display_ && lvgl_port_lock(pdMS_TO_TICKS(100))) {
+                if (auto* ui = GetDesktopUI()) {
+                    ui->ClearMusicLyric();
+                }
+                lvgl_port_unlock();
             }
         });
         radio_service_.Start(desktop_ui);
