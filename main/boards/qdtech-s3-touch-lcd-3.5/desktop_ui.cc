@@ -1,6 +1,10 @@
 #include "desktop_ui.h"
 #include "application.h"
 #include "assets/lang_config.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+#include "bone_weight_service.h"
+#endif
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
@@ -1614,6 +1618,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_fc = current_page_ == DesktopPage::FC;
     const bool was_xiaozhi = current_page_ == DesktopPage::XIAOZHI;
     const bool was_shake_lab = current_page_ == DesktopPage::SHAKE_LAB;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    const bool was_bone_weight = current_page_ == DesktopPage::BONE_WEIGHT;
+#endif
     current_page_ = page;
     if (was_xiaozhi && page != DesktopPage::XIAOZHI) {
         ReleaseThemedFaceGif();
@@ -1629,6 +1637,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (calendar_page_) {
         lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    if (bone_weight_page_) {
+        lv_obj_add_flag(bone_weight_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
     if (focus_page_) {
         lv_obj_add_flag(focus_page_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -1688,6 +1702,19 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show calendar page");
             break;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+        case DesktopPage::BONE_WEIGHT:
+            if (!bone_weight_page_) {
+                CreateBoneWeightPage(lv_scr_act());
+            }
+            if (bone_weight_page_) {
+                lv_obj_clear_flag(bone_weight_page_, LV_OBJ_FLAG_HIDDEN);
+                RefreshBoneWeightInput();
+            }
+            ESP_LOGI(TAG, "Show Calendar bone-weight page");
+            break;
+#endif
         case DesktopPage::RADIO:
             lv_obj_clear_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
             ESP_LOGI(TAG, "Show radio page");
@@ -1764,6 +1791,13 @@ void DesktopUI::ShowPage(DesktopPage page) {
             break;
     }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    if (was_bone_weight && page != DesktopPage::BONE_WEIGHT) {
+        ReleaseBoneWeightPage();
+    }
+#endif
+
     // Do not keep weather particles mutating hidden objects behind full-screen apps.
     // They are resumed by ApplyWeatherVisual when the main-page weather is updated.
     if (weather_particle_timer_ && page != DesktopPage::MAIN) {
@@ -1816,6 +1850,16 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
     const int16_t min_dx = 70;
     const int16_t max_dy = 90;
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    if (current_page_ == DesktopPage::BONE_WEIGHT &&
+        bone_weight_reader_visible_ && LV_ABS(dy) < max_dy &&
+        LV_ABS(dx) > min_dx) {
+        ChangeBoneWeightReaderPage(dx < 0 ? 1 : -1);
+        return;
+    }
+#endif
+
     if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > 35 && LV_ABS(dx) > LV_ABS(dy)) {
         NavigateBack();
         return;
@@ -1853,6 +1897,11 @@ void DesktopUI::NavigateBack() {
         target = DesktopPage::APPS;
     } else if (current_page_ == DesktopPage::PODCAST) {
         target = DesktopPage::MEDIA;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    } else if (current_page_ == DesktopPage::BONE_WEIGHT) {
+        target = DesktopPage::CALENDAR;
+#endif
     }
     ESP_LOGI(TAG, "Navigate back page=%d target=%d",
              static_cast<int>(current_page_), static_cast<int>(target));
@@ -1974,6 +2023,14 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         return;
     }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    if (current_page_ == DesktopPage::BONE_WEIGHT) {
+        HandleBoneWeightTap(x, y);
+        return;
+    }
+#endif
+
     if (current_page_ == DesktopPage::MAIN) {
         if (x >= 376 && x < 470 && y >= 8 && y < 62) {
             ShowPage(DesktopPage::APPS);
@@ -2094,6 +2151,13 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     }
 
     if (current_page_ == DesktopPage::CALENDAR) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+        if (hit(118, 278, 68, 34)) {
+            ShowPage(DesktopPage::BONE_WEIGHT);
+            return;
+        }
+#endif
         if (hit(376, 36, 76, 28) || hit(192, 278, 96, 34)) {
             ShowTodayCalendar();
         } else if (hit(18, 278, 96, 34)) {
@@ -3220,6 +3284,21 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
                                   themed_color(LV_COLOR_MAKE(0x5b, 0x3c, 0x27), COLOR_LINE), 0);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 18, 278);
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    lv_obj_t* bone_weight = CreateButton(calendar_page_, "称骨", nullptr);
+    lv_obj_set_size(bone_weight, 68, 34);
+    lv_obj_set_style_bg_color(
+        bone_weight, themed_color(LV_COLOR_MAKE(0x5a, 0x2d, 0x1a), COLOR_SURFACE_2), 0);
+    lv_obj_set_style_border_color(
+        bone_weight, themed_color(LV_COLOR_MAKE(0xd5, 0x8c, 0x48), COLOR_GOLD), 0);
+    lv_obj_align(bone_weight, LV_ALIGN_TOP_LEFT, 118, 278);
+    lv_obj_t* bone_weight_text = lv_obj_get_child(bone_weight, 0);
+    if (bone_weight_text) {
+        lv_obj_set_style_text_font(bone_weight_text, qd_cn_font_16(), 0);
+    }
+#endif
+
     lv_obj_t* today = CreateButton(calendar_page_, "Today", calendar_today_cb);
     lv_obj_set_size(today, 96, 34);
     lv_obj_set_ext_click_area(today, 12);
@@ -3239,6 +3318,499 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
 
     RenderCalendar();
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+void DesktopUI::CreateBoneWeightPage(lv_obj_t* root) {
+    if (bone_weight_page_) {
+        return;
+    }
+
+    if (!bone_weight_initialized_) {
+        if (current_year_ >= 1901 && current_year_ <= 2100) {
+            bone_weight_year_ = current_year_;
+            bone_weight_month_ = std::clamp(current_month_, 1, 12);
+            bone_weight_day_ = std::clamp(
+                current_day_, 1, days_in_month(bone_weight_year_, bone_weight_month_));
+            bone_weight_hour_ = std::clamp(current_hour_, 0, 23);
+        }
+        bone_weight_initialized_ = true;
+    }
+
+    bone_weight_page_ = lv_obj_create(root);
+    lv_obj_add_style(bone_weight_page_, &style_screen, 0);
+    lv_obj_set_size(bone_weight_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(bone_weight_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(bone_weight_page_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(bone_weight_page_);
+    lv_obj_set_style_bg_color(
+        bone_weight_page_, themed_color(LV_COLOR_MAKE(0x24, 0x13, 0x0b), COLOR_BG), 0);
+
+    lv_obj_t* title = label_en(bone_weight_page_, "称骨命理", &style_gold);
+    lv_obj_set_style_text_font(title, qd_cn_font_16(), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    lv_obj_t* subtitle =
+        label_en(bone_weight_page_, "选择公历出生年月日与小时", &style_muted);
+    lv_obj_set_style_text_font(subtitle, qd_cn_font_16(), 0);
+    lv_obj_align(subtitle, LV_ALIGN_TOP_LEFT, 18, 38);
+
+    lv_obj_t* back = CreateButton(bone_weight_page_, "返回", nullptr);
+    lv_obj_set_size(back, 74, 34);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -16, 10);
+    lv_obj_t* back_text = lv_obj_get_child(back, 0);
+    if (back_text) {
+        lv_obj_set_style_text_font(back_text, qd_cn_font_16(), 0);
+    }
+
+    auto make_control_button = [this](lv_obj_t* parent, const char* text,
+                                      int x, int y, int width) {
+        lv_obj_t* button = CreateButton(parent, text, nullptr);
+        lv_obj_set_size(button, width, 28);
+        lv_obj_set_style_radius(button, 8, 0);
+        lv_obj_align(button, LV_ALIGN_TOP_LEFT, x, y);
+        lv_obj_t* label = lv_obj_get_child(button, 0);
+        if (label) {
+            lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
+        }
+    };
+
+    auto make_selector = [this](const char* title_text, int x, int width,
+                                lv_obj_t** value_label) {
+        lv_obj_t* panel = CreatePanel(bone_weight_page_, width, 112, x, 64);
+        lv_obj_set_style_radius(panel, 10, 0);
+        lv_obj_t* field_title = label_en(panel, title_text, &style_muted);
+        lv_obj_set_style_text_font(field_title, qd_cn_font_16(), 0);
+        lv_obj_align(field_title, LV_ALIGN_TOP_MID, 0, 6);
+        *value_label = label_en(panel, "--", &style_en);
+        lv_obj_set_style_text_font(*value_label, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_color(*value_label, COLOR_GOLD, 0);
+        lv_obj_align(*value_label, LV_ALIGN_TOP_MID, 0, 36);
+        return panel;
+    };
+
+    lv_obj_t* year_panel = make_selector("出生年", 12, 132, &bone_weight_year_label_);
+    make_control_button(year_panel, "-10", 3, 78, 28);
+    make_control_button(year_panel, "-1", 35, 78, 28);
+    make_control_button(year_panel, "+1", 68, 78, 28);
+    make_control_button(year_panel, "+10", 101, 78, 28);
+
+    lv_obj_t* month_panel = make_selector("月", 150, 98, &bone_weight_month_label_);
+    make_control_button(month_panel, "-", 8, 78, 36);
+    make_control_button(month_panel, "+", 54, 78, 36);
+
+    lv_obj_t* day_panel = make_selector("日", 254, 98, &bone_weight_day_label_);
+    make_control_button(day_panel, "-", 8, 78, 36);
+    make_control_button(day_panel, "+", 54, 78, 36);
+
+    lv_obj_t* hour_panel = make_selector("时辰", 358, 110, &bone_weight_hour_label_);
+    make_control_button(hour_panel, "-", 10, 78, 38);
+    make_control_button(hour_panel, "+", 62, 78, 38);
+
+    lv_obj_t* calculate = CreateButton(bone_weight_page_, "开始推算", nullptr);
+    lv_obj_set_size(calculate, 448, 38);
+    lv_obj_set_style_bg_color(
+        calculate, themed_color(LV_COLOR_MAKE(0xd5, 0x8c, 0x48), COLOR_CREAM), 0);
+    lv_obj_set_style_border_width(calculate, 0, 0);
+    lv_obj_align(calculate, LV_ALIGN_TOP_LEFT, 16, 187);
+    bone_weight_action_label_ = lv_obj_get_child(calculate, 0);
+    if (bone_weight_action_label_) {
+        lv_obj_set_style_text_font(bone_weight_action_label_, qd_cn_font_16(), 0);
+    }
+
+    bone_weight_result_label_ =
+        label_en(bone_weight_page_, "选择出生年月日时，点击开始推算", &style_gold);
+    lv_obj_set_width(bone_weight_result_label_, 448);
+    lv_obj_set_height(bone_weight_result_label_, 38);
+    lv_label_set_long_mode(bone_weight_result_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(bone_weight_result_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(bone_weight_result_label_, qd_cn_font_16(), 0);
+    lv_obj_align(bone_weight_result_label_, LV_ALIGN_TOP_LEFT, 16, 230);
+
+    bone_weight_song_label_ =
+        label_en(bone_weight_page_, "SD卡路径：/calendar/bone_weight/", &style_en);
+    lv_obj_set_width(bone_weight_song_label_, 448);
+    lv_obj_set_height(bone_weight_song_label_, 42);
+    lv_label_set_long_mode(bone_weight_song_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(bone_weight_song_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(bone_weight_song_label_, qd_cn_font_16(), 0);
+    lv_obj_align(bone_weight_song_label_, LV_ALIGN_TOP_LEFT, 16, 269);
+
+    lv_obj_t* notice =
+        label_en(bone_weight_page_, "传统民俗文化娱乐参考", &style_muted);
+    lv_obj_set_style_text_font(notice, qd_cn_font_16(), 0);
+    lv_obj_align(notice, LV_ALIGN_TOP_RIGHT, -100, 12);
+
+    bone_weight_reader_group_ = lv_obj_create(bone_weight_page_);
+    lv_obj_add_style(bone_weight_reader_group_, &style_screen, 0);
+    lv_obj_set_size(bone_weight_reader_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(bone_weight_reader_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(
+        bone_weight_reader_group_,
+        themed_color(LV_COLOR_MAKE(0x24, 0x13, 0x0b), COLOR_BG), 0);
+    lv_obj_add_flag(bone_weight_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(bone_weight_reader_group_);
+
+    lv_obj_t* reader_title =
+        label_en(bone_weight_reader_group_, "称骨详解", &style_gold);
+    lv_obj_set_style_text_font(reader_title, qd_cn_font_16(), 0);
+    lv_obj_align(reader_title, LV_ALIGN_TOP_LEFT, 18, 10);
+
+    bone_weight_reader_summary_label_ =
+        label_en(bone_weight_reader_group_, "--", &style_muted);
+    lv_obj_set_width(bone_weight_reader_summary_label_, 350);
+    lv_obj_set_style_text_font(
+        bone_weight_reader_summary_label_, qd_cn_font_16(), 0);
+    lv_obj_align(bone_weight_reader_summary_label_, LV_ALIGN_TOP_LEFT, 18, 36);
+
+    lv_obj_t* reader_back =
+        CreateButton(bone_weight_reader_group_, "返回", nullptr);
+    lv_obj_set_size(reader_back, 74, 34);
+    lv_obj_align(reader_back, LV_ALIGN_TOP_RIGHT, -16, 10);
+    lv_obj_t* reader_back_text = lv_obj_get_child(reader_back, 0);
+    if (reader_back_text) {
+        lv_obj_set_style_text_font(reader_back_text, qd_cn_font_16(), 0);
+    }
+
+    lv_obj_t* reader_panel =
+        CreatePanel(bone_weight_reader_group_, 448, 192, 16, 64);
+    lv_obj_set_style_radius(reader_panel, 12, 0);
+    lv_obj_set_style_border_color(
+        reader_panel, themed_color(LV_COLOR_MAKE(0xd5, 0x8c, 0x48), COLOR_LINE), 0);
+
+    bone_weight_reader_section_label_ =
+        label_en(reader_panel, "称骨歌诀", &style_gold);
+    lv_obj_set_style_text_font(
+        bone_weight_reader_section_label_, qd_cn_font_16(), 0);
+    lv_obj_align(bone_weight_reader_section_label_, LV_ALIGN_TOP_LEFT, 14, 10);
+
+    bone_weight_reader_text_label_ =
+        label_en(reader_panel, "", &style_en);
+    lv_obj_set_width(bone_weight_reader_text_label_, 416);
+    lv_obj_set_height(bone_weight_reader_text_label_, 132);
+    lv_label_set_long_mode(
+        bone_weight_reader_text_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(
+        bone_weight_reader_text_label_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_line_space(bone_weight_reader_text_label_, 4, 0);
+    lv_obj_align(bone_weight_reader_text_label_, LV_ALIGN_TOP_LEFT, 14, 42);
+
+    lv_obj_t* reader_prev =
+        CreateButton(bone_weight_reader_group_, "上一页", nullptr);
+    lv_obj_set_size(reader_prev, 96, 36);
+    lv_obj_align(reader_prev, LV_ALIGN_TOP_LEFT, 16, 270);
+    lv_obj_t* reader_prev_text = lv_obj_get_child(reader_prev, 0);
+    if (reader_prev_text) {
+        lv_obj_set_style_text_font(reader_prev_text, qd_cn_font_16(), 0);
+    }
+
+    bone_weight_reader_page_label_ =
+        label_en(bone_weight_reader_group_, "1 / 6", &style_muted);
+    lv_obj_set_width(bone_weight_reader_page_label_, 120);
+    lv_obj_set_style_text_align(
+        bone_weight_reader_page_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(bone_weight_reader_page_label_, LV_ALIGN_TOP_MID, 0, 280);
+
+    lv_obj_t* reader_next =
+        CreateButton(bone_weight_reader_group_, "下一页", nullptr);
+    lv_obj_set_size(reader_next, 96, 36);
+    lv_obj_align(reader_next, LV_ALIGN_TOP_RIGHT, -16, 270);
+    lv_obj_t* reader_next_text = lv_obj_get_child(reader_next, 0);
+    if (reader_next_text) {
+        lv_obj_set_style_text_font(reader_next_text, qd_cn_font_16(), 0);
+    }
+
+    RefreshBoneWeightInput();
+}
+
+void DesktopUI::ReleaseBoneWeightPage() {
+    if (bone_weight_page_) {
+        lv_obj_del(bone_weight_page_);
+    }
+    bone_weight_page_ = nullptr;
+    bone_weight_reader_group_ = nullptr;
+    bone_weight_year_label_ = nullptr;
+    bone_weight_month_label_ = nullptr;
+    bone_weight_day_label_ = nullptr;
+    bone_weight_hour_label_ = nullptr;
+    bone_weight_action_label_ = nullptr;
+    bone_weight_result_label_ = nullptr;
+    bone_weight_song_label_ = nullptr;
+    bone_weight_reader_summary_label_ = nullptr;
+    bone_weight_reader_section_label_ = nullptr;
+    bone_weight_reader_text_label_ = nullptr;
+    bone_weight_reader_page_label_ = nullptr;
+    bone_weight_total_ = 0;
+    bone_weight_has_result_ = false;
+    bone_weight_reader_visible_ = false;
+    bone_weight_reader_page_ = 0;
+}
+
+void DesktopUI::RefreshBoneWeightInput() {
+    static constexpr const char* kShichen[] = {
+        "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
+    };
+    char text[32];
+    if (bone_weight_year_label_) {
+        snprintf(text, sizeof(text), "%d年", bone_weight_year_);
+        lv_label_set_text(bone_weight_year_label_, text);
+    }
+    if (bone_weight_month_label_) {
+        snprintf(text, sizeof(text), "%02d月", bone_weight_month_);
+        lv_label_set_text(bone_weight_month_label_, text);
+    }
+    if (bone_weight_day_label_) {
+        snprintf(text, sizeof(text), "%02d日", bone_weight_day_);
+        lv_label_set_text(bone_weight_day_label_, text);
+    }
+    if (bone_weight_hour_label_) {
+        const int shichen =
+            bone_weight_hour_ == 23 || bone_weight_hour_ == 0
+                ? 0
+                : (bone_weight_hour_ + 1) / 2;
+        snprintf(text, sizeof(text), "%02d时 %s", bone_weight_hour_, kShichen[shichen]);
+        lv_label_set_text(bone_weight_hour_label_, text);
+    }
+}
+
+void DesktopUI::AdjustBoneWeightInput(int action) {
+    switch (action) {
+        case 0:
+            bone_weight_year_ = std::max(1901, bone_weight_year_ - 10);
+            break;
+        case 1:
+            bone_weight_year_ = std::max(1901, bone_weight_year_ - 1);
+            break;
+        case 2:
+            bone_weight_year_ = std::min(2100, bone_weight_year_ + 1);
+            break;
+        case 3:
+            bone_weight_year_ = std::min(2100, bone_weight_year_ + 10);
+            break;
+        case 4:
+            bone_weight_month_ = bone_weight_month_ == 1 ? 12 : bone_weight_month_ - 1;
+            break;
+        case 5:
+            bone_weight_month_ = bone_weight_month_ == 12 ? 1 : bone_weight_month_ + 1;
+            break;
+        case 6: {
+            const int maximum = days_in_month(bone_weight_year_, bone_weight_month_);
+            bone_weight_day_ = bone_weight_day_ == 1 ? maximum : bone_weight_day_ - 1;
+            break;
+        }
+        case 7: {
+            const int maximum = days_in_month(bone_weight_year_, bone_weight_month_);
+            bone_weight_day_ = bone_weight_day_ == maximum ? 1 : bone_weight_day_ + 1;
+            break;
+        }
+        case 8:
+            bone_weight_hour_ = bone_weight_hour_ == 0 ? 23 : bone_weight_hour_ - 1;
+            break;
+        case 9:
+            bone_weight_hour_ = bone_weight_hour_ == 23 ? 0 : bone_weight_hour_ + 1;
+            break;
+        default:
+            return;
+    }
+
+    bone_weight_day_ = std::min(
+        bone_weight_day_, days_in_month(bone_weight_year_, bone_weight_month_));
+    if (bone_weight_result_label_) {
+        lv_label_set_text(bone_weight_result_label_, "选择完成后点击开始推算");
+    }
+    if (bone_weight_song_label_) {
+        lv_label_set_text(bone_weight_song_label_, "SD卡路径：/calendar/bone_weight/");
+    }
+    if (bone_weight_action_label_) {
+        lv_label_set_text(bone_weight_action_label_, "开始推算");
+    }
+    bone_weight_total_ = 0;
+    bone_weight_has_result_ = false;
+    bone_weight_reader_visible_ = false;
+    bone_weight_reader_page_ = 0;
+    RefreshBoneWeightInput();
+}
+
+void DesktopUI::CalculateBoneWeight() {
+    if (!bone_weight_result_label_ || !bone_weight_song_label_) {
+        return;
+    }
+
+    QdBoneWeight::Result result{};
+    const QdBoneWeight::Status status = QdBoneWeight::Calculate(
+        {bone_weight_year_, bone_weight_month_, bone_weight_day_, bone_weight_hour_},
+        &result);
+    if (status != QdBoneWeight::Status::OK) {
+        lv_label_set_text(bone_weight_result_label_, QdBoneWeight::StatusText(status));
+        lv_label_set_text(
+            bone_weight_song_label_,
+            "请将桌面数据包中的 calendar 文件夹复制到 SD 卡根目录");
+        bone_weight_total_ = 0;
+        bone_weight_has_result_ = false;
+        bone_weight_reader_visible_ = false;
+        bone_weight_reader_page_ = 0;
+        if (bone_weight_action_label_) {
+            lv_label_set_text(bone_weight_action_label_, "开始推算");
+        }
+        return;
+    }
+
+    static constexpr const char* kStems[] = {
+        "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸",
+    };
+    static constexpr const char* kBranches[] = {
+        "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
+    };
+    static constexpr const char* kShichen[] = {
+        "子", "丑", "寅", "卯", "辰", "巳", "午", "未", "申", "酉", "戌", "亥",
+    };
+
+    char summary[192];
+    snprintf(summary, sizeof(summary),
+             "%s%s年 农历%s%d月%d日 %s时  骨重%d两%d钱\n"
+             "年%d 月%d 日%d 时%d（钱）",
+             kStems[result.lunar_year_cycle % 10],
+             kBranches[result.lunar_year_cycle % 12],
+             result.lunar_leap_month ? "闰" : "",
+             result.lunar_month,
+             result.lunar_day,
+             kShichen[result.shichen],
+             result.total_weight / 10,
+             result.total_weight % 10,
+             result.year_weight,
+             result.month_weight,
+             result.day_weight,
+             result.hour_weight);
+    lv_label_set_text(bone_weight_result_label_, summary);
+    lv_label_set_text(bone_weight_song_label_, result.song);
+    bone_weight_total_ = result.total_weight;
+    bone_weight_has_result_ = true;
+    bone_weight_reader_page_ = 0;
+    if (bone_weight_action_label_) {
+        lv_label_set_text(bone_weight_action_label_, "打开详细解读");
+    }
+}
+
+void DesktopUI::ShowBoneWeightReader() {
+    if (!bone_weight_has_result_ || !bone_weight_reader_group_) {
+        return;
+    }
+    bone_weight_reader_visible_ = true;
+    bone_weight_reader_page_ = 0;
+    lv_obj_clear_flag(bone_weight_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    RefreshBoneWeightReader();
+}
+
+void DesktopUI::HideBoneWeightReader() {
+    bone_weight_reader_visible_ = false;
+    bone_weight_reader_page_ = 0;
+    if (bone_weight_reader_group_) {
+        lv_obj_add_flag(bone_weight_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void DesktopUI::ChangeBoneWeightReaderPage(int delta) {
+    if (!bone_weight_reader_visible_) {
+        return;
+    }
+    const int next = std::clamp(
+        static_cast<int>(bone_weight_reader_page_) + delta,
+        0, static_cast<int>(QdBoneWeight::ReaderPageCount()) - 1);
+    if (next == bone_weight_reader_page_) {
+        return;
+    }
+    bone_weight_reader_page_ = static_cast<uint8_t>(next);
+    RefreshBoneWeightReader();
+}
+
+void DesktopUI::RefreshBoneWeightReader() {
+    if (!bone_weight_reader_visible_ || !bone_weight_reader_text_label_) {
+        return;
+    }
+
+    if (bone_weight_reader_section_label_) {
+        lv_label_set_text(
+            bone_weight_reader_section_label_,
+            QdBoneWeight::ReaderPageTitle(bone_weight_reader_page_));
+    }
+    if (bone_weight_reader_summary_label_) {
+        char summary[96];
+        snprintf(summary, sizeof(summary),
+                 "公历 %04d-%02d-%02d %02d时 · 骨重%d两%d钱",
+                 bone_weight_year_, bone_weight_month_, bone_weight_day_,
+                 bone_weight_hour_, bone_weight_total_ / 10,
+                 bone_weight_total_ % 10);
+        lv_label_set_text(bone_weight_reader_summary_label_, summary);
+    }
+    if (bone_weight_reader_page_label_) {
+        char page[16];
+        snprintf(page, sizeof(page), "%u / %u",
+                 static_cast<unsigned>(bone_weight_reader_page_ + 1),
+                 static_cast<unsigned>(QdBoneWeight::ReaderPageCount()));
+        lv_label_set_text(bone_weight_reader_page_label_, page);
+    }
+
+    char text[320];
+    const QdBoneWeight::Status status = QdBoneWeight::LoadReaderPage(
+        bone_weight_total_, bone_weight_reader_page_, text, sizeof(text));
+    lv_label_set_text(
+        bone_weight_reader_text_label_,
+        status == QdBoneWeight::Status::OK
+            ? text
+            : QdBoneWeight::StatusText(status));
+}
+
+bool DesktopUI::HandleBoneWeightTap(uint16_t x, uint16_t y) {
+    auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
+        return x >= left && x < left + width && y >= top && y < top + height;
+    };
+    if (bone_weight_reader_visible_) {
+        if (hit(390, 10, 74, 34)) {
+            HideBoneWeightReader();
+        } else if (hit(16, 270, 96, 36)) {
+            ChangeBoneWeightReaderPage(-1);
+        } else if (hit(368, 270, 96, 36)) {
+            ChangeBoneWeightReaderPage(1);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    if (hit(390, 10, 74, 34)) {
+        NavigateBack();
+    } else if (hit(15, 142, 28, 28)) {
+        AdjustBoneWeightInput(0);
+    } else if (hit(47, 142, 28, 28)) {
+        AdjustBoneWeightInput(1);
+    } else if (hit(80, 142, 28, 28)) {
+        AdjustBoneWeightInput(2);
+    } else if (hit(113, 142, 28, 28)) {
+        AdjustBoneWeightInput(3);
+    } else if (hit(158, 142, 36, 28)) {
+        AdjustBoneWeightInput(4);
+    } else if (hit(204, 142, 36, 28)) {
+        AdjustBoneWeightInput(5);
+    } else if (hit(262, 142, 36, 28)) {
+        AdjustBoneWeightInput(6);
+    } else if (hit(308, 142, 36, 28)) {
+        AdjustBoneWeightInput(7);
+    } else if (hit(368, 142, 38, 28)) {
+        AdjustBoneWeightInput(8);
+    } else if (hit(420, 142, 38, 28)) {
+        AdjustBoneWeightInput(9);
+    } else if (hit(16, 187, 448, 38)) {
+        if (bone_weight_has_result_) {
+            ShowBoneWeightReader();
+        } else {
+            CalculateBoneWeight();
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+#endif
 
 // ===== Radio page =====
 void DesktopUI::CreateRadioPage(lv_obj_t* root) {
@@ -5774,6 +6346,26 @@ void DesktopUI::ReloadUserProfile() {
     photo_page_ = nullptr;
     fc_page_ = nullptr;
     calendar_page_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    bone_weight_page_ = nullptr;
+    bone_weight_reader_group_ = nullptr;
+    bone_weight_year_label_ = nullptr;
+    bone_weight_month_label_ = nullptr;
+    bone_weight_day_label_ = nullptr;
+    bone_weight_hour_label_ = nullptr;
+    bone_weight_action_label_ = nullptr;
+    bone_weight_result_label_ = nullptr;
+    bone_weight_song_label_ = nullptr;
+    bone_weight_reader_summary_label_ = nullptr;
+    bone_weight_reader_section_label_ = nullptr;
+    bone_weight_reader_text_label_ = nullptr;
+    bone_weight_reader_page_label_ = nullptr;
+    bone_weight_total_ = 0;
+    bone_weight_has_result_ = false;
+    bone_weight_reader_visible_ = false;
+    bone_weight_reader_page_ = 0;
+#endif
     radio_page_ = nullptr;
     music_page_ = nullptr;
     music_title_label_ = nullptr;
@@ -5837,6 +6429,26 @@ void DesktopUI::CycleTheme() {
     photo_page_ = nullptr;
     fc_page_ = nullptr;
     calendar_page_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    bone_weight_page_ = nullptr;
+    bone_weight_reader_group_ = nullptr;
+    bone_weight_year_label_ = nullptr;
+    bone_weight_month_label_ = nullptr;
+    bone_weight_day_label_ = nullptr;
+    bone_weight_hour_label_ = nullptr;
+    bone_weight_action_label_ = nullptr;
+    bone_weight_result_label_ = nullptr;
+    bone_weight_song_label_ = nullptr;
+    bone_weight_reader_summary_label_ = nullptr;
+    bone_weight_reader_section_label_ = nullptr;
+    bone_weight_reader_text_label_ = nullptr;
+    bone_weight_reader_page_label_ = nullptr;
+    bone_weight_total_ = 0;
+    bone_weight_has_result_ = false;
+    bone_weight_reader_visible_ = false;
+    bone_weight_reader_page_ = 0;
+#endif
     radio_page_ = nullptr;
     music_page_ = nullptr;
     music_title_label_ = nullptr;

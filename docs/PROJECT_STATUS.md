@@ -1,3 +1,14 @@
+# 2026-07-16 Project Status: v1.8.0 Calendar Bone-Weight Reader
+
+- Added an optional Calendar-integrated bone-weight calculator guarded by the default-off `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT`.
+- Supports Gregorian birth date selection from 1901 to 2100, birth hour selection, SD-backed lunar lookup, traditional weight calculation, verse display, and a six-page detailed reader.
+- Detailed commentary is stored in the desktop SD package rather than firmware flash and is read one page at a time.
+- Reader sections are verse, overview, character/conduct, career/finance, relationships, and life advice. Buttons and horizontal swipes change pages.
+- All 2.1-7.2 liang results are covered. UTF-8, checksum, data-range, and 1,090-character font coverage checks passed with no missing glyphs.
+- Off/On ESP-IDF 5.5.2 builds passed. Off is 6,710,752 bytes; final v1.8.0 release sizes are recorded in the release checksum file.
+- App-only hardware flashing and serial boot passed without panic, watchdog, or reboot loop. The final detailed-reader visual pass remains pending because the SD card was unavailable during the final boot capture.
+- No media, weather animation, touch driver, BMI270, XiaoZhi, MCP, OTA layout, partition, pin, or AFE/WakeNet behavior was changed.
+
 # 2026-07-13 Project Status: v1.7.99 Post-Music Weather Recovery
 
 - Latest release target is `v1.7.99` on current `main`, retaining the diagnostics long-press fix and the v1.7.97 particle hourglass baseline.

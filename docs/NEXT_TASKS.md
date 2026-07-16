@@ -1,3 +1,11 @@
+# 2026-07-16 v1.8.0 Calendar Bone-Weight Reader Follow-Up
+
+- Copy the updated desktop `calendar` folder to the SD-card root and reboot with the card firmly inserted.
+- Verify all six reader pages on the physical LCD: text wrapping, line spacing, no clipping, previous/next buttons, horizontal swipes, page count, and return to the date selector.
+- Test boundary inputs: 1901/2100, leap day, 23:00 next-day rule, month-end dates, and several results across the 2.1-7.2 liang range.
+- Confirm missing SD card and missing `details.tsv` produce readable errors without a crash.
+- Return to Main and verify weather animation, touch, XiaoZhi, music, and Radio remain unchanged. Radio audio remains a separately known media issue and is not part of this feature.
+
 # 2026-07-10 v1.7.92 Shake Lab Hardware Follow-Up
 
 - v1.7.92 is flashed to COM3 and release assets are prepared. First confirm Main/Apps taps, Apps More, photo right-swipe, Settings vertical scroll, and XiaoZhi right-swipe.

@@ -1,3 +1,14 @@
+## 2026-07-16: v1.8.0 Calendar Bone-Weight Detailed Reader
+
+- Added the optional `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT` feature for the QDTech 3.5-inch Calendar page; it remains disabled by default in source configuration.
+- Added Gregorian date/hour selection for 1901-2100, SD-backed lunar lookup, traditional weight calculation, and verse loading.
+- Added an SD-backed six-page reader with verse, overview, character/conduct, career/finance, relationships, and life-advice sections.
+- Added previous/next controls and horizontal page swipes while preserving the existing Calendar and all unrelated UI paths.
+- Detailed text is project-authored, gentle, non-deterministic cultural commentary. It is not represented as an authoritative prediction or real-world decision advice.
+- Added no task, timer, queue, semaphore, NVS storage, media behavior, touch-driver behavior, partition, or pin change.
+- ESP-IDF 5.5.2 Off/On builds passed; Off remains 6,710,752 bytes. Release sizes and hashes are recorded in `releases/v1.8.0/SHA256SUMS.txt`.
+- App-only flash and serial startup passed on `/dev/cu.usbmodem212401` with no panic, watchdog, or reboot loop. Final detailed-reader visual verification remains pending after SD data installation.
+
 ## 2026-07-13: v1.7.99 Low-Memory Weather and Manual Phone Web Hotfix
 
 - Kept the QDTech firmware version at `1.7.99` and published a hotfix build for the Windows/COM3 board.
