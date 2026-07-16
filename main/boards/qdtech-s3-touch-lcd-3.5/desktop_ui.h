@@ -1,5 +1,6 @@
 #pragma once
 
+#include "sdkconfig.h"
 #include "lvgl.h"
 #include "shake_detector.h"
 #include <cstddef>
@@ -13,6 +14,10 @@ enum class DesktopPage {
     PHOTO,
     FC,
     CALENDAR,
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    BONE_WEIGHT,
+#endif
     RADIO,
     MUSIC,
     MEDIA,
@@ -162,6 +167,11 @@ private:
     lv_obj_t* photo_page_ = nullptr;
     lv_obj_t* fc_page_ = nullptr;
     lv_obj_t* calendar_page_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    lv_obj_t* bone_weight_page_ = nullptr;
+    lv_obj_t* bone_weight_reader_group_ = nullptr;
+#endif
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* music_page_ = nullptr;
     lv_obj_t* media_page_ = nullptr;
@@ -265,6 +275,29 @@ private:
     int calendar_year_ = 0;
     int calendar_month_ = 0;
     bool calendar_follow_today_ = true;
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    lv_obj_t* bone_weight_year_label_ = nullptr;
+    lv_obj_t* bone_weight_month_label_ = nullptr;
+    lv_obj_t* bone_weight_day_label_ = nullptr;
+    lv_obj_t* bone_weight_hour_label_ = nullptr;
+    lv_obj_t* bone_weight_action_label_ = nullptr;
+    lv_obj_t* bone_weight_result_label_ = nullptr;
+    lv_obj_t* bone_weight_song_label_ = nullptr;
+    lv_obj_t* bone_weight_reader_summary_label_ = nullptr;
+    lv_obj_t* bone_weight_reader_section_label_ = nullptr;
+    lv_obj_t* bone_weight_reader_text_label_ = nullptr;
+    lv_obj_t* bone_weight_reader_page_label_ = nullptr;
+    int bone_weight_year_ = 1990;
+    int bone_weight_month_ = 1;
+    int bone_weight_day_ = 1;
+    int bone_weight_hour_ = 12;
+    uint8_t bone_weight_total_ = 0;
+    bool bone_weight_initialized_ = false;
+    bool bone_weight_has_result_ = false;
+    bool bone_weight_reader_visible_ = false;
+    uint8_t bone_weight_reader_page_ = 0;
+#endif
 
     // Radio page elements
     lv_obj_t* radio_station_label_ = nullptr;
@@ -488,6 +521,19 @@ private:
     void CreatePhotoPage(lv_obj_t* root);
     void CreateFcPage(lv_obj_t* root);
     void CreateCalendarPage(lv_obj_t* root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
+    void CreateBoneWeightPage(lv_obj_t* root);
+    void ReleaseBoneWeightPage();
+    void RefreshBoneWeightInput();
+    void AdjustBoneWeightInput(int action);
+    void CalculateBoneWeight();
+    void ShowBoneWeightReader();
+    void HideBoneWeightReader();
+    void ChangeBoneWeightReaderPage(int delta);
+    void RefreshBoneWeightReader();
+    bool HandleBoneWeightTap(uint16_t x, uint16_t y);
+#endif
     void CreateRadioPage(lv_obj_t* root);
     void CreateMusicPage(lv_obj_t* root);
     void CreateMediaPage(lv_obj_t* root);

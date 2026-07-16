@@ -1,3 +1,17 @@
+## 2026-07-16 Handoff: v1.8.0 Calendar Bone-Weight Reader
+
+- Firmware version is `v1.8.0`, based on remote `main` commit `71ce1df1b1ea195449d125e71c0a14c172106e1b`.
+- Added a default-off QDTech experiment, `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT`, which adds a `称骨` entry to the existing Calendar page without changing the normal Calendar path when disabled.
+- The app accepts arbitrary Gregorian dates from 1901 through 2100 and a 0-23 birth hour, converts the date through SD-card calendar records, and calculates the traditional year/month/day/shichen weight.
+- Songs and all explanatory text remain on the SD card under `/calendar/bone_weight/`. The firmware reads only the selected record or reader page and does not keep the complete dataset in RAM.
+- The detailed reader has six pages: verse, overview, character/conduct, career/finance, relationships, and life advice. It supports previous/next buttons and horizontal page swipes.
+- The project-authored explanations use gentle, non-deterministic wording and remain folk-culture entertainment rather than medical, financial, or life-decision advice.
+- No new task, timer, queue, semaphore, NVS record, media path, touch-driver path, weather artwork, LVGL rendering mode, partition, or pin change was introduced.
+- ESP-IDF 5.5.2 Off/On builds passed. The Off image remains `6,710,752` bytes. Final release sizes and hashes are recorded in `releases/v1.8.0/SHA256SUMS.txt`.
+- App-only flashing to `/dev/cu.usbmodem212401` at `0x100000` completed with esptool hash verification. Boot confirmed 8 MB PSRAM, LCD/LVGL/Desktop UI, touch, BMI270, Wi-Fi, MQTT, weather HTTP 200, and idle with no panic/watchdog/reboot loop.
+- The previous short interpretation was physically visible. The final six-page detailed reader still requires a physical pass after copying the updated SD package because the SD card timed out during the final boot capture.
+- Recovery: disable `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT` or app-only flash the Off build. The SD data may remain installed because disabled firmware ignores it.
+
 ## 2026-07-13 Handoff: v1.7.99 Low-Memory Weather + Manual Phone Web Hotfix
 
 - Firmware version remains `1.7.99`; this is a hotfix on the QDTech 3.5-inch line, not a feature-version bump.
