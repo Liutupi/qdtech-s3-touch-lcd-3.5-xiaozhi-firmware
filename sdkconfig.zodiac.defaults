@@ -1,0 +1,5 @@
+# Explicit opt-in profile for the QDTech v1.8.0 Calendar feature build.
+# The Kconfig defaults remain off; this file is used only when named in
+# SDKCONFIG_DEFAULTS by the release build command.
+CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT=y
+CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC=y

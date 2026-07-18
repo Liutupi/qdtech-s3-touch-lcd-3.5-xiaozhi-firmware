@@ -3,6 +3,11 @@
 #include "sdkconfig.h"
 #include "lvgl.h"
 #include "shake_detector.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+#include "zodiac_service.h"
+#endif
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -17,6 +22,10 @@ enum class DesktopPage {
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     BONE_WEIGHT,
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    ZODIAC,
 #endif
     RADIO,
     MUSIC,
@@ -172,6 +181,11 @@ private:
     lv_obj_t* bone_weight_page_ = nullptr;
     lv_obj_t* bone_weight_reader_group_ = nullptr;
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    lv_obj_t* zodiac_page_ = nullptr;
+    lv_obj_t* zodiac_reader_group_ = nullptr;
+#endif
     lv_obj_t* radio_page_ = nullptr;
     lv_obj_t* music_page_ = nullptr;
     lv_obj_t* media_page_ = nullptr;
@@ -297,6 +311,31 @@ private:
     bool bone_weight_has_result_ = false;
     bool bone_weight_reader_visible_ = false;
     uint8_t bone_weight_reader_page_ = 0;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    lv_obj_t* zodiac_year_label_ = nullptr;
+    lv_obj_t* zodiac_month_label_ = nullptr;
+    lv_obj_t* zodiac_day_label_ = nullptr;
+    lv_obj_t* zodiac_action_label_ = nullptr;
+    lv_obj_t* zodiac_result_label_ = nullptr;
+    lv_obj_t* zodiac_hint_label_ = nullptr;
+    lv_obj_t* zodiac_reader_image_ = nullptr;
+    lv_obj_t* zodiac_reader_image_status_ = nullptr;
+    lv_obj_t* zodiac_reader_summary_label_ = nullptr;
+    lv_obj_t* zodiac_reader_section_label_ = nullptr;
+    lv_obj_t* zodiac_reader_text_label_ = nullptr;
+    lv_obj_t* zodiac_reader_page_label_ = nullptr;
+    int zodiac_year_ = 1990;
+    int zodiac_month_ = 1;
+    int zodiac_day_ = 1;
+    QdZodiac::Sign zodiac_sign_ = QdZodiac::Sign::ARIES;
+    QdZodiac::ImageFrame zodiac_image_frame_{};
+    std::atomic<uint32_t> zodiac_load_request_id_{0};
+    bool zodiac_initialized_ = false;
+    bool zodiac_has_result_ = false;
+    bool zodiac_reader_visible_ = false;
+    uint8_t zodiac_reader_page_ = 0;
 #endif
 
     // Radio page elements
@@ -533,6 +572,19 @@ private:
     void ChangeBoneWeightReaderPage(int delta);
     void RefreshBoneWeightReader();
     bool HandleBoneWeightTap(uint16_t x, uint16_t y);
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    void CreateZodiacPage(lv_obj_t* root);
+    void ReleaseZodiacPage();
+    void RefreshZodiacInput();
+    void AdjustZodiacInput(int action);
+    void CalculateZodiac();
+    void ShowZodiacReader();
+    void HideZodiacReader();
+    void ChangeZodiacReaderPage(int delta);
+    void RefreshZodiacReader(bool load_image = false);
+    bool HandleZodiacTap(uint16_t x, uint16_t y);
 #endif
     void CreateRadioPage(lv_obj_t* root);
     void CreateMusicPage(lv_obj_t* root);
