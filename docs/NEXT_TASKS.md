@@ -1,4 +1,4 @@
-# 2026-07-18 v1.8.1 Calendar Zodiac + Dice OTA Follow-Up
+# 2026-07-18 v1.8.2 Chinese Apps Labels OTA Follow-Up
 
 - Full build handoff and rollback details are in `docs/V180_ZODIAC_HANDOFF.md`.
 - App-only COM3 flashing, Zodiac image loading, repeated reader entry/exit,
@@ -6,11 +6,12 @@
 - The hardware-discovered `esp_timer` JPEG stack overflow was fixed by moving
   SD text/image loading to the existing background task.
 - Copy the additive `calendar/zodiac` folder to the SD-card root without removing the existing `calendar/bone_weight` data.
-- The GitHub latest Release must carry tag `v1.8.1`, the exact App asset name
-  `qdtech-s3-touch-lcd-3.5-v1.8.1-app.bin`, and a matching SHA256SUMS entry.
-  Eligible boards should open Firmware Update, tap Check, see `v1.8.1 ready`,
+- The GitHub latest Release must carry tag `v1.8.2`, the exact App asset name
+  `qdtech-s3-touch-lcd-3.5-v1.8.2-app.bin`, and a matching SHA256SUMS entry.
+  Eligible v1.8.1 boards should open Firmware Update, tap Check, see `v1.8.2 ready`,
   then install only while idle with audio stopped.
-- Future USB flashes still require explicit user confirmation. Confirm the boot log reports app version `1.8.1`, SD mount succeeds, and no panic/watchdog/reboot loop occurs.
+- Confirm the secondary Apps page shows `电台、相册、小智、红白机、日历、专注、网络、设置、音乐、播客` without missing glyphs. These labels intentionally use Puhui rather than the compact LXGW subset.
+- Future USB flashes still require explicit user confirmation. Confirm the boot log reports app version `1.8.2`, SD mount succeeds, and no panic/watchdog/reboot loop occurs.
 - Open Calendar -> `星座`; test a normal date, leap day, invalid-day adjustment, and every transition boundary around the twelve signs.
 - Verify the result summary and all six reader pages: cute image clarity, Chinese wrapping, previous/next buttons, horizontal swipes, page count, back navigation, and repeated open/close without increasing PSRAM use.
 - Remove the SD card or rename one image/detail file and confirm a readable fallback appears without a crash.

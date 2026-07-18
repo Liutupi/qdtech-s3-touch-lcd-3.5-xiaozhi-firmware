@@ -1,18 +1,21 @@
-# v1.8.1 Calendar Zodiac Reader + Dice Face Fix
+# v1.8.2 Calendar Zodiac, Dice Fix + Chinese Apps Labels
 
 Date: 2026-07-18
 
 ## Scope
 
-- Baseline: tag commit `f889c6b69a8ac3ba6d1f72232c82a708b41622fb`, released project version `1.8.1`.
+- Baseline: published `v1.8.1` Zodiac/Dice OTA release.
+- v1.8.2 translates the secondary Apps-page entry labels to Chinese and uses
+  the complete Puhui Chinese font for those labels, avoiding missing-glyph
+  boxes while preserving the original names (including `相册`、`小智`、`红白机`).
 - Added default-off `CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC`.
 - The explicit `sdkconfig.zodiac.defaults` profile enables the existing
   Calendar bone-weight reader and the new Zodiac reader.
 - No Wi-Fi source, partition, pin, touch-driver, weather, voice, media, or OTA
   behavior was changed.
 - The QDTech in-device updater reads the latest GitHub Release. Publish the
-  `v1.8.1` release with the exact app asset name
-  `qdtech-s3-touch-lcd-3.5-v1.8.1-app.bin` so eligible v1.8.0 boards can
+  `v1.8.2` release with the exact app asset name
+  `qdtech-s3-touch-lcd-3.5-v1.8.2-app.bin` so eligible v1.8.1 boards can
   discover it as an OTA update.
 
 ## Behavior and resources
@@ -53,6 +56,12 @@ Date: 2026-07-18
 - Automated checks passed for 24 sign boundary cases, all 72 UTF-8 records,
   all twelve JPEG names/format/dimensions/size, and the dice face-six mask.
 - `git diff --check`: passed.
+- v1.8.2 ESP-IDF 5.5 build and link: passed; app `0x66b260` / 6,730,336
+  bytes, leaving `0x94da0` / 609,696 bytes (8%) in each 7 MB OTA slot.
+- v1.8.2 app-only flash to COM7 (MAC `7c:e8:b1:b2:8e:80`) at `0x100000`
+  completed with esptool hash verification. The following boot log confirmed
+  app version 1.8.1 before the version bump; the final 1.8.2 release image is
+  rebuilt from the same validated source plus only the project-version change.
 - Wi-Fi implementation was hash-compared with the untouched v1.8.0 base and
   remained identical.
 - App-only flashing to COM3 at `0x100000` completed with esptool hash

@@ -2775,16 +2775,16 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     };
 
     AppInfo apps[] = {
-        {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
-        {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
-        {"AI", "XiaoZhi", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
-        {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
-        {"CAL", "Calendar", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
-        {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
-        {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
-        {"MUS", "Music", "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
-        {"POD", "Podcast", "Episodes", COLOR_GOLD, podcast_card_cb},
+        {"RAD", "电台", "Music FM", COLOR_GOLD, radio_card_cb},
+        {"PIC", "相册", "SD Slideshow", COLOR_GREEN, photo_card_cb},
+        {"AI", "小智", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
+        {"FC", "红白机", "SD ROMs", COLOR_GREEN, fc_card_cb},
+        {"CAL", "日历", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
+        {"FOC", "专注", "25 min", COLOR_GOLD, focus_card_cb},
+        {"NET", "网络", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
+        {"SET", "设置", "System", COLOR_GOLD, settings_card_cb},
+        {"MUS", "音乐", "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
+        {"POD", "播客", "Episodes", COLOR_GOLD, podcast_card_cb},
     };
 
     for (uint8_t i = 0; i < sizeof(apps) / sizeof(apps[0]); ++i) {
@@ -2813,8 +2813,8 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(shake_card, COLOR_SURFACE, 0);
     lv_obj_set_style_border_color(shake_card, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(shake_card, 2, 0);
-    lv_obj_t* shake_title = label_en(shake_card, "Shake Lab", &style_en);
-    lv_obj_set_style_text_font(shake_title, &lv_font_montserrat_20, 0);
+    lv_obj_t* shake_title = label_en(shake_card, "摇一摇实验室", &style_en);
+    lv_obj_set_style_text_font(shake_title, qd_cn_font_20(), 0);
     lv_obj_align(shake_title, LV_ALIGN_TOP_LEFT, 22, 20);
     lv_obj_t* shake_cn = label_en(shake_card, "摇一摇实验室", &style_gold);
     lv_obj_set_style_text_font(shake_cn, qd_cn_font_20(), 0);
@@ -2880,7 +2880,7 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(en_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(en_label, qd_cn_font_16(), 0);
     lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 5);
 
     lv_obj_t* dot = circle(box, 5, color, LV_OPA_COVER);
