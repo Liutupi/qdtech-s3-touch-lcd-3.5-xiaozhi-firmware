@@ -286,6 +286,16 @@ config QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
         preserves the existing Calendar path when disabled, and should not be
         enabled in a production release before hardware verification.
 
+config QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    bool "Enable experimental Calendar zodiac app"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds an experimental Western zodiac lookup entry to the QDTech
+        3.5-inch Calendar page. Detailed text and JPEG artwork are loaded on
+        demand from /calendar/zodiac on the SD card. Disabled by default so
+        the stable Calendar path is unchanged when not selected.
+
 choice ESP_S3_LCD_EV_Board_Version_TYPE
     depends on BOARD_TYPE_ESP_S3_LCD_EV_Board
     prompt "EV_BOARD Type"
