@@ -1,4 +1,4 @@
-# 2026-07-18 v1.8.0 Calendar Zodiac + Dice Hardware Follow-Up
+# 2026-07-18 v1.8.1 Calendar Zodiac + Dice OTA Follow-Up
 
 - Full build handoff and rollback details are in `docs/V180_ZODIAC_HANDOFF.md`.
 - App-only COM3 flashing, Zodiac image loading, repeated reader entry/exit,
@@ -6,7 +6,11 @@
 - The hardware-discovered `esp_timer` JPEG stack overflow was fixed by moving
   SD text/image loading to the existing background task.
 - Copy the additive `calendar/zodiac` folder to the SD-card root without removing the existing `calendar/bone_weight` data.
-- Future flashes still require explicit user confirmation. Confirm the boot log reports app version `1.8.0`, SD mount succeeds, and no panic/watchdog/reboot loop occurs.
+- The GitHub latest Release must carry tag `v1.8.1`, the exact App asset name
+  `qdtech-s3-touch-lcd-3.5-v1.8.1-app.bin`, and a matching SHA256SUMS entry.
+  Eligible boards should open Firmware Update, tap Check, see `v1.8.1 ready`,
+  then install only while idle with audio stopped.
+- Future USB flashes still require explicit user confirmation. Confirm the boot log reports app version `1.8.1`, SD mount succeeds, and no panic/watchdog/reboot loop occurs.
 - Open Calendar -> `星座`; test a normal date, leap day, invalid-day adjustment, and every transition boundary around the twelve signs.
 - Verify the result summary and all six reader pages: cute image clarity, Chinese wrapping, previous/next buttons, horizontal swipes, page count, back navigation, and repeated open/close without increasing PSRAM use.
 - Remove the SD card or rename one image/detail file and confirm a readable fallback appears without a crash.

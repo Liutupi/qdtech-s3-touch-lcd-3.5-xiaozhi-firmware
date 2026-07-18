@@ -1,15 +1,19 @@
-# v1.8.0 Calendar Zodiac Reader + Dice Face Fix
+# v1.8.1 Calendar Zodiac Reader + Dice Face Fix
 
 Date: 2026-07-18
 
 ## Scope
 
-- Baseline: tag commit `f889c6b69a8ac3ba6d1f72232c82a708b41622fb`, project version `1.8.0`.
+- Baseline: tag commit `f889c6b69a8ac3ba6d1f72232c82a708b41622fb`, released project version `1.8.1`.
 - Added default-off `CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC`.
 - The explicit `sdkconfig.zodiac.defaults` profile enables the existing
   Calendar bone-weight reader and the new Zodiac reader.
 - No Wi-Fi source, partition, pin, touch-driver, weather, voice, media, or OTA
   behavior was changed.
+- The QDTech in-device updater reads the latest GitHub Release. Publish the
+  `v1.8.1` release with the exact app asset name
+  `qdtech-s3-touch-lcd-3.5-v1.8.1-app.bin` so eligible v1.8.0 boards can
+  discover it as an OTA update.
 
 ## Behavior and resources
 
