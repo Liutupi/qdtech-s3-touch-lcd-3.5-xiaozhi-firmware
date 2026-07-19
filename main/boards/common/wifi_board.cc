@@ -50,14 +50,30 @@ std::string WifiBoard::GetBoardType() {
     return "wifi";
 }
 
-void WifiBoard::EnterWifiConfigMode() {
+int WifiBoard::GetStartupWifiConnectTimeoutMs() const {
+    return kStartupWifiConnectTimeoutMs;
+}
+
+void WifiBoard::EnterWifiConfigMode(bool station_already_started) {
     auto& application = Application::GetInstance();
     application.SetDeviceState(kDeviceStateWifiConfiguring);
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetLanguage(Lang::CODE);
     wifi_ap.SetSsidPrefix("Xiaozhi");
+#ifdef QDTECH_PROVISIONING_APSTA
+    // The QDTech compatibility Beacon uses the Station transmit queue. Keep
+    // one driver instance and hand it to provisioning after the normal full
+    // application startup path has completed.
+    auto& wifi_station = WifiStation::GetInstance();
+    if (!station_already_started) {
+        wifi_station.Start();
+    }
+    wifi_ap.StartWithExistingWifi(wifi_station.ReleaseForApstaHandoff());
+#else
+    (void)station_already_started;
     wifi_ap.Start();
+#endif
 
     // 显示 WiFi 配置 AP 的 SSID 和 Web 服务器 URL
     std::string hint = Lang::Strings::CONNECT_TO_HOTSPOT;
@@ -96,6 +112,14 @@ void WifiBoard::StartNetwork() {
     }
 
     auto& wifi_station = WifiStation::GetInstance();
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
+    defined(CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT)
+    if (wifi_station.IsConnected()) {
+        ESP_LOGI(TAG, "Reusing WiFi connection established by network-first boot");
+        return;
+    }
+#endif
+
     wifi_station.OnScanBegin([this]() {
         auto display = Board::GetInstance().GetDisplay();
         display->ShowNotification(Lang::Strings::SCANNING_WIFI, 30000);
@@ -117,12 +141,18 @@ void WifiBoard::StartNetwork() {
     wifi_station.Start();
 
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
-    if (!wifi_station.WaitForConnected(kStartupWifiConnectTimeoutMs)) {
+    const int startup_timeout_ms = GetStartupWifiConnectTimeoutMs();
+    if (!wifi_station.WaitForConnected(startup_timeout_ms)) {
         ESP_LOGW(TAG, "No saved WiFi connected within %d ms, entering provisioning mode",
-                 kStartupWifiConnectTimeoutMs);
+                 startup_timeout_ms);
+#ifdef QDTECH_PROVISIONING_APSTA
+        wifi_config_mode_ = true;
+        EnterWifiConfigMode(true);
+#else
         wifi_station.Stop();
         wifi_config_mode_ = true;
         EnterWifiConfigMode();
+#endif
         return;
     }
 }

@@ -15,6 +15,7 @@
 #include <nvs_flash.h>
 #include <cJSON.h>
 #include <esp_smartconfig.h>
+#include <cstring>
 #include "ssid_manager.h"
 
 #define TAG "WifiConfigurationAp"
@@ -22,6 +23,13 @@
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
 static constexpr size_t kMaxSavedWifiCount = 5;
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+static constexpr uint64_t kRawBeaconIntervalUs = 100 * 1000;
+// The normal AP interface reports successful raw-beacon TX completion on this
+// board without producing an externally visible frame. Submit the identical
+// frame through the already running Station interface to isolate that queue.
+static constexpr wifi_interface_t kRawBeaconTxInterface = WIFI_IF_STA;
+#endif
 
 extern const char index_html_start[] asm("_binary_wifi_configuration_html_start");
 extern const char done_html_start[] asm("_binary_wifi_configuration_done_html_start");
@@ -39,6 +47,9 @@ WifiConfigurationAp::WifiConfigurationAp()
 
 WifiConfigurationAp::~WifiConfigurationAp()
 {
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    StopRawBeaconFallback();
+#endif
     if (scan_timer_) {
         esp_timer_stop(scan_timer_);
         esp_timer_delete(scan_timer_);
@@ -83,6 +94,18 @@ void WifiConfigurationAp::Start()
     StartWebServer();
 }
 
+#ifdef QDTECH_PROVISIONING_APSTA
+void WifiConfigurationAp::StartWithExistingWifi(esp_netif_t* sta_netif)
+{
+    ESP_ERROR_CHECK(sta_netif != nullptr ? ESP_OK : ESP_ERR_INVALID_ARG);
+    sta_netif_ = sta_netif;
+    reuse_wifi_driver_ = true;
+    ESP_LOGI(TAG, "Starting provisioning with existing WiFi driver sta_netif=%p nvs=unchanged",
+             sta_netif_);
+    Start();
+}
+#endif
+
 std::string WifiConfigurationAp::GetSsid()
 {
     // Get MAC and use it to generate a unique SSID
@@ -124,7 +147,18 @@ void WifiConfigurationAp::StartAccessPoint()
 
     // Initialize the WiFi stack in Access Point mode
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+#ifdef QDTECH_PROVISIONING_STATELESS_RF
+    // Provisioning sets every AP parameter below, so do not load retained
+    // driver state that may prevent a valid beacon after repeated upgrades.
+    cfg.nvs_enable = false;
+#endif
+#ifdef QDTECH_PROVISIONING_APSTA
+    if (!reuse_wifi_driver_) {
+        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    }
+#else
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+#endif
 
     // Get the SSID
     std::string ssid = GetSsid();
@@ -133,17 +167,49 @@ void WifiConfigurationAp::StartAccessPoint()
     wifi_config_t wifi_config = {};
     strcpy((char *)wifi_config.ap.ssid, ssid.c_str());
     wifi_config.ap.ssid_len = ssid.length();
+#ifdef QDTECH_PROVISIONING_CHANNEL_6
+    wifi_config.ap.channel = 6;
+#else
     wifi_config.ap.channel = 1;
+#endif
     wifi_config.ap.max_connection = 2;
     wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+#ifdef QDTECH_PROVISIONING_STATELESS_RF
+    wifi_config.ap.ssid_hidden = 0;
+    wifi_config.ap.beacon_interval = 100;
+#endif
 
-    // Start in pure AP mode first. APSTA scanning can make the setup hotspot
-    // hard to discover on tight-SRAM boards, so only enable STA when submitting
-    // credentials.
+    // QDTech production provisioning keeps the already running Station driver
+    // and adds the AP on the same instance; other boards retain pure AP mode.
+#ifdef QDTECH_PROVISIONING_APSTA
+    ESP_ERROR_CHECK(esp_wifi_set_mode(
+        reuse_wifi_driver_ ? WIFI_MODE_APSTA : WIFI_MODE_AP));
+#else
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+#endif
+#ifdef QDTECH_PROVISIONING_STATELESS_RF
+    wifi_country_t country = {};
+    country.cc[0] = 'C';
+    country.cc[1] = 'N';
+    country.schan = 1;
+    country.nchan = 13;
+    country.policy = WIFI_COUNTRY_POLICY_MANUAL;
+    ESP_ERROR_CHECK(esp_wifi_set_country(&country));
+#endif
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+#ifdef QDTECH_PROVISIONING_STATELESS_RF
+    ESP_ERROR_CHECK(esp_wifi_set_protocol(
+        WIFI_IF_AP, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
+#endif
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+#ifdef QDTECH_PROVISIONING_APSTA
+    if (!reuse_wifi_driver_) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+    }
+#else
     ESP_ERROR_CHECK(esp_wifi_start());
+#endif
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(78));
 
 #ifdef CONFIG_SOC_WIFI_SUPPORT_5G
@@ -152,6 +218,10 @@ void WifiConfigurationAp::StartAccessPoint()
 #endif
 
     ESP_LOGI(TAG, "Access Point started with SSID %s", ssid.c_str());
+
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    StartRawBeaconFallback(ssid, wifi_config.ap.channel);
+#endif
 
     // 加载高级配置
     nvs_handle_t nvs;
@@ -185,7 +255,160 @@ void WifiConfigurationAp::StartAccessPoint()
 
         nvs_close(nvs);
     }
+
+#ifdef QDTECH_PROVISIONING_STATELESS_RF
+    wifi_mode_t actual_mode = WIFI_MODE_NULL;
+    wifi_config_t actual_config = {};
+    uint8_t actual_primary = 0;
+    wifi_second_chan_t actual_secondary = WIFI_SECOND_CHAN_NONE;
+    uint8_t actual_protocol = 0;
+    wifi_bandwidth_t actual_bandwidth = WIFI_BW_HT20;
+    wifi_country_t actual_country = {};
+    int8_t actual_tx_power = 0;
+    ESP_ERROR_CHECK(esp_wifi_get_mode(&actual_mode));
+    ESP_ERROR_CHECK(esp_wifi_get_config(WIFI_IF_AP, &actual_config));
+    ESP_ERROR_CHECK(esp_wifi_get_channel(&actual_primary, &actual_secondary));
+    ESP_ERROR_CHECK(esp_wifi_get_protocol(WIFI_IF_AP, &actual_protocol));
+    ESP_ERROR_CHECK(esp_wifi_get_bandwidth(WIFI_IF_AP, &actual_bandwidth));
+    ESP_ERROR_CHECK(esp_wifi_get_country(&actual_country));
+    ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&actual_tx_power));
+#ifdef QDTECH_PROVISIONING_APSTA
+    ESP_LOGI(TAG,
+             "SoftAP RF mode=%d channel=%u secondary=%d protocol=0x%02x bandwidth=%d "
+             "country=%c%c start=%u count=%u tx_power=%d hidden=%u beacon=%u "
+             "nvs=off reused_driver=%d",
+             actual_mode, actual_primary, actual_secondary, actual_protocol,
+             actual_bandwidth, actual_country.cc[0], actual_country.cc[1],
+             actual_country.schan, actual_country.nchan, actual_tx_power,
+             actual_config.ap.ssid_hidden, actual_config.ap.beacon_interval,
+             reuse_wifi_driver_);
+#else
+    ESP_LOGI(TAG,
+             "SoftAP RF mode=%d channel=%u secondary=%d protocol=0x%02x bandwidth=%d "
+             "country=%c%c start=%u count=%u tx_power=%d hidden=%u beacon=%u nvs=off",
+             actual_mode, actual_primary, actual_secondary, actual_protocol,
+             actual_bandwidth, actual_country.cc[0], actual_country.cc[1],
+             actual_country.schan, actual_country.nchan, actual_tx_power,
+             actual_config.ap.ssid_hidden, actual_config.ap.beacon_interval);
+#endif
+#endif
 }
+
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+void WifiConfigurationAp::StartRawBeaconFallback(const std::string& ssid,
+                                                  uint8_t channel)
+{
+    if (raw_beacon_timer_ != nullptr) {
+        ESP_LOGW(TAG, "Raw beacon fallback already running");
+        return;
+    }
+    if (ssid.empty() || ssid.size() > 32 || channel == 0) {
+        ESP_LOGE(TAG, "Raw beacon fallback invalid AP identity ssid_len=%u channel=%u",
+                 static_cast<unsigned>(ssid.size()), channel);
+        return;
+    }
+
+    uint8_t ap_mac[6] = {};
+    const esp_err_t mac_result = esp_wifi_get_mac(WIFI_IF_AP, ap_mac);
+    if (mac_result != ESP_OK) {
+        ESP_LOGE(TAG, "Raw beacon fallback cannot read AP MAC: %s",
+                 esp_err_to_name(mac_result));
+        return;
+    }
+
+    raw_beacon_frame_.clear();
+    raw_beacon_frame_.reserve(96);
+    const auto append = [this](std::initializer_list<uint8_t> bytes) {
+        raw_beacon_frame_.insert(raw_beacon_frame_.end(), bytes.begin(), bytes.end());
+    };
+
+    // IEEE 802.11 beacon MAC header. The driver supplies the sequence number
+    // because esp_wifi_80211_tx() is called with en_sys_seq=true.
+    append({0x80, 0x00, 0x00, 0x00});
+    append({0xff, 0xff, 0xff, 0xff, 0xff, 0xff});
+    raw_beacon_frame_.insert(raw_beacon_frame_.end(), ap_mac, ap_mac + sizeof(ap_mac));
+    raw_beacon_frame_.insert(raw_beacon_frame_.end(), ap_mac, ap_mac + sizeof(ap_mac));
+    append({0x00, 0x00});
+
+    // Timestamp is refreshed before every transmission. Interval is 100 TU;
+    // capability bits advertise an open ESS with short preamble/slot support.
+    append({0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
+    append({0x64, 0x00, 0x21, 0x04});
+
+    raw_beacon_frame_.push_back(0x00);  // SSID element
+    raw_beacon_frame_.push_back(static_cast<uint8_t>(ssid.size()));
+    raw_beacon_frame_.insert(raw_beacon_frame_.end(), ssid.begin(), ssid.end());
+    append({0x01, 0x08, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24});
+    append({0x03, 0x01, channel});
+    append({0x05, 0x04, 0x00, 0x01, 0x00, 0x00});
+    append({0x07, 0x06, 'C', 'N', ' ', 0x01, 0x0d, 0x14});
+    append({0x32, 0x04, 0x30, 0x48, 0x60, 0x6c});
+
+    raw_beacon_tx_error_logged_ = false;
+
+    const esp_timer_create_args_t timer_args = {
+        .callback = &RawBeaconTimerCallback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "qd_raw_beacon",
+        .skip_unhandled_events = true,
+    };
+    esp_err_t result = esp_timer_create(&timer_args, &raw_beacon_timer_);
+    if (result == ESP_OK) {
+        result = esp_timer_start_periodic(raw_beacon_timer_, kRawBeaconIntervalUs);
+    }
+    if (result != ESP_OK) {
+        if (raw_beacon_timer_ != nullptr) {
+            esp_timer_delete(raw_beacon_timer_);
+            raw_beacon_timer_ = nullptr;
+        }
+        ESP_LOGE(TAG, "Raw beacon fallback timer start failed: %s",
+                 esp_err_to_name(result));
+        return;
+    }
+
+    ESP_LOGW(TAG,
+             "Raw beacon fallback started ssid=%s bssid=%02x:%02x:%02x:%02x:%02x:%02x "
+             "channel=%u interval_ms=100 frame_len=%u tx_if=%d",
+             ssid.c_str(), ap_mac[0], ap_mac[1], ap_mac[2], ap_mac[3], ap_mac[4],
+             ap_mac[5], channel, static_cast<unsigned>(raw_beacon_frame_.size()),
+             kRawBeaconTxInterface);
+}
+
+void WifiConfigurationAp::StopRawBeaconFallback()
+{
+    if (raw_beacon_timer_ != nullptr) {
+        esp_timer_stop(raw_beacon_timer_);
+        esp_timer_delete(raw_beacon_timer_);
+        raw_beacon_timer_ = nullptr;
+    }
+    raw_beacon_frame_.clear();
+    raw_beacon_tx_error_logged_ = false;
+}
+
+void WifiConfigurationAp::RawBeaconTimerCallback(void* arg)
+{
+    auto* owner = static_cast<WifiConfigurationAp*>(arg);
+    if (owner == nullptr || owner->raw_beacon_frame_.size() < 36) {
+        return;
+    }
+
+    const uint64_t timestamp = static_cast<uint64_t>(esp_timer_get_time());
+    for (size_t i = 0; i < sizeof(timestamp); ++i) {
+        owner->raw_beacon_frame_[24 + i] =
+            static_cast<uint8_t>((timestamp >> (8 * i)) & 0xff);
+    }
+
+    const esp_err_t result = esp_wifi_80211_tx(
+        kRawBeaconTxInterface, owner->raw_beacon_frame_.data(),
+        static_cast<int>(owner->raw_beacon_frame_.size()), true);
+    if (result != ESP_OK && !owner->raw_beacon_tx_error_logged_) {
+        owner->raw_beacon_tx_error_logged_ = true;
+        ESP_LOGE(TAG, "Raw beacon fallback TX failed: %s",
+                 esp_err_to_name(result));
+    }
+}
+#endif
 
 void WifiConfigurationAp::StartWebServer()
 {
@@ -813,6 +1036,9 @@ void WifiConfigurationAp::Stop() {
     esp_smartconfig_stop();
 
     // 停止定时器
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    StopRawBeaconFallback();
+#endif
     if (scan_timer_) {
         esp_timer_stop(scan_timer_);
         esp_timer_delete(scan_timer_);

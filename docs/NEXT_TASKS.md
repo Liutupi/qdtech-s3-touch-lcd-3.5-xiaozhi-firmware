@@ -1,3 +1,179 @@
+# 2026-07-19 v1.8.2 OTA Release Gate
+
+- The v1.8.2 App and full recovery image are built from the QDTech production
+  provisioning fix, normal full-application startup, automatic phone web
+  configuration, and Chinese Apps-center entries. Details are in
+  `docs/V182_QDTECH_PROVISIONING_OTA_HANDOFF.md`.
+- The user requested that final v1.8.2 validation proceed through remote OTA
+  because the USB board was removed. After installing, confirm the reported
+  version, Chinese Apps-center labels, `http://<board-ip>/`, MQTT idle, and
+  normal UI. The published release retains this verification boundary.
+
+# 2026-07-19 v1.8.1 SoftAP Channel 1-to-6 A/B Follow-Up
+
+- Full implementation, build comparison, App-only flash evidence, repeated
+  scans, client join, DHCP, web-page verification, and rollback are in
+  `docs/V181_SOFTAP_CHANNEL6_AB_HANDOFF.md`.
+- Channel 6 is the first configuration that made `Xiaozhi-8E81` externally
+  visible: four full Mac scans each found one target at -26 dBm on channel 6.
+- The Mac joined, the board assigned `192.168.4.2`, and
+  `http://192.168.4.1/` returned the 22,036-byte provisioning page with HTTP
+  200. Channel 1 had repeatedly produced zero matches on the same hardware.
+- The current channel-6 A/B App remains credential-free and was flashed
+  App-only; NVS is untouched. It is stable, but still includes raw-beacon and
+  other diagnostic flags.
+- The next separately approved step should build channel 6 with raw beacon
+  disabled and the minimum normal SoftAP path, then repeat visibility, DHCP,
+  and web checks before promoting the channel change as the production fix.
+
+# 2026-07-19 v1.8.1 Raw Beacon Fallback Follow-Up
+
+- Full implementation, A/B queue testing, App-only flash evidence, external
+  scans, resource cost, and rollback are in
+  `docs/V181_RAW_BEACON_FALLBACK_HANDOFF.md`.
+- AP-interface and STA-interface submissions both ran without API/TX-done
+  errors, including 2,300 attempts on the current STA-interface build, but
+  exact and full Mac scans still found no target SSID or BSSID.
+- Memory stayed stable and there was no reboot or panic. A successful TX-done
+  callback therefore does not establish that the beacon was visible over the
+  air on this board.
+- The current App is the credential-free STA-interface raw-beacon diagnostic,
+  flashed App-only; NVS remains untouched. Keep the experiment default-off.
+- The next separately approved diagnostic should A/B channel 1 against channel
+  6. Every failed SoftAP run used channel 1, while the proven Station TX path
+  and strongest nearby AP were on channel 6.
+
+# 2026-07-19 v1.8.1 Single-Driver APSTA Handoff Follow-Up
+
+- Full implementation, build comparison, App-only flash evidence, hardware
+  trace, independent scans, and rollback are in
+  `docs/V181_SINGLE_DRIVER_APSTA_HANDOFF.md`.
+- The saved-network timeout now hands the existing Station driver and netif
+  directly to APSTA provisioning. Hardware logs confirmed one driver task,
+  `sta + softAP`, `reused_driver=1`, DHCP/DNS/web readiness, and stable memory.
+- Four exact-name Mac scans returned `COUNT=0`; a full scan found six nearby
+  networks and zero target SSID/BSSID matches. The single-driver handoff did
+  not make `Xiaozhi-8E81` visible.
+- This rules out the Station stop/deinit/reinit transition and further confirms
+  that startup memory is not the cause. The remaining boundary is actual
+  SoftAP beacon/frame emission despite successful driver configuration.
+- The credential-free diagnostic App is currently flashed App-only. NVS was
+  untouched. Keep every provisioning experiment default-off in production.
+- Do not continue heap, startup-order, or ordinary AP-parameter tuning. The
+  next firmware or lab diagnostic needs separate approval and should observe
+  real 802.11 AP frames or driver TX completion.
+
+# 2026-07-19 v1.8.1 Temporary-Hotspot Station TX Follow-Up
+
+- Full implementation, build comparison, App-only flash evidence, hardware
+  trace, privacy boundary, and rollback are in
+  `docs/V181_WIFI_STA_TX_SELF_TEST_HANDOFF.md`.
+- The board found the temporary WPA2 network at -21 dBm, completed
+  authentication and association, obtained `192.168.1.103` by DHCP, completed
+  an HTTP request, connected MQTT, and reached idle.
+- The temporary credential was held only in RAM by the startup candidate path,
+  cleared after connection, and never passed to `SsidManager` or written to
+  NVS. The reusable build profile now contains no password.
+- Station-mode receive and transmit hardware are both healthy. The missing
+  `Xiaozhi-8E81` is specific to SoftAP beacon emission or the current
+  Station-stop/deinit-to-SoftAP transition, not heap size, antenna, or RF PA.
+- The Station TX test App is currently flashed. It contains the disposable
+  build-time credential even though NVS does not; use the documented App-only
+  rollback when this diagnostic is no longer needed.
+- The next separately approved test should keep one Wi-Fi driver instance and
+  hand off from Station scanning to APSTA/SoftAP without stop/deinit/reinit,
+  then repeat phone and Mac scans. Do not promote any experiment flag yet.
+
+# 2026-07-19 v1.8.1 Bidirectional Wi-Fi RF Self-Test Follow-Up
+
+- Full implementation, A/B build, App-only flash evidence, receive results,
+  independent Mac scans, and rollback are in
+  `docs/V181_WIFI_RX_SELF_TEST_HANDOFF.md`.
+- The board repeatedly received 11-15 nearby APs; the strongest was about
+  -29 dBm on channel 6. The receive path and antenna are therefore working,
+  and first-provisioning memory starvation is ruled out.
+- During the same boot, minimal `Xiaozhi-8E81` started at about 8.5 seconds
+  with correct RF readback and about 179.8 KB internal SRAM free, but Mac
+  scans still returned exact `COUNT=0` and full `TOTAL=4 MATCHES=0`.
+- The fault boundary is now the SoftAP transmit/beacon path. Do not continue
+  tuning startup order, heap, ordinary AP parameters, or phone UI behavior.
+- The diagnostic-on App is currently flashed. Keep all four experimental
+  flags default-off in production.
+- The next firmware diagnostic requires separate approval and should verify
+  802.11 transmit completion or send a controlled raw test frame. If no frame
+  is visible externally, prioritize RF transmit/PA/antenna-switch hardware
+  inspection before more provisioning changes.
+
+# 2026-07-19 v1.8.1 Historical-App RF Boundary Follow-Up
+
+- A true USB power removal of more than ten seconds was completed. On the next
+  cold boot, ESP-IDF reported that PHY calibration data had failed checksum or
+  was outdated and automatically saved new calibration data in mode 0.
+- After that automatic recalibration, v1.8.1 still produced no target beacon:
+  exact-name scan `COUNT=0`, full scan `TOTAL=4 MATCHES=0`.
+- SoftAP remained alive to 48.6 seconds with about 179.8 KB internal SRAM free
+  and no panic or reboot. A power cycle and automatic PHY recalibration did not
+  repair the issue.
+- The next separately approved firmware diagnostic should log only early
+  Station scan aggregate results: nearby AP count, strongest RSSI, and channel,
+  without changing credentials, calibration data, or SoftAP behavior. This
+  distinguishes a general RF receive/antenna failure from a transmit-only
+  SoftAP failure.
+- Full App-only flash evidence and restoration details are in
+  `docs/V181_HISTORICAL_APP_RF_BOUNDARY_HANDOFF.md`.
+- The historical v1.7.61 App, previously verified on this same USB board with
+  a SoftAP client at `192.168.4.2`, was temporarily flashed App-only while
+  preserving NVS and every other partition.
+- v1.7.61 again started `Xiaozhi-8E81`, DHCP, and the web server, but the Mac
+  exact-name scan returned `COUNT=0`; a full scan found six nearby networks
+  and zero target SSID/BSSID matches.
+- The board has been restored App-only to the current v1.8.1 stateless-RF
+  experiment. Boot, 8-second fallback, SoftAP configuration readback, and
+  minimal-provisioning memory were reconfirmed.
+- Because the fault crosses current and historically visible App binaries, do
+  not continue tuning SoftAP memory or ordinary AP configuration. The true
+  power cycle has now also failed; proceed with the default-off receive-path
+  scan self-test before considering PHY calibration/NVS repair.
+
+# 2026-07-19 v1.8.1 Stateless SoftAP RF Follow-Up
+
+- Full implementation, A/B build, hardware trace, RF scan evidence,
+  artifacts, and rollback are in
+  `docs/V181_STATELESS_SOFTAP_RF_HANDOFF.md`.
+- The stateless-RF experimental App is currently flashed App-only. It keeps
+  network-first boot and starts minimal `Xiaozhi-8E81` at about 8.5 seconds.
+- Firmware readback is correct: pure SoftAP, channel 1, HT20, 11b/g/n,
+  country CN channels 1-13, 19.5 dBm, visible SSID, 100 ms beacon interval,
+  and Wi-Fi driver NVS disabled.
+- The Mac exact-name scan returned `COUNT=0`; a full scan found six nearby
+  networks and zero matches for SSID `Xiaozhi-8E81` or BSSID
+  `7c:e8:b1:b2:8e:81`. The phone also still did not show the network.
+- SoftAP remained alive without a panic or reboot. Internal SRAM remained
+  about 179.8 KB free, so the missing over-the-air beacon is not caused by
+  provisioning memory starvation.
+- Do not promote any of the provisioning experiment flags yet. The historical
+  App test also failed to expose a beacon; follow the newer RF-boundary section
+  above before any PHY full calibration or NVS repair.
+
+# 2026-07-19 v1.8.1 Network-First Provisioning Follow-Up
+
+- Full diagnosis, implementation, resource comparison, hardware trace,
+  artifacts, and rollback are in
+  `docs/V181_NETWORK_FIRST_BOOT_HANDOFF.md`.
+- The network-first experimental App is currently flashed App-only. It
+  preserves NVS and starts `Xiaozhi-8E81` at about 8.5 seconds when the
+  saved network is unavailable.
+- Minimal SoftAP free internal SRAM is now about 179.7 KB versus 4.9 KB on the
+  full-application path. The largest free block is about 106.5 KB.
+- Phone and Mac testing confirmed that `Xiaozhi-8E81` still does not appear,
+  even though minimal SoftAP starts with ample memory. See the newer
+  stateless-RF handoff above.
+- After reboot, confirm the newly saved network connects before the LCD,
+  audio, UI, sensors, weather, and media services start.
+- The LCD may stay blank during minimal provisioning by design.
+- Keep `CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT` default-off until RF
+  discovery, phone-side provisioning, and saved-network handoff pass.
+
 # 2026-07-18 v1.8.1 Calendar Zodiac + Dice OTA Follow-Up
 
 - Full build handoff and rollback details are in `docs/V180_ZODIAC_HANDOFF.md`.

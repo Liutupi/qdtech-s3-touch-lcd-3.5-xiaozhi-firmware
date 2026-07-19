@@ -296,6 +296,111 @@ config QDTECH_EXPERIMENT_CALENDAR_ZODIAC
         demand from /calendar/zodiac on the SD card. Disabled by default so
         the stable Calendar path is unchanged when not selected.
 
+config QDTECH_PROVISIONING_COMPAT
+    bool
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default y
+    help
+        Enables the hardware-verified QDTech first-provisioning path: network
+        preflight before the full application, an 8-second saved-network
+        window, stateless APSTA on channel 6, and a standards-based provisioning
+        beacon sent through the retained Station interface. This option is
+        board-local and does not change WiFi behavior on other products.
+
+config QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK
+    bool "Enable experimental fast WiFi provisioning fallback"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Shortens only the QDTech startup wait for previously saved WiFi from
+        30 seconds to 8 seconds. If no saved network connects in that window,
+        the existing pure-SoftAP provisioning path starts unchanged. Keep this
+        disabled for the stable 30-second behavior until hardware verification
+        is complete.
+
+config QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT
+    bool "Enable experimental network-first boot"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Runs the saved-network check and provisioning SoftAP before constructing
+        the QDTech board, display, audio, touch, sensors, or application
+        services. Saved networks get an 8-second connection window; otherwise
+        the existing pure-SoftAP web provisioning service receives nearly all
+        startup memory. Disabled by default to preserve the stable boot path.
+
+config QDTECH_EXPERIMENT_STATELESS_SOFTAP_RF
+    bool "Enable experimental stateless SoftAP RF hardening"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Keeps the provisioning SoftAP from loading ESP WiFi driver NVS state
+        and explicitly selects a visible channel-1, HT20, 802.11 b/g/n access
+        point under the CN 2.4 GHz country profile. It also logs the effective
+        RF settings after startup. Application WiFi credentials remain stored
+        in the existing wifi namespace and are not erased.
+
+config QDTECH_EXPERIMENT_SOFTAP_CHANNEL_6_AB
+    bool "Enable experimental SoftAP channel-6 A/B test"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    depends on QDTECH_EXPERIMENT_STATELESS_SOFTAP_RF
+    default n
+    help
+        Moves only the QDTech provisioning SoftAP from channel 1 to channel 6
+        so external visibility can be compared on the same hardware. The raw
+        beacon fallback, when enabled, follows the configured SoftAP channel.
+        Disabled by default; credentials and NVS are not changed.
+
+config QDTECH_EXPERIMENT_WIFI_RX_SELF_TEST
+    bool "Enable experimental WiFi receive-path self-test logging"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Logs only the aggregate result of the existing startup Station scan:
+        nearby access-point count plus the strongest RSSI and channel. It does
+        not add scans, expose SSIDs or BSSIDs, change credentials, alter
+        provisioning behavior, or modify PHY calibration data.
+
+config QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    bool "Enable experimental temporary-hotspot Station TX self-test"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds one build-time test hotspot only to the Station scan candidates
+        held in RAM during network-first preflight. It never adds, removes, or
+        updates credentials in SsidManager or NVS. Disabled by default.
+
+config QDTECH_WIFI_STA_TX_SELF_TEST_SSID
+    string "Temporary Station TX self-test SSID"
+    depends on QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    default ""
+
+config QDTECH_WIFI_STA_TX_SELF_TEST_PASSWORD
+    string "Temporary Station TX self-test password"
+    depends on QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    default ""
+
+config QDTECH_EXPERIMENT_SINGLE_DRIVER_APSTA_PROVISIONING
+    bool "Enable experimental single-driver STA-to-APSTA provisioning handoff"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Keeps the WiFi driver and Station netif alive after an unsuccessful
+        network-first scan, unregisters the Station handlers, and adds the
+        provisioning AP on the same driver in APSTA mode. This avoids the
+        normal stop/deinit/reinit transition. Disabled by default.
+
+config QDTECH_EXPERIMENT_RAW_BEACON_FALLBACK
+    bool "Enable experimental raw SoftAP beacon fallback"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Sends a standards-based beacon for the already running provisioning AP
+        through esp_wifi_80211_tx every 100 ms. The frame uses only this board's
+        SoftAP MAC, SSID, channel, and open-network capabilities. Runtime output
+        is limited to one startup line and the first transmit error. Disabled
+        by default.
+
 choice ESP_S3_LCD_EV_Board_Version_TYPE
     depends on BOARD_TYPE_ESP_S3_LCD_EV_Board
     prompt "EV_BOARD Type"

@@ -87,6 +87,54 @@ void WifiStation::Stop() {
     }
 }
 
+#ifdef QDTECH_PROVISIONING_APSTA
+esp_netif_t* WifiStation::ReleaseForApstaHandoff() {
+    if (timer_handle_ != nullptr) {
+        esp_timer_stop(timer_handle_);
+        esp_timer_delete(timer_handle_);
+        timer_handle_ = nullptr;
+    }
+
+    if (instance_any_id_ != nullptr) {
+        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
+            WIFI_EVENT, ESP_EVENT_ANY_ID, instance_any_id_));
+        instance_any_id_ = nullptr;
+    }
+    if (instance_got_ip_ != nullptr) {
+        ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
+            IP_EVENT, IP_EVENT_STA_GOT_IP, instance_got_ip_));
+        instance_got_ip_ = nullptr;
+    }
+
+    const esp_err_t disconnect_result = esp_wifi_disconnect();
+    if (disconnect_result != ESP_OK &&
+        disconnect_result != ESP_ERR_WIFI_NOT_CONNECT) {
+        ESP_LOGW(TAG, "Disconnect before APSTA handoff failed: %s",
+                 esp_err_to_name(disconnect_result));
+    }
+
+    const esp_err_t scan_stop_result = esp_wifi_scan_stop();
+    if (scan_stop_result != ESP_OK && scan_stop_result != ESP_ERR_WIFI_STATE) {
+        ESP_LOGW(TAG, "Stop scan before APSTA handoff failed: %s",
+                 esp_err_to_name(scan_stop_result));
+    }
+
+    connect_queue_.clear();
+    reconnect_count_ = 0;
+    xEventGroupClearBits(event_group_, WIFI_EVENT_CONNECTED);
+
+    esp_netif_t* transferred_netif = sta_netif_;
+    sta_netif_ = nullptr;
+
+    wifi_mode_t mode = WIFI_MODE_NULL;
+    ESP_ERROR_CHECK(esp_wifi_get_mode(&mode));
+    ESP_LOGI(TAG,
+             "Released Station for APSTA handoff driver_kept=1 mode=%d sta_netif=%p nvs=unchanged",
+             mode, transferred_netif);
+    return transferred_netif;
+}
+#endif
+
 void WifiStation::OnScanBegin(std::function<void()> on_scan_begin) {
     on_scan_begin_ = on_scan_begin;
 }
@@ -98,6 +146,22 @@ void WifiStation::OnConnect(std::function<void(const std::string& ssid)> on_conn
 void WifiStation::OnConnected(std::function<void(const std::string& ssid)> on_connected) {
     on_connected_ = on_connected;
 }
+
+#ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+void WifiStation::SetTemporaryAuth(const std::string& ssid, const std::string& password) {
+    temporary_ssid_ = ssid;
+    temporary_password_ = password;
+    ESP_LOGI(TAG, "Temporary Station self-test candidate enabled ssid=%s nvs=unchanged",
+             temporary_ssid_.c_str());
+}
+
+void WifiStation::ClearTemporaryAuth() {
+    temporary_ssid_.clear();
+    std::fill(temporary_password_.begin(), temporary_password_.end(), '\0');
+    temporary_password_.clear();
+    ESP_LOGI(TAG, "Temporary Station self-test candidate cleared nvs=unchanged");
+}
+#endif
 
 void WifiStation::Start() {
     // Initialize the TCP/IP stack
@@ -159,8 +223,31 @@ void WifiStation::HandleScanResult() {
         return a.rssi > b.rssi;
     });
 
+#ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_RX_SELF_TEST
+    if (ap_num == 0) {
+        ESP_LOGW(TAG, "QDTech WiFi RX self-test ap_num=0");
+    } else {
+        ESP_LOGI(TAG,
+                 "QDTech WiFi RX self-test ap_num=%u strongest_rssi=%d strongest_channel=%u",
+                 static_cast<unsigned>(ap_num), ap_records[0].rssi,
+                 static_cast<unsigned>(ap_records[0].primary));
+    }
+#endif
+
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
+#ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    if (!temporary_ssid_.empty()) {
+        auto existing = std::find_if(ssid_list.begin(), ssid_list.end(), [this](const SsidItem& item) {
+            return item.ssid == temporary_ssid_;
+        });
+        if (existing == ssid_list.end()) {
+            ssid_list.insert(ssid_list.begin(), {temporary_ssid_, temporary_password_});
+        } else {
+            existing->password = temporary_password_;
+        }
+    }
+#endif
     for (int i = 0; i < ap_num; i++) {
         auto ap_record = ap_records[i];
         auto it = std::find_if(ssid_list.begin(), ssid_list.end(), [ap_record](const SsidItem& item) {

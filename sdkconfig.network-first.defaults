@@ -1,0 +1,4 @@
+# Explicit opt-in profile for QDTech network-first provisioning validation.
+# Both options remain default-off in Kconfig.
+CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK=y
+CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT=y

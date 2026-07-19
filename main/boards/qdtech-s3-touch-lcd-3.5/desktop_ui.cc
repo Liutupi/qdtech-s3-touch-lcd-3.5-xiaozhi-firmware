@@ -346,6 +346,52 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
     return label;
 }
 
+static const char* localize_app_card_status(const char* status) {
+    if (!status) return "";
+    struct StatusText {
+        const char* source;
+        const char* translated;
+    };
+    static constexpr StatusText kStatusTexts[] = {
+        {"Music FM", "音乐电台"},
+        {"Playing", "播放中"},
+        {"Stopped", "已停止"},
+        {"Buffer", "缓冲中"},
+        {"Buffering", "缓冲中"},
+        {"Connect", "连接中"},
+        {"Connecting", "连接中"},
+        {"SD Slideshow", "SD 相册"},
+        {"Refreshing", "刷新中"},
+        {"Scanning", "扫描中"},
+        {"Online", "在线"},
+        {"Offline", "离线"},
+        {"SD ROMs", "SD 游戏"},
+        {"Loading ROM", "载入游戏"},
+        {"Ready", "就绪"},
+        {"Today", "今天"},
+        {"Done", "已完成"},
+        {"Paused", "已暂停"},
+        {"WiFi Hub", "WiFi 管理"},
+        {"WiFi", "无线网络"},
+        {"Wait", "请稍候"},
+        {"Update", "可更新"},
+        {"System", "系统"},
+        {"Latest", "最新版"},
+        {"Check", "检查更新"},
+        {"Ask song", "点歌"},
+        {"Ask XiaoZhi", "问小智"},
+        {"Failed", "失败"},
+        {"Episodes", "节目列表"},
+        {"Error", "错误"},
+    };
+    for (const auto& item : kStatusTexts) {
+        if (strcmp(status, item.source) == 0) {
+            return item.translated;
+        }
+    }
+    return status;
+}
+
 static void fit_brand_label(lv_obj_t* label, int16_t width, bool owner) {
     const lv_font_t* font = lv_obj_get_style_text_font(label, 0);
     const int16_t line_height = font ? (lv_font_get_line_height(font) + 2) : 20;
@@ -2740,17 +2786,19 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
     CreateStatusBar(apps_page_);
 
-    lv_obj_t* title = label_en(apps_page_, "Apps", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_t* title = label_en(apps_page_, "应用", &style_en);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     if (is_tupi_warm_theme()) {
         lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
     }
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
-    lv_obj_t* sub = label_en(apps_page_, "App Center", &style_muted);
+    lv_obj_t* sub = label_en(apps_page_, "应用中心", &style_muted);
+    lv_obj_set_style_text_font(sub, qd_cn_font_16(), 0);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
-    lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
+    lv_obj_t* back = CreateButton(apps_page_, "返回", navigate_back_cb);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
     lv_obj_set_style_bg_color(back,
                               is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x24, 0x16, 0x0f), COLOR_SURFACE), 0);
@@ -2775,16 +2823,16 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     };
 
     AppInfo apps[] = {
-        {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
-        {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
-        {"AI", "XiaoZhi", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
-        {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
-        {"CAL", "Calendar", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
-        {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
-        {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
-        {"MUS", "Music", "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
-        {"POD", "Podcast", "Episodes", COLOR_GOLD, podcast_card_cb},
+        {"电", "电台", "音乐电台", COLOR_GOLD, radio_card_cb},
+        {"照", "照片", "SD 相册", COLOR_GREEN, photo_card_cb},
+        {"智", "小智", "在线", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
+        {"游", "红白机", "SD 游戏", COLOR_GREEN, fc_card_cb},
+        {"历", "日历", "今天", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
+        {"专", "专注", "25 分钟", COLOR_GOLD, focus_card_cb},
+        {"网", "网络", "WiFi 管理", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
+        {"设", "设置", "系统", COLOR_GOLD, settings_card_cb},
+        {"音", "音乐", "点歌", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
+        {"播", "播客", "节目列表", COLOR_GOLD, podcast_card_cb},
     };
 
     for (uint8_t i = 0; i < sizeof(apps) / sizeof(apps[0]); ++i) {
@@ -2798,10 +2846,10 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         }
     }
 
-    apps_more_button_ = CreateButton(apps_page_, "More", nullptr);
+    apps_more_button_ = CreateButton(apps_page_, "更多", nullptr);
     lv_obj_set_size(apps_more_button_, 92, 26);
     lv_obj_set_style_radius(apps_more_button_, 10, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(apps_more_button_, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(apps_more_button_, 0), qd_cn_font_16(), 0);
     lv_obj_align(apps_more_button_, LV_ALIGN_TOP_LEFT, 248, 45);
 
     apps_more_group_ = lv_obj_create(apps_page_);
@@ -2813,20 +2861,22 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(shake_card, COLOR_SURFACE, 0);
     lv_obj_set_style_border_color(shake_card, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(shake_card, 2, 0);
-    lv_obj_t* shake_title = label_en(shake_card, "Shake Lab", &style_en);
-    lv_obj_set_style_text_font(shake_title, &lv_font_montserrat_20, 0);
+    lv_obj_t* shake_title = label_en(shake_card, "摇一摇实验室", &style_en);
+    lv_obj_set_style_text_font(shake_title, qd_cn_font_20(), 0);
     lv_obj_align(shake_title, LV_ALIGN_TOP_LEFT, 22, 20);
-    lv_obj_t* shake_cn = label_en(shake_card, "摇一摇实验室", &style_gold);
-    lv_obj_set_style_text_font(shake_cn, qd_cn_font_20(), 0);
+    lv_obj_t* shake_cn = label_en(shake_card, "趣味互动", &style_gold);
+    lv_obj_set_style_text_font(shake_cn, qd_cn_font_16(), 0);
     lv_obj_align(shake_cn, LV_ALIGN_TOP_LEFT, 22, 50);
-    lv_obj_t* shake_detail = label_en(shake_card, "Ask Ball  ·  Dice", &style_muted);
+    lv_obj_t* shake_detail = label_en(shake_card, "答案球  ·  骰子", &style_muted);
+    lv_obj_set_style_text_font(shake_detail, qd_cn_font_16(), 0);
     lv_obj_align(shake_detail, LV_ALIGN_TOP_LEFT, 22, 88);
     lv_obj_t* shake_mark = circle(shake_card, 54, COLOR_GREEN, LV_OPA_50);
     lv_obj_align(shake_mark, LV_ALIGN_RIGHT_MID, -30, 0);
     lv_obj_t* shake_dot = circle(shake_card, 18, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(shake_dot, shake_mark, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t* hint = label_en(apps_page_, "Swipe right: Home", &style_muted);
+    lv_obj_t* hint = label_en(apps_page_, "右滑返回主页", &style_muted);
+    lv_obj_set_style_text_font(hint, qd_cn_font_16(), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 
     RefreshAppTileStatuses();
@@ -2875,18 +2925,18 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
 
     lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
     lv_obj_set_style_text_color(cn_label, is_tupi_warm_theme() ? color : COLOR_GOLD, 0);
-    lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(cn_label, qd_cn_font_16(), 0);
     lv_obj_center(cn_label);
 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(en_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(en_label, qd_cn_font_16(), 0);
     lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 5);
 
     lv_obj_t* dot = circle(box, 5, color, LV_OPA_COVER);
     lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 58, 29);
-    lv_obj_t* status_label = label_en(box, status, &style_muted);
-    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
+    lv_obj_t* status_label = label_en(box, localize_app_card_status(status), &style_muted);
+    lv_obj_set_style_text_font(status_label, qd_cn_font_16(), 0);
     lv_obj_set_width(status_label, 82);
     lv_label_set_long_mode(status_label, LV_LABEL_LONG_DOT);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 67, 25);
@@ -7526,13 +7576,13 @@ void DesktopUI::UpdateFocusUI() {
         snprintf(app_status, sizeof(app_status), "Done");
         app_color = COLOR_GREEN;
     } else if (focus_running_) {
-        snprintf(app_status, sizeof(app_status), "%lum",
+        snprintf(app_status, sizeof(app_status), "%lu 分钟",
                  static_cast<unsigned long>((focus_remaining_sec_ + 59) / 60));
     } else if (focus_remaining_sec_ != focus_total_sec_) {
         snprintf(app_status, sizeof(app_status), "Paused");
         app_color = COLOR_MUTED;
     } else {
-        snprintf(app_status, sizeof(app_status), "%lu min",
+        snprintf(app_status, sizeof(app_status), "%lu 分钟",
                  static_cast<unsigned long>(focus_total_sec_ / 60));
     }
     SetAppTileStatus(5, app_status, app_color);
@@ -7543,7 +7593,7 @@ void DesktopUI::SetAppTileStatus(uint8_t index, const char* status, lv_color_t c
         return;
     }
     if (app_status_labels_[index] && status) {
-        lv_label_set_text(app_status_labels_[index], status);
+        lv_label_set_text(app_status_labels_[index], localize_app_card_status(status));
     }
     if (app_status_dots_[index]) {
         lv_obj_set_style_bg_color(app_status_dots_[index], color, 0);
@@ -8455,7 +8505,7 @@ void DesktopUI::SetAppsMoreVisible(bool visible) {
     if (apps_more_button_) {
         lv_obj_t* label = lv_obj_get_child(apps_more_button_, 0);
         if (label) {
-            lv_label_set_text(label, visible ? "All Apps" : "More");
+            lv_label_set_text(label, visible ? "全部应用" : "更多");
         }
     }
 }

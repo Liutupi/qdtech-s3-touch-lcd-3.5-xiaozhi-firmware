@@ -8,6 +8,10 @@
 #include "application.h"
 #include "system_info.h"
 
+#ifdef CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT
+#include "boards/qdtech-s3-touch-lcd-3.5/network_first_boot.h"
+#endif
+
 #define TAG "main"
 
 extern "C" void app_main(void)
@@ -23,6 +27,10 @@ extern "C" void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+#ifdef CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT
+    RunQdtechNetworkFirstBoot();
+#endif
 
     // Launch the application
     Application::GetInstance().Start();

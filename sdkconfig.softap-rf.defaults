@@ -1,0 +1,5 @@
+# Explicit opt-in profile for QDTech stateless SoftAP RF validation.
+# All three options remain default-off in Kconfig.
+CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK=y
+CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT=y
+CONFIG_QDTECH_EXPERIMENT_STATELESS_SOFTAP_RF=y

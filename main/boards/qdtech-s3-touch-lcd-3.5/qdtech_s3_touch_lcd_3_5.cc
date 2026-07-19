@@ -724,11 +724,25 @@ public:
         return battery_monitor_.GetLevel(level, charging, discharging);
     }
 
+    int GetStartupWifiConnectTimeoutMs() const override {
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
+    defined(CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK)
+        return 8 * 1000;
+#else
+        return WifiBoard::GetStartupWifiConnectTimeoutMs();
+#endif
+    }
+
     void StartNetwork() override {
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
+    defined(CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK)
+        ESP_LOGI(TAG, "QDTech fast provisioning fallback enabled timeout=%d ms",
+                 GetStartupWifiConnectTimeoutMs());
+#endif
         EnsureStrongestBssidDefault();
         WifiBoard::StartNetwork();
         const bool open_phone_web_after_setup = ConsumePhoneWebAfterSetupFlag();
-        ESP_LOGI(TAG, "Lyric UDP and phone web config kept off by default to protect weather memory");
+        ESP_LOGI(TAG, "Lyric UDP kept off by default; phone web config starts automatically");
         
         // WiFi 连接后启动时间天气服�?
         if (!time_weather_started_ && display_) {
@@ -736,6 +750,17 @@ public:
             time_weather_service_.Start(qd_display->GetDesktopUI());
             time_weather_started_ = true;
             ESP_LOGI(TAG, "Time weather service started");
+        }
+
+        InitializeWifiConfigServer();
+        if (wifi_config_server_.IsRunning()) {
+            network_services_started_ = true;
+            ESP_LOGI(TAG, "Phone web config available: %s",
+                     wifi_config_server_.Status().c_str());
+        } else {
+            ScheduleDeferredNetworkServices(30000000);
+            ESP_LOGW(TAG, "Phone web config start deferred: %s",
+                     wifi_config_server_.Status().c_str());
         }
         if (open_phone_web_after_setup) {
             StartPhoneWebFromSettings();
