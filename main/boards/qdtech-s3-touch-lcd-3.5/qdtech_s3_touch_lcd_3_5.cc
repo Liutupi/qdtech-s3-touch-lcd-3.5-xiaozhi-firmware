@@ -59,6 +59,8 @@ static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
 static constexpr int64_t kBmi270LowRatePollMs = 250;
 static constexpr int64_t kShakeLabSampleIntervalMs = 30;
 static constexpr int64_t kShakeLabUiUpdateIntervalMs = 80;
+static constexpr int64_t kTouchActivityHoldMs = 800;
+static constexpr int64_t kShakeLabTouchSettleMs = 120;
 static constexpr int64_t kShakeLabTouchSkipLogIntervalMs = 2000;
 static constexpr int64_t kShakeLabI2cErrorLogIntervalMs = 2000;
 extern "C" {
@@ -1190,21 +1192,36 @@ private:
         return true;
     }
 
-    bool Bmi270ReadSample(int16_t& accel_x, int16_t& accel_y, int16_t& accel_z,
-                          int16_t& gyro_x, int16_t& gyro_y, int16_t& gyro_z) {
+    enum class Bmi270SampleStatus : uint8_t {
+        OK,
+        DEVICE_UNAVAILABLE,
+        LOCK_TIMEOUT,
+        TRANSFER_FAILED,
+    };
+
+    Bmi270SampleStatus Bmi270ReadSample(int16_t& accel_x, int16_t& accel_y, int16_t& accel_z,
+                                        int16_t& gyro_x, int16_t& gyro_y, int16_t& gyro_z,
+                                        TickType_t lock_timeout = 0,
+                                        esp_err_t* transfer_error = nullptr) {
+        if (transfer_error != nullptr) {
+            *transfer_error = ESP_OK;
+        }
         if (!bmi270_dev_) {
-            return false;
+            return Bmi270SampleStatus::DEVICE_UNAVAILABLE;
         }
         constexpr uint8_t kAccelStartRegister = 0x0C;
         uint8_t data[12] = {};
-        if (!LockSharedI2c(0)) {
-            return false;
+        if (!LockSharedI2c(lock_timeout)) {
+            return Bmi270SampleStatus::LOCK_TIMEOUT;
         }
         const esp_err_t err = i2c_master_transmit_receive(bmi270_dev_, &kAccelStartRegister, 1, data,
                                                            sizeof(data), pdMS_TO_TICKS(100));
         UnlockSharedI2c();
         if (err != ESP_OK) {
-            return false;
+            if (transfer_error != nullptr) {
+                *transfer_error = err;
+            }
+            return Bmi270SampleStatus::TRANSFER_FAILED;
         }
         accel_x = static_cast<int16_t>((static_cast<uint16_t>(data[1]) << 8) | data[0]);
         accel_y = static_cast<int16_t>((static_cast<uint16_t>(data[3]) << 8) | data[2]);
@@ -1212,7 +1229,7 @@ private:
         gyro_x = static_cast<int16_t>((static_cast<uint16_t>(data[7]) << 8) | data[6]);
         gyro_y = static_cast<int16_t>((static_cast<uint16_t>(data[9]) << 8) | data[8]);
         gyro_z = static_cast<int16_t>((static_cast<uint16_t>(data[11]) << 8) | data[10]);
-        return true;
+        return Bmi270SampleStatus::OK;
     }
     bool Bmi270ReadGyro(int16_t& x, int16_t& y, int16_t& z) {
         uint8_t data[6] = {};
@@ -1283,13 +1300,33 @@ private:
             ESP_LOGW(TAG, "BMI270 not detected on I2C addr 0x68/0x69");
             return;
         }
-        BaseType_t ok = xTaskCreate(
-            [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
-            // This task owns I2C sampling only.  Keep a modest guard margin
-            // because its driver calls use stack-local transfer buffers.
-            "bmi270", 6144, this, 1, &bmi270_task_);
+        constexpr uint32_t kBmi270TaskStackSize = 6144;
+        const auto task_entry = [](void* arg) {
+            static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task();
+        };
+
+        // Keep the overflow fix from v1.8.4 (a full 6144-byte stack), but
+        // place this long-lived, I2C-bound task in PSRAM first.  This returns
+        // internal SRAM to time/weather and other latency-sensitive services.
+        bmi270_task_ = nullptr;
+        BaseType_t ok = xTaskCreateWithCaps(
+            task_entry, "bmi270", kBmi270TaskStackSize, this, 1, &bmi270_task_,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (ok == pdPASS) {
+            ESP_LOGI(TAG, "BMI270 task started stack=%lu memory=psram",
+                     static_cast<unsigned long>(kBmi270TaskStackSize));
+            return;
+        }
+
+        // Preserve operation on units where PSRAM allocation is unavailable.
+        ESP_LOGW(TAG, "BMI270 PSRAM stack allocation failed; falling back to internal SRAM");
+        bmi270_task_ = nullptr;
+        ok = xTaskCreate(task_entry, "bmi270", kBmi270TaskStackSize, this, 1, &bmi270_task_);
         if (ok != pdPASS) {
             ESP_LOGW(TAG, "BMI270 task create failed");
+        } else {
+            ESP_LOGI(TAG, "BMI270 task started stack=%lu memory=internal",
+                     static_cast<unsigned long>(kBmi270TaskStackSize));
         }
     }
 
@@ -1366,12 +1403,22 @@ private:
                     ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kShakeLabSampleIntervalMs));
                 }
-                if (loop_ms < touch_active_until_ms_.load(std::memory_order_relaxed)) {
+                const int64_t touch_active_until = touch_active_until_ms_.load(std::memory_order_relaxed);
+                const bool touch_is_down = touch_cached_down_.load(std::memory_order_acquire);
+                // Normal orientation polling keeps its full post-touch holdoff.
+                // Shake Lab needs a shorter handoff so a user can tap into the
+                // page and immediately start shaking without losing the first
+                // part of the gesture.  The shared I2C lock still serializes
+                // all actual touch and BMI270 transfers.
+                const bool touch_recently_released =
+                    touch_active_until > 0 &&
+                    loop_ms < touch_active_until - kTouchActivityHoldMs + kShakeLabTouchSettleMs;
+                if (touch_is_down || touch_recently_released) {
                     if (loop_ms - last_shake_touch_skip_log_ms >= kShakeLabTouchSkipLogIntervalMs) {
                         ESP_LOGI(TAG, "Shake Lab BMI270 read skipped: touch active");
                         last_shake_touch_skip_log_ms = loop_ms;
                     }
-                    vTaskDelay(pdMS_TO_TICKS(100));
+                    vTaskDelay(pdMS_TO_TICKS(kShakeLabSampleIntervalMs));
                     continue;
                 }
                 int16_t x = 0;
@@ -1380,12 +1427,25 @@ private:
                 int16_t gx = 0;
                 int16_t gy = 0;
                 int16_t gz = 0;
-                if (!Bmi270ReadSample(x, y, z, gx, gy, gz)) {
+                // A bounded wait lets the high-rate sampler survive short bursts
+                // of shared touch/display I2C traffic without starving the
+                // detector of the stable samples needed to reveal a result.
+                esp_err_t sample_error = ESP_OK;
+                const auto sample_status =
+                    Bmi270ReadSample(x, y, z, gx, gy, gz, pdMS_TO_TICKS(20), &sample_error);
+                if (sample_status != Bmi270SampleStatus::OK) {
                     if (loop_ms - last_shake_i2c_error_log_ms >= kShakeLabI2cErrorLogIntervalMs) {
-                        ESP_LOGW(TAG, "Shake Lab BMI270 I2C read failed");
+                        if (sample_status == Bmi270SampleStatus::LOCK_TIMEOUT) {
+                            ESP_LOGW(TAG, "Shake Lab BMI270 sample lock timeout wait=20ms");
+                        } else if (sample_status == Bmi270SampleStatus::TRANSFER_FAILED) {
+                            ESP_LOGW(TAG, "Shake Lab BMI270 transfer failed: %s",
+                                     esp_err_to_name(sample_error));
+                        } else {
+                            ESP_LOGW(TAG, "Shake Lab BMI270 device unavailable");
+                        }
                         last_shake_i2c_error_log_ms = loop_ms;
                     }
-                    vTaskDelay(pdMS_TO_TICKS(100));
+                    vTaskDelay(pdMS_TO_TICKS(kShakeLabSampleIntervalMs));
                     continue;
                 }
                 const auto result = shake_detector_.Process({x, y, z, gx, gy, gz, loop_ms});
@@ -1427,7 +1487,7 @@ private:
             int16_t gx = 0;
             int16_t gy = 0;
             int16_t gz = 0;
-            if (!Bmi270ReadSample(x, y, z, gx, gy, gz)) {
+            if (Bmi270ReadSample(x, y, z, gx, gy, gz) != Bmi270SampleStatus::OK) {
                 vTaskDelay(pdMS_TO_TICKS(500));
                 continue;
             }
@@ -2042,7 +2102,7 @@ private:
         const bool touched = point_count > 0;
         const int64_t now_ms = esp_timer_get_time() / 1000;
         if (touched) {
-            touch_active_until_ms_.store(now_ms + 800, std::memory_order_relaxed);
+            touch_active_until_ms_.store(now_ms + kTouchActivityHoldMs, std::memory_order_relaxed);
         }
         auto* desktop_ui = GetDesktopUI();
 

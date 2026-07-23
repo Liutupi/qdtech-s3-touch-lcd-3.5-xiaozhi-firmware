@@ -8926,7 +8926,7 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         lv_label_set_text(shake_lab_divination_name_label_, "静心起卦");
         lv_label_set_text(shake_lab_divination_judgment_label_, "在心中默念所问，\n平稳摇动设备。 ");
         lv_label_set_text(shake_lab_divination_guidance_label_, "轻摇设备，静待卦象。 ");
-        lv_label_set_text(shake_lab_divination_hint_label_, "准备完成 · 轻摇起卦");
+        lv_label_set_text(shake_lab_divination_hint_label_, "准备完成 · 摇1-2秒后停稳");
     }
     shake_lab_sampling_active_ = true;
     if (shake_lab_sampling_callback_) {
@@ -9438,7 +9438,7 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
                 shake_lab_divination_revealed_lines_ = 0;
                 shake_lab_divination_sequence_active_ = false;
-                lv_label_set_text(shake_lab_divination_hint_label_, "阴阳流转 · 请继续摇");
+                lv_label_set_text(shake_lab_divination_hint_label_, "已感应 · 请停稳出卦");
             }
             if (shake_lab_anim_timer_) {
                 lv_timer_resume(shake_lab_anim_timer_);
@@ -9452,7 +9452,7 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "一枝签正在落下……");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
-                lv_label_set_text(shake_lab_divination_hint_label_, "卦象正在显现……");
+                lv_label_set_text(shake_lab_divination_hint_label_, "卦象显现中 · 请保持静止");
             }
             break;
         case ShakeDetector::Transition::SETTLING_TO_REVEAL:

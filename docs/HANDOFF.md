@@ -1,3 +1,13 @@
+## 2026-07-24 Handoff: v1.8.5 Shake Lab I2C Sampling Recovery
+
+- Version `1.8.5` is the OTA successor to the verified `v1.8.4` baseline; the version increment is required because the OTA client rejects the same version string.
+- Root cause: high-rate BMI270 sample starvation. Shared-I2C lock misses and physical transfer failures were previously collapsed into one boolean result, followed by a 100 ms sleep.
+- The board-local sampler now reports device unavailable, lock timeout, and transfer failure separately; Shake Lab waits up to 20 ms for the shared lock and retries on the existing 30 ms cadence. Thresholds, low-rate Hourglass polling, touch, Wi-Fi, weather, calendar, Zodiac, Bone Weight, media, NVS, and partitions are unchanged.
+- COM3 hardware logs recorded repeated Divination, Dice, and Fortune `ARMED -> SHAKING -> SETTLING -> REVEAL` sequences, SD divination image loading, normal touch return, and no I2C timeout/transfer-failure, panic, watchdog, or stack-overflow event. Internal SRAM was about 11.2-12.7 KB; observed minimum was about 9.7 KB.
+- ESP-IDF 5.5 full Zodiac/Bone-Weight build and merge passed. App: `0x670530` / 6,751,536 bytes; 7 MB slot free: `0x8fad0` (8%); merged recovery image: `0x770530` / 7,800,112 bytes. The final v1.8.5 build differs from the hardware-verified payload only in `PROJECT_VER`.
+- Release hashes: app `957adb54bc93990778c170a3a096133b04bb5ca2c09881605272bd6e34099161`; full `976316156aee9ab6bdfb4d37f34cd0918c0716badd200dec751dd3ad94148b07`; firmware ZIP `76c8de32a2995f180860b0bcf645b51f5e20faf35a671a34cc247f7bad7b35ec`; SD card ZIP `9f2dd7df8202c0d776f3e06eaedadb1304a28de6bf23235486e9564f0b51730e`.
+- Rollback: OTA-flash the known-good v1.8.4 app, or recovery-flash its full image at offset `0x0`; recovery flashing may clear local provisioning state, while OTA app flashing preserves it.
+
 ## 2026-07-16 Handoff: v1.8.0 Calendar Bone-Weight Reader
 
 - Firmware version is `v1.8.0`, based on remote `main` commit `71ce1df1b1ea195449d125e71c0a14c172106e1b`.

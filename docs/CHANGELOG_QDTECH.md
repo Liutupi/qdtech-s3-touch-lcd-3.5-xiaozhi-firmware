@@ -1,3 +1,13 @@
+## 2026-07-24: v1.8.5 Shake Lab I2C Sampling Recovery
+
+- Bumped the OTA-visible firmware version from `1.8.4` to `1.8.5`.
+- Fixed Shake Lab sample starvation by distinguishing a shared-I2C lock timeout from a BMI270 transfer failure, waiting up to 20 ms for the lock, and retrying on the existing 30 ms sample cadence instead of sleeping 100 ms after every failed attempt.
+- Kept ShakeDetector thresholds, low-rate Hourglass polling, touch parsing, Wi-Fi, weather, calendar, Zodiac, Bone Weight, media, NVS, and partitions unchanged.
+- Clarified the Divination guidance for shake, stop, and reveal states.
+- ESP-IDF 5.5 Zodiac/Bone-Weight build and merge passed: app `0x670530` / 6,751,536 bytes; 7 MB app-slot free `0x8fad0` (8%); merged recovery image `0x770530` / 7,800,112 bytes.
+- COM3 logs verified repeated Divination, Dice, and Fortune sequences, SD divination image loading, normal touch return, stable internal SRAM, and no I2C error, panic, watchdog, or stack-overflow event.
+- Release hashes: app `957adb54bc93990778c170a3a096133b04bb5ca2c09881605272bd6e34099161`; full `976316156aee9ab6bdfb4d37f34cd0918c0716badd200dec751dd3ad94148b07`; firmware ZIP `76c8de32a2995f180860b0bcf645b51f5e20faf35a671a34cc247f7bad7b35ec`; SD card ZIP `9f2dd7df8202c0d776f3e06eaedadb1304a28de6bf23235486e9564f0b51730e`.
+
 ## 2026-07-16: v1.8.0 Calendar Bone-Weight Detailed Reader
 
 - Added the optional `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT` feature for the QDTech 3.5-inch Calendar page; it remains disabled by default in source configuration.

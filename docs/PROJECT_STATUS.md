@@ -1,3 +1,10 @@
+# 2026-07-24 Project Status: v1.8.5 Shake Lab I2C Sampling Recovery
+
+- Current release candidate is `v1.8.5`, an OTA-visible successor to `v1.8.4`.
+- The board-local high-rate BMI270 reader now distinguishes shared-I2C lock contention from a real transfer failure, waits up to 20 ms for short contention, and retries at the existing 30 ms cadence.
+- COM3 hardware validation covered Divination, Dice, Fortune, touch return, SD divination image loading, SRAM stability, and crash monitoring. No I2C starvation or runtime fault was observed.
+- Calendar Zodiac and Bone-Weight build options remain enabled; Wi-Fi behavior is intentionally unchanged.
+
 # 2026-07-16 Project Status: v1.8.0 Calendar Bone-Weight Reader
 
 - Added an optional Calendar-integrated bone-weight calculator guarded by the default-off `CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT`.

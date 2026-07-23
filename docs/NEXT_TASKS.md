@@ -1,3 +1,8 @@
+# 2026-07-24 v1.8.5 Multi-Board OTA Acceptance
+
+- After publication, update one separate `v1.8.4` board through the normal OTA flow and confirm it discovers `v1.8.5`, downloads the app asset, reboots successfully, and shows the new version.
+- On that board, run one Divination, Dice, and Fortune cycle after the OTA reboot. Do not mix Wi-Fi work into this acceptance task.
+
 # 2026-07-19 v1.8.2 OTA Release Gate
 
 - The v1.8.2 App and full recovery image are built from the QDTech production
