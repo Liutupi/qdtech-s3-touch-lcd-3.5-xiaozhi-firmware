@@ -1285,7 +1285,9 @@ private:
         }
         BaseType_t ok = xTaskCreate(
             [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
-            "bmi270", 4096, this, 1, &bmi270_task_);
+            // This task owns I2C sampling only.  Keep a modest guard margin
+            // because its driver calls use stack-local transfer buffers.
+            "bmi270", 6144, this, 1, &bmi270_task_);
         if (ok != pdPASS) {
             ESP_LOGW(TAG, "BMI270 task create failed");
         }
@@ -1312,12 +1314,19 @@ private:
         if (!display_) {
             return false;
         }
-        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
-        if (!lvgl_port_lock(0)) {
-            return false;
-        }
-        qd_display->GetDesktopUI()->UpdateShakeLabDetector(result);
-        lvgl_port_unlock();
+        // Never let the sensor task execute a UI transition.  SETTLING_TO_REVEAL
+        // opens SD resources and starts animation; doing that on the 4 KB-ish
+        // I2C worker caused its stack to overflow and reboot the board exactly
+        // when the result was about to appear.  MainEventLoop owns this work.
+        Application::GetInstance().Schedule([this, result]() {
+            if (!display_) return;
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            if (!lvgl_port_lock(pdMS_TO_TICKS(100))) return;
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->UpdateShakeLabDetector(result);
+            }
+            lvgl_port_unlock();
+        });
         return true;
     }
     bool ExitHourglassFromBmi270() {
@@ -1344,7 +1353,6 @@ private:
         int64_t last_log_ms = 0;
         int64_t last_shake_touch_skip_log_ms = 0;
         int64_t last_shake_i2c_error_log_ms = 0;
-        int64_t last_shake_ui_update_ms = 0;
         bool hourglass_active = false;
         bool shake_sampling_was_active = false;
 
@@ -1355,7 +1363,6 @@ private:
                 if (!shake_sampling_was_active) {
                     shake_detector_.Arm(loop_ms);
                     shake_sampling_was_active = true;
-                    last_shake_ui_update_ms = 0;
                     ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kShakeLabSampleIntervalMs));
                 }
@@ -1398,11 +1405,8 @@ private:
                 } else if (result.transition == ShakeDetector::Transition::COOLDOWN_COMPLETE) {
                     ESP_LOGI(TAG, "Shake Lab cooldown complete");
                 }
-                if (result.transition != ShakeDetector::Transition::NONE ||
-                    loop_ms - last_shake_ui_update_ms >= kShakeLabUiUpdateIntervalMs) {
-                    if (PublishShakeLabUpdate(result)) {
-                        last_shake_ui_update_ms = loop_ms;
-                    }
+                if (result.transition != ShakeDetector::Transition::NONE) {
+                    PublishShakeLabUpdate(result);
                 }
                 vTaskDelay(pdMS_TO_TICKS(kShakeLabSampleIntervalMs));
                 continue;

@@ -3,6 +3,7 @@
 #include "sdkconfig.h"
 #include "lvgl.h"
 #include "shake_detector.h"
+#include "divination_service.h"
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
 #include "zodiac_service.h"
@@ -435,6 +436,7 @@ private:
         ASK_BALL,
         DICE,
         FORTUNE,
+        DIVINATION,
     };
     lv_obj_t* shake_lab_page_ = nullptr;
     lv_obj_t* shake_lab_home_group_ = nullptr;
@@ -442,6 +444,7 @@ private:
     lv_obj_t* shake_lab_ask_group_ = nullptr;
     lv_obj_t* shake_lab_dice_group_ = nullptr;
     lv_obj_t* shake_lab_fortune_group_ = nullptr;
+    lv_obj_t* shake_lab_divination_group_ = nullptr;
     lv_obj_t* shake_lab_ball_ = nullptr;
     lv_obj_t* shake_lab_glow_[2] = {};
     lv_obj_t* shake_lab_particles_[10] = {};
@@ -458,6 +461,17 @@ private:
     lv_obj_t* shake_lab_fortune_poem_label_ = nullptr;
     lv_obj_t* shake_lab_fortune_explain_label_ = nullptr;
     lv_obj_t* shake_lab_fortune_hint_label_ = nullptr;
+    lv_obj_t* shake_lab_divination_image_ = nullptr;
+    lv_obj_t* shake_lab_divination_image_status_ = nullptr;
+    lv_obj_t* shake_lab_divination_name_label_ = nullptr;
+    lv_obj_t* shake_lab_divination_judgment_label_ = nullptr;
+    lv_obj_t* shake_lab_divination_guidance_label_ = nullptr;
+    lv_obj_t* shake_lab_divination_hint_label_ = nullptr;
+    lv_obj_t* shake_lab_divination_coins_[3] = {};
+    lv_obj_t* shake_lab_divination_lines_[6][2] = {};
+    QdDivination::ImageFrame shake_lab_divination_image_frame_{};
+    QdDivination::Reading shake_lab_divination_reading_{};
+    std::atomic<uint32_t> shake_lab_divination_load_request_id_{0};
     lv_timer_t* shake_lab_anim_timer_ = nullptr;
     std::function<void(bool)> shake_lab_sampling_callback_;
     ShakeLabMode shake_lab_mode_ = ShakeLabMode::HOME;
@@ -466,6 +480,8 @@ private:
     uint8_t shake_lab_dice_count_ = 1;
     uint8_t shake_lab_dice_values_state_[6] = {1, 1, 1, 1, 1, 1};
     uint16_t shake_lab_anim_tick_ = 0;
+    uint8_t shake_lab_divination_revealed_lines_ = 0;
+    bool shake_lab_divination_sequence_active_ = false;
     bool shake_lab_sampling_active_ = false;
 
     lv_obj_t* apps_primary_group_ = nullptr;
@@ -630,6 +646,9 @@ private:
     void ReleaseShakeLabPage();
     void UpdateShakeLabVisuals();
     void UpdateShakeLabDice();
+    void UpdateShakeLabDivinationVisuals();
+    void StartShakeLabDivinationSequence();
+    void FinishShakeLabDivinationSequence();
     void RevealShakeLabResult();
     void UpdateFocusUI();
     uint32_t CurrentFocusDateKey() const;
