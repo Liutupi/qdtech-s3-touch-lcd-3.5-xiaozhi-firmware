@@ -1,6 +1,9 @@
 #ifndef _WIFI_CONFIGURATION_AP_H_
 #define _WIFI_CONFIGURATION_AP_H_
 
+#include "sdkconfig.h"
+#include "qdtech_provisioning_compat.h"
+
 #include <string>
 #include <vector>
 #include <mutex>
@@ -19,6 +22,9 @@ public:
     void SetSsidPrefix(const std::string &&ssid_prefix);
     void SetLanguage(const std::string &&language);
     void Start();
+#ifdef QDTECH_PROVISIONING_APSTA
+    void StartWithExistingWifi(esp_netif_t* sta_netif);
+#endif
     void Stop();
     void StartSmartConfig();
     bool ConnectToWifi(const std::string &ssid, const std::string &password);
@@ -54,9 +60,22 @@ private:
     int8_t max_tx_power_;
     bool remember_bssid_;
     esp_netif_t* sta_netif_ = nullptr;
+#ifdef QDTECH_PROVISIONING_APSTA
+    bool reuse_wifi_driver_ = false;
+#endif
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    esp_timer_handle_t raw_beacon_timer_ = nullptr;
+    std::vector<uint8_t> raw_beacon_frame_;
+    bool raw_beacon_tx_error_logged_ = false;
+#endif
 
     void StartAccessPoint();
     void StartWebServer();
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    void StartRawBeaconFallback(const std::string& ssid, uint8_t channel);
+    void StopRawBeaconFallback();
+    static void RawBeaconTimerCallback(void* arg);
+#endif
 
     // Event handlers
     static void WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);

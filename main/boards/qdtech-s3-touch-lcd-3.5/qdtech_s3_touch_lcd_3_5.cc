@@ -724,11 +724,25 @@ public:
         return battery_monitor_.GetLevel(level, charging, discharging);
     }
 
+    int GetStartupWifiConnectTimeoutMs() const override {
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
+    defined(CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK)
+        return 8 * 1000;
+#else
+        return WifiBoard::GetStartupWifiConnectTimeoutMs();
+#endif
+    }
+
     void StartNetwork() override {
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
+    defined(CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK)
+        ESP_LOGI(TAG, "QDTech fast provisioning fallback enabled timeout=%d ms",
+                 GetStartupWifiConnectTimeoutMs());
+#endif
         EnsureStrongestBssidDefault();
         WifiBoard::StartNetwork();
         const bool open_phone_web_after_setup = ConsumePhoneWebAfterSetupFlag();
-        ESP_LOGI(TAG, "Lyric UDP and phone web config kept off by default to protect weather memory");
+        ESP_LOGI(TAG, "Lyric UDP kept off by default; phone web config starts automatically");
         
         // WiFi 连接后启动时间天气服�?
         if (!time_weather_started_ && display_) {
@@ -736,6 +750,17 @@ public:
             time_weather_service_.Start(qd_display->GetDesktopUI());
             time_weather_started_ = true;
             ESP_LOGI(TAG, "Time weather service started");
+        }
+
+        InitializeWifiConfigServer();
+        if (wifi_config_server_.IsRunning()) {
+            network_services_started_ = true;
+            ESP_LOGI(TAG, "Phone web config available: %s",
+                     wifi_config_server_.Status().c_str());
+        } else {
+            ScheduleDeferredNetworkServices(30000000);
+            ESP_LOGW(TAG, "Phone web config start deferred: %s",
+                     wifi_config_server_.Status().c_str());
         }
         if (open_phone_web_after_setup) {
             StartPhoneWebFromSettings();
@@ -1260,7 +1285,9 @@ private:
         }
         BaseType_t ok = xTaskCreate(
             [](void* arg) { static_cast<QdtechS3TouchLcd35Board*>(arg)->Bmi270Task(); },
-            "bmi270", 4096, this, 1, &bmi270_task_);
+            // This task owns I2C sampling only.  Keep a modest guard margin
+            // because its driver calls use stack-local transfer buffers.
+            "bmi270", 6144, this, 1, &bmi270_task_);
         if (ok != pdPASS) {
             ESP_LOGW(TAG, "BMI270 task create failed");
         }
@@ -1287,12 +1314,19 @@ private:
         if (!display_) {
             return false;
         }
-        auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
-        if (!lvgl_port_lock(0)) {
-            return false;
-        }
-        qd_display->GetDesktopUI()->UpdateShakeLabDetector(result);
-        lvgl_port_unlock();
+        // Never let the sensor task execute a UI transition.  SETTLING_TO_REVEAL
+        // opens SD resources and starts animation; doing that on the 4 KB-ish
+        // I2C worker caused its stack to overflow and reboot the board exactly
+        // when the result was about to appear.  MainEventLoop owns this work.
+        Application::GetInstance().Schedule([this, result]() {
+            if (!display_) return;
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            if (!lvgl_port_lock(pdMS_TO_TICKS(100))) return;
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->UpdateShakeLabDetector(result);
+            }
+            lvgl_port_unlock();
+        });
         return true;
     }
     bool ExitHourglassFromBmi270() {
@@ -1319,7 +1353,6 @@ private:
         int64_t last_log_ms = 0;
         int64_t last_shake_touch_skip_log_ms = 0;
         int64_t last_shake_i2c_error_log_ms = 0;
-        int64_t last_shake_ui_update_ms = 0;
         bool hourglass_active = false;
         bool shake_sampling_was_active = false;
 
@@ -1330,7 +1363,6 @@ private:
                 if (!shake_sampling_was_active) {
                     shake_detector_.Arm(loop_ms);
                     shake_sampling_was_active = true;
-                    last_shake_ui_update_ms = 0;
                     ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kShakeLabSampleIntervalMs));
                 }
@@ -1373,11 +1405,8 @@ private:
                 } else if (result.transition == ShakeDetector::Transition::COOLDOWN_COMPLETE) {
                     ESP_LOGI(TAG, "Shake Lab cooldown complete");
                 }
-                if (result.transition != ShakeDetector::Transition::NONE ||
-                    loop_ms - last_shake_ui_update_ms >= kShakeLabUiUpdateIntervalMs) {
-                    if (PublishShakeLabUpdate(result)) {
-                        last_shake_ui_update_ms = loop_ms;
-                    }
+                if (result.transition != ShakeDetector::Transition::NONE) {
+                    PublishShakeLabUpdate(result);
                 }
                 vTaskDelay(pdMS_TO_TICKS(kShakeLabSampleIntervalMs));
                 continue;

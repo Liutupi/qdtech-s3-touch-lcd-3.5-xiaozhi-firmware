@@ -5,6 +5,10 @@
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
 #include "bone_weight_service.h"
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+#include "zodiac_service.h"
+#endif
 #include "config.h"
 #include "audio_codecs/audio_codec.h"
 #include "boards/common/board.h"
@@ -19,15 +23,21 @@
 #include <cmath>
 #include <cstdint>
 #include <ctime>
+#include <new>
 #include <string>
 #include <utility>
 
 #include <esp_app_desc.h>
 #include <esp_heap_caps.h>
+#include <esp_lvgl_port.h>
 #include <esp_log.h>
 #include <esp_ota_ops.h>
 #include <esp_system.h>
 #include <esp_timer.h>
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+#include <esp_lvgl_port.h>
+#endif
 #include <nvs_flash.h>
 #include <nvs.h>
 #include <ssid_manager.h>
@@ -335,6 +345,52 @@ static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style)
     lv_obj_add_style(label, style, 0);
     add_gesture_bubble(label);
     return label;
+}
+
+static const char* localize_app_card_status(const char* status) {
+    if (!status) return "";
+    struct StatusText {
+        const char* source;
+        const char* translated;
+    };
+    static constexpr StatusText kStatusTexts[] = {
+        {"Music FM", "音乐电台"},
+        {"Playing", "播放中"},
+        {"Stopped", "已停止"},
+        {"Buffer", "缓冲中"},
+        {"Buffering", "缓冲中"},
+        {"Connect", "连接中"},
+        {"Connecting", "连接中"},
+        {"SD Slideshow", "SD 相册"},
+        {"Refreshing", "刷新中"},
+        {"Scanning", "扫描中"},
+        {"Online", "在线"},
+        {"Offline", "离线"},
+        {"SD ROMs", "SD 游戏"},
+        {"Loading ROM", "载入游戏"},
+        {"Ready", "就绪"},
+        {"Today", "今天"},
+        {"Done", "已完成"},
+        {"Paused", "已暂停"},
+        {"WiFi Hub", "WiFi 管理"},
+        {"WiFi", "无线网络"},
+        {"Wait", "请稍候"},
+        {"Update", "可更新"},
+        {"System", "系统"},
+        {"Latest", "最新版"},
+        {"Check", "检查更新"},
+        {"Ask song", "点歌"},
+        {"Ask XiaoZhi", "问小智"},
+        {"Failed", "失败"},
+        {"Episodes", "节目列表"},
+        {"Error", "错误"},
+    };
+    for (const auto& item : kStatusTexts) {
+        if (strcmp(status, item.source) == 0) {
+            return item.translated;
+        }
+    }
+    return status;
 }
 
 static void fit_brand_label(lv_obj_t* label, int16_t width, bool owner) {
@@ -1622,6 +1678,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     const bool was_bone_weight = current_page_ == DesktopPage::BONE_WEIGHT;
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    const bool was_zodiac = current_page_ == DesktopPage::ZODIAC;
+#endif
     current_page_ = page;
     if (was_xiaozhi && page != DesktopPage::XIAOZHI) {
         ReleaseThemedFaceGif();
@@ -1641,6 +1701,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     if (bone_weight_page_) {
         lv_obj_add_flag(bone_weight_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    if (zodiac_page_) {
+        lv_obj_add_flag(zodiac_page_, LV_OBJ_FLAG_HIDDEN);
     }
 #endif
     if (focus_page_) {
@@ -1713,6 +1779,19 @@ void DesktopUI::ShowPage(DesktopPage page) {
                 RefreshBoneWeightInput();
             }
             ESP_LOGI(TAG, "Show Calendar bone-weight page");
+            break;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+        case DesktopPage::ZODIAC:
+            if (!zodiac_page_) {
+                CreateZodiacPage(lv_scr_act());
+            }
+            if (zodiac_page_) {
+                lv_obj_clear_flag(zodiac_page_, LV_OBJ_FLAG_HIDDEN);
+                RefreshZodiacInput();
+            }
+            ESP_LOGI(TAG, "Show Calendar zodiac page");
             break;
 #endif
         case DesktopPage::RADIO:
@@ -1797,6 +1876,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
         ReleaseBoneWeightPage();
     }
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    if (was_zodiac && page != DesktopPage::ZODIAC) {
+        ReleaseZodiacPage();
+    }
+#endif
 
     // Do not keep weather particles mutating hidden objects behind full-screen apps.
     // They are resumed by ApplyWeatherVisual when the main-page weather is updated.
@@ -1859,6 +1944,15 @@ void DesktopUI::HandleSwipe(int16_t dx, int16_t dy) {
         return;
     }
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    if (current_page_ == DesktopPage::ZODIAC &&
+        zodiac_reader_visible_ && LV_ABS(dy) < max_dy &&
+        LV_ABS(dx) > min_dx) {
+        ChangeZodiacReaderPage(dx < 0 ? 1 : -1);
+        return;
+    }
+#endif
 
     if (current_page_ == DesktopPage::PHOTO && LV_ABS(dx) > 35 && LV_ABS(dx) > LV_ABS(dy)) {
         NavigateBack();
@@ -1900,6 +1994,11 @@ void DesktopUI::NavigateBack() {
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     } else if (current_page_ == DesktopPage::BONE_WEIGHT) {
+        target = DesktopPage::CALENDAR;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    } else if (current_page_ == DesktopPage::ZODIAC) {
         target = DesktopPage::CALENDAR;
 #endif
     }
@@ -2027,6 +2126,13 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     if (current_page_ == DesktopPage::BONE_WEIGHT) {
         HandleBoneWeightTap(x, y);
+        return;
+    }
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    if (current_page_ == DesktopPage::ZODIAC) {
+        HandleZodiacTap(x, y);
         return;
     }
 #endif
@@ -2158,7 +2264,21 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
             return;
         }
 #endif
-        if (hit(376, 36, 76, 28) || hit(192, 278, 96, 34)) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+        if (hit(192, 278, 68, 34)) {
+            ShowPage(DesktopPage::ZODIAC);
+            return;
+        }
+#endif
+        if (hit(376, 36, 76, 28)
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+            || hit(266, 278, 96, 34)
+#else
+            || hit(192, 278, 96, 34)
+#endif
+        ) {
             ShowTodayCalendar();
         } else if (hit(18, 278, 96, 34)) {
             AdjustCalendarMonth(-1);
@@ -2667,17 +2787,19 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
     CreateStatusBar(apps_page_);
 
-    lv_obj_t* title = label_en(apps_page_, "Apps", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_t* title = label_en(apps_page_, "应用", &style_en);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     if (is_tupi_warm_theme()) {
         lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
     }
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
-    lv_obj_t* sub = label_en(apps_page_, "App Center", &style_muted);
+    lv_obj_t* sub = label_en(apps_page_, "应用中心", &style_muted);
+    lv_obj_set_style_text_font(sub, qd_cn_font_16(), 0);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 86, 53);
 
-    lv_obj_t* back = CreateButton(apps_page_, "Back", navigate_back_cb);
+    lv_obj_t* back = CreateButton(apps_page_, "返回", navigate_back_cb);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
     lv_obj_set_style_bg_color(back,
                               is_tupi_warm_theme() ? COLOR_SURFACE :
                               themed_color(LV_COLOR_MAKE(0x24, 0x16, 0x0f), COLOR_SURFACE), 0);
@@ -2702,16 +2824,16 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     };
 
     AppInfo apps[] = {
-        {"RAD", "Radio", "Music FM", COLOR_GOLD, radio_card_cb},
-        {"PIC", "Photos", "SD Slideshow", COLOR_GREEN, photo_card_cb},
-        {"AI", "XiaoZhi", "Online", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
-        {"FC", "NES", "SD ROMs", COLOR_GREEN, fc_card_cb},
-        {"CAL", "Calendar", "Today", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
-        {"FOC", "Focus", "25 min", COLOR_GOLD, focus_card_cb},
-        {"NET", "Network", "WiFi Hub", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
-        {"SET", "Settings", "System", COLOR_GOLD, settings_card_cb},
-        {"MUS", "Music", "Ask song", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
-        {"POD", "Podcast", "Episodes", COLOR_GOLD, podcast_card_cb},
+        {"电", "电台", "音乐电台", COLOR_GOLD, radio_card_cb},
+        {"照", "照片", "SD 相册", COLOR_GREEN, photo_card_cb},
+        {"智", "小智", "在线", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, xiaozhi_card_cb},
+        {"游", "红白机", "SD 游戏", COLOR_GREEN, fc_card_cb},
+        {"历", "日历", "今天", is_tupi_warm_theme() ? COLOR_GOLD : COLOR_PURPLE, calendar_card_cb},
+        {"专", "专注", "25 分钟", COLOR_GOLD, focus_card_cb},
+        {"网", "网络", "WiFi 管理", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_BLUE, network_card_cb},
+        {"设", "设置", "系统", COLOR_GOLD, settings_card_cb},
+        {"音", "音乐", "点歌", is_tupi_warm_theme() ? COLOR_GREEN : COLOR_PURPLE, music_card_cb},
+        {"播", "播客", "节目列表", COLOR_GOLD, podcast_card_cb},
     };
 
     for (uint8_t i = 0; i < sizeof(apps) / sizeof(apps[0]); ++i) {
@@ -2725,10 +2847,10 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
         }
     }
 
-    apps_more_button_ = CreateButton(apps_page_, "More", nullptr);
+    apps_more_button_ = CreateButton(apps_page_, "更多", nullptr);
     lv_obj_set_size(apps_more_button_, 92, 26);
     lv_obj_set_style_radius(apps_more_button_, 10, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(apps_more_button_, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(apps_more_button_, 0), qd_cn_font_16(), 0);
     lv_obj_align(apps_more_button_, LV_ALIGN_TOP_LEFT, 248, 45);
 
     apps_more_group_ = lv_obj_create(apps_page_);
@@ -2740,20 +2862,22 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(shake_card, COLOR_SURFACE, 0);
     lv_obj_set_style_border_color(shake_card, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(shake_card, 2, 0);
-    lv_obj_t* shake_title = label_en(shake_card, "Shake Lab", &style_en);
-    lv_obj_set_style_text_font(shake_title, &lv_font_montserrat_20, 0);
+    lv_obj_t* shake_title = label_en(shake_card, "摇一摇实验室", &style_en);
+    lv_obj_set_style_text_font(shake_title, qd_cn_font_20(), 0);
     lv_obj_align(shake_title, LV_ALIGN_TOP_LEFT, 22, 20);
-    lv_obj_t* shake_cn = label_en(shake_card, "摇一摇实验室", &style_gold);
-    lv_obj_set_style_text_font(shake_cn, qd_cn_font_20(), 0);
+    lv_obj_t* shake_cn = label_en(shake_card, "趣味互动", &style_gold);
+    lv_obj_set_style_text_font(shake_cn, qd_cn_font_16(), 0);
     lv_obj_align(shake_cn, LV_ALIGN_TOP_LEFT, 22, 50);
-    lv_obj_t* shake_detail = label_en(shake_card, "Ask Ball  ·  Dice", &style_muted);
+    lv_obj_t* shake_detail = label_en(shake_card, "答案球  ·  骰子", &style_muted);
+    lv_obj_set_style_text_font(shake_detail, qd_cn_font_16(), 0);
     lv_obj_align(shake_detail, LV_ALIGN_TOP_LEFT, 22, 88);
     lv_obj_t* shake_mark = circle(shake_card, 54, COLOR_GREEN, LV_OPA_50);
     lv_obj_align(shake_mark, LV_ALIGN_RIGHT_MID, -30, 0);
     lv_obj_t* shake_dot = circle(shake_card, 18, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(shake_dot, shake_mark, LV_ALIGN_CENTER, 0, 0);
 
-    lv_obj_t* hint = label_en(apps_page_, "Swipe right: Home", &style_muted);
+    lv_obj_t* hint = label_en(apps_page_, "右滑返回主页", &style_muted);
+    lv_obj_set_style_text_font(hint, qd_cn_font_16(), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 
     RefreshAppTileStatuses();
@@ -2802,18 +2926,18 @@ lv_obj_t* DesktopUI::CreateAppTile(lv_obj_t* parent, uint8_t index, const char* 
 
     lv_obj_t* cn_label = label_en(icon_box, cn, &style_gold);
     lv_obj_set_style_text_color(cn_label, is_tupi_warm_theme() ? color : COLOR_GOLD, 0);
-    lv_obj_set_style_text_font(cn_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(cn_label, qd_cn_font_16(), 0);
     lv_obj_center(cn_label);
 
     lv_obj_t* en_label = label_en(box, en, &style_gold);
     lv_obj_set_style_text_color(en_label, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(en_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(en_label, qd_cn_font_16(), 0);
     lv_obj_align(en_label, LV_ALIGN_TOP_LEFT, 58, 5);
 
     lv_obj_t* dot = circle(box, 5, color, LV_OPA_COVER);
     lv_obj_align(dot, LV_ALIGN_TOP_LEFT, 58, 29);
-    lv_obj_t* status_label = label_en(box, status, &style_muted);
-    lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
+    lv_obj_t* status_label = label_en(box, localize_app_card_status(status), &style_muted);
+    lv_obj_set_style_text_font(status_label, qd_cn_font_16(), 0);
     lv_obj_set_width(status_label, 82);
     lv_label_set_long_mode(status_label, LV_LABEL_LONG_DOT);
     lv_obj_align(status_label, LV_ALIGN_TOP_LEFT, 67, 25);
@@ -3299,13 +3423,33 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     }
 #endif
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    lv_obj_t* zodiac = CreateButton(calendar_page_, "星座", nullptr);
+    lv_obj_set_size(zodiac, 68, 34);
+    lv_obj_set_style_bg_color(
+        zodiac, themed_color(LV_COLOR_MAKE(0x1d, 0x35, 0x5a), COLOR_SURFACE_2), 0);
+    lv_obj_set_style_border_color(
+        zodiac, themed_color(LV_COLOR_MAKE(0x84, 0xb6, 0xff), COLOR_BLUE), 0);
+    lv_obj_align(zodiac, LV_ALIGN_TOP_LEFT, 192, 278);
+    lv_obj_t* zodiac_text = lv_obj_get_child(zodiac, 0);
+    if (zodiac_text) {
+        lv_obj_set_style_text_font(zodiac_text, qd_cn_font_16(), 0);
+    }
+#endif
+
     lv_obj_t* today = CreateButton(calendar_page_, "Today", calendar_today_cb);
     lv_obj_set_size(today, 96, 34);
     lv_obj_set_ext_click_area(today, 12);
     lv_obj_set_style_bg_color(today,
                               themed_color(LV_COLOR_MAKE(0xff, 0xc1, 0x70), COLOR_CREAM), 0);
     lv_obj_set_style_border_width(today, 0, 0);
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    lv_obj_align(today, LV_ALIGN_TOP_LEFT, 266, 278);
+#else
     lv_obj_align(today, LV_ALIGN_TOP_MID, 0, 278);
+#endif
 
     lv_obj_t* next = CreateButton(calendar_page_, "Next", calendar_next_cb);
     lv_obj_set_size(next, 96, 34);
@@ -3805,6 +3949,498 @@ bool DesktopUI::HandleBoneWeightTap(uint16_t x, uint16_t y) {
         } else {
             CalculateBoneWeight();
         }
+    } else {
+        return false;
+    }
+    return true;
+}
+#endif
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+void DesktopUI::CreateZodiacPage(lv_obj_t* root) {
+    if (zodiac_page_) {
+        return;
+    }
+    if (!zodiac_initialized_) {
+        if (current_year_ >= 1900 && current_year_ <= 2100) {
+            zodiac_year_ = current_year_;
+            zodiac_month_ = std::clamp(current_month_, 1, 12);
+            zodiac_day_ = std::clamp(
+                current_day_, 1, days_in_month(zodiac_year_, zodiac_month_));
+        }
+        zodiac_initialized_ = true;
+    }
+
+    zodiac_page_ = lv_obj_create(root);
+    lv_obj_add_style(zodiac_page_, &style_screen, 0);
+    lv_obj_set_size(zodiac_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(zodiac_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(zodiac_page_, LV_OBJ_FLAG_HIDDEN);
+    add_gesture_bubble(zodiac_page_);
+    lv_obj_set_style_bg_color(
+        zodiac_page_, themed_color(LV_COLOR_MAKE(0x0d, 0x18, 0x2a), COLOR_BG), 0);
+
+    lv_obj_t* title = label_en(zodiac_page_, "星座查询", &style_gold);
+    lv_obj_set_style_text_font(title, qd_cn_font_16(), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 18, 10);
+    lv_obj_t* subtitle =
+        label_en(zodiac_page_, "输入公历出生年月日，推算西方十二星座", &style_muted);
+    lv_obj_set_style_text_font(subtitle, qd_cn_font_16(), 0);
+    lv_obj_align(subtitle, LV_ALIGN_TOP_LEFT, 18, 38);
+
+    lv_obj_t* back = CreateButton(zodiac_page_, "返回", nullptr);
+    lv_obj_set_size(back, 74, 34);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -16, 10);
+    if (lv_obj_t* text = lv_obj_get_child(back, 0)) {
+        lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
+    }
+
+    auto make_button = [this](lv_obj_t* parent, const char* text,
+                              int x, int width) {
+        lv_obj_t* button = CreateButton(parent, text, nullptr);
+        lv_obj_set_size(button, width, 28);
+        lv_obj_set_style_radius(button, 8, 0);
+        lv_obj_align(button, LV_ALIGN_TOP_LEFT, x, 78);
+        if (lv_obj_t* label = lv_obj_get_child(button, 0)) {
+            lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
+        }
+    };
+    auto make_selector = [this](const char* caption, int x, int width,
+                                lv_obj_t** value_label) {
+        lv_obj_t* panel = CreatePanel(zodiac_page_, width, 112, x, 64);
+        lv_obj_set_style_radius(panel, 10, 0);
+        lv_obj_set_style_border_color(
+            panel, themed_color(LV_COLOR_MAKE(0x42, 0x65, 0x91), COLOR_LINE), 0);
+        lv_obj_t* field_title = label_en(panel, caption, &style_muted);
+        lv_obj_set_style_text_font(field_title, qd_cn_font_16(), 0);
+        lv_obj_align(field_title, LV_ALIGN_TOP_MID, 0, 6);
+        *value_label = label_en(panel, "--", &style_en);
+        lv_obj_set_style_text_font(*value_label, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_color(*value_label, COLOR_BLUE, 0);
+        lv_obj_align(*value_label, LV_ALIGN_TOP_MID, 0, 36);
+        return panel;
+    };
+
+    lv_obj_t* year_panel = make_selector("出生年", 12, 150, &zodiac_year_label_);
+    make_button(year_panel, "-10", 3, 32);
+    make_button(year_panel, "-1", 39, 32);
+    make_button(year_panel, "+1", 75, 32);
+    make_button(year_panel, "+10", 111, 36);
+    lv_obj_t* month_panel = make_selector("月", 168, 142, &zodiac_month_label_);
+    make_button(month_panel, "-", 12, 54);
+    make_button(month_panel, "+", 76, 54);
+    lv_obj_t* day_panel = make_selector("日", 316, 152, &zodiac_day_label_);
+    make_button(day_panel, "-", 12, 58);
+    make_button(day_panel, "+", 80, 58);
+
+    lv_obj_t* calculate = CreateButton(zodiac_page_, "开始推算", nullptr);
+    lv_obj_set_size(calculate, 448, 38);
+    lv_obj_set_style_bg_color(
+        calculate, themed_color(LV_COLOR_MAKE(0x72, 0xa7, 0xed), COLOR_CREAM), 0);
+    lv_obj_set_style_border_width(calculate, 0, 0);
+    lv_obj_align(calculate, LV_ALIGN_TOP_LEFT, 16, 187);
+    zodiac_action_label_ = lv_obj_get_child(calculate, 0);
+    if (zodiac_action_label_) {
+        lv_obj_set_style_text_font(zodiac_action_label_, qd_cn_font_16(), 0);
+    }
+
+    zodiac_result_label_ =
+        label_en(zodiac_page_, "选择出生日期后点击开始推算", &style_gold);
+    lv_obj_set_width(zodiac_result_label_, 448);
+    lv_obj_set_height(zodiac_result_label_, 38);
+    lv_label_set_long_mode(zodiac_result_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(zodiac_result_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(zodiac_result_label_, qd_cn_font_16(), 0);
+    lv_obj_align(zodiac_result_label_, LV_ALIGN_TOP_LEFT, 16, 234);
+
+    zodiac_hint_label_ = label_en(
+        zodiac_page_, "详细文案与插画：SD卡 /calendar/zodiac/", &style_muted);
+    lv_obj_set_width(zodiac_hint_label_, 448);
+    lv_obj_set_style_text_align(zodiac_hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(zodiac_hint_label_, qd_cn_font_16(), 0);
+    lv_obj_align(zodiac_hint_label_, LV_ALIGN_TOP_LEFT, 16, 282);
+
+    zodiac_reader_group_ = lv_obj_create(zodiac_page_);
+    lv_obj_add_style(zodiac_reader_group_, &style_screen, 0);
+    lv_obj_set_size(zodiac_reader_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(zodiac_reader_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(zodiac_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(
+        zodiac_reader_group_, themed_color(LV_COLOR_MAKE(0x0b, 0x14, 0x24), COLOR_BG), 0);
+    add_gesture_bubble(zodiac_reader_group_);
+
+    lv_obj_t* reader_title = label_en(zodiac_reader_group_, "星座详细信息", &style_gold);
+    lv_obj_set_style_text_font(reader_title, qd_cn_font_16(), 0);
+    lv_obj_align(reader_title, LV_ALIGN_TOP_LEFT, 16, 10);
+    lv_obj_t* reader_back = CreateButton(zodiac_reader_group_, "返回", nullptr);
+    lv_obj_set_size(reader_back, 74, 34);
+    lv_obj_align(reader_back, LV_ALIGN_TOP_RIGHT, -16, 10);
+    if (lv_obj_t* text = lv_obj_get_child(reader_back, 0)) {
+        lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
+    }
+
+    zodiac_reader_summary_label_ = label_en(zodiac_reader_group_, "", &style_muted);
+    lv_obj_set_width(zodiac_reader_summary_label_, 350);
+    lv_label_set_long_mode(zodiac_reader_summary_label_, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(zodiac_reader_summary_label_, qd_cn_font_16(), 0);
+    lv_obj_align(zodiac_reader_summary_label_, LV_ALIGN_TOP_LEFT, 16, 42);
+
+    lv_obj_t* image_panel = CreatePanel(zodiac_reader_group_, 160, 176, 16, 70);
+    lv_obj_set_style_radius(image_panel, 12, 0);
+    lv_obj_set_style_border_color(
+        image_panel, themed_color(LV_COLOR_MAKE(0x58, 0x84, 0xbb), COLOR_LINE), 0);
+    zodiac_reader_image_ = lv_image_create(image_panel);
+    lv_obj_center(zodiac_reader_image_);
+    zodiac_reader_image_status_ = label_en(image_panel, "等待加载插画", &style_muted);
+    lv_obj_set_width(zodiac_reader_image_status_, 136);
+    lv_obj_set_style_text_align(zodiac_reader_image_status_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(zodiac_reader_image_status_, qd_cn_font_16(), 0);
+    lv_obj_center(zodiac_reader_image_status_);
+
+    lv_obj_t* text_panel = CreatePanel(zodiac_reader_group_, 276, 176, 188, 70);
+    lv_obj_set_style_radius(text_panel, 12, 0);
+    lv_obj_set_style_border_color(
+        text_panel, themed_color(LV_COLOR_MAKE(0x58, 0x84, 0xbb), COLOR_LINE), 0);
+    zodiac_reader_section_label_ = label_en(text_panel, "性格概览", &style_gold);
+    lv_obj_set_style_text_font(zodiac_reader_section_label_, qd_cn_font_16(), 0);
+    lv_obj_align(zodiac_reader_section_label_, LV_ALIGN_TOP_LEFT, 12, 8);
+    zodiac_reader_text_label_ = label_en(text_panel, "", &style_en);
+    lv_obj_set_width(zodiac_reader_text_label_, 250);
+    lv_obj_set_height(zodiac_reader_text_label_, 132);
+    lv_label_set_long_mode(zodiac_reader_text_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(zodiac_reader_text_label_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_line_space(zodiac_reader_text_label_, 3, 0);
+    lv_obj_align(zodiac_reader_text_label_, LV_ALIGN_TOP_LEFT, 12, 36);
+
+    lv_obj_t* reader_prev = CreateButton(zodiac_reader_group_, "上一页", nullptr);
+    lv_obj_set_size(reader_prev, 96, 36);
+    lv_obj_align(reader_prev, LV_ALIGN_TOP_LEFT, 16, 270);
+    if (lv_obj_t* text = lv_obj_get_child(reader_prev, 0)) {
+        lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
+    }
+    zodiac_reader_page_label_ = label_en(zodiac_reader_group_, "1 / 6", &style_muted);
+    lv_obj_set_width(zodiac_reader_page_label_, 120);
+    lv_obj_set_style_text_align(zodiac_reader_page_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(zodiac_reader_page_label_, LV_ALIGN_TOP_MID, 0, 280);
+    lv_obj_t* reader_next = CreateButton(zodiac_reader_group_, "下一页", nullptr);
+    lv_obj_set_size(reader_next, 96, 36);
+    lv_obj_align(reader_next, LV_ALIGN_TOP_RIGHT, -16, 270);
+    if (lv_obj_t* text = lv_obj_get_child(reader_next, 0)) {
+        lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
+    }
+
+    RefreshZodiacInput();
+}
+
+void DesktopUI::ReleaseZodiacPage() {
+    zodiac_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    if (zodiac_reader_image_) {
+        lv_image_set_src(zodiac_reader_image_, nullptr);
+    }
+    if (zodiac_page_) {
+        lv_obj_del(zodiac_page_);
+    }
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+    zodiac_page_ = nullptr;
+    zodiac_reader_group_ = nullptr;
+    zodiac_year_label_ = nullptr;
+    zodiac_month_label_ = nullptr;
+    zodiac_day_label_ = nullptr;
+    zodiac_action_label_ = nullptr;
+    zodiac_result_label_ = nullptr;
+    zodiac_hint_label_ = nullptr;
+    zodiac_reader_image_ = nullptr;
+    zodiac_reader_image_status_ = nullptr;
+    zodiac_reader_summary_label_ = nullptr;
+    zodiac_reader_section_label_ = nullptr;
+    zodiac_reader_text_label_ = nullptr;
+    zodiac_reader_page_label_ = nullptr;
+    zodiac_has_result_ = false;
+    zodiac_reader_visible_ = false;
+    zodiac_reader_page_ = 0;
+}
+
+void DesktopUI::RefreshZodiacInput() {
+    char text[24];
+    if (zodiac_year_label_) {
+        snprintf(text, sizeof(text), "%d年", zodiac_year_);
+        lv_label_set_text(zodiac_year_label_, text);
+    }
+    if (zodiac_month_label_) {
+        snprintf(text, sizeof(text), "%02d月", zodiac_month_);
+        lv_label_set_text(zodiac_month_label_, text);
+    }
+    if (zodiac_day_label_) {
+        snprintf(text, sizeof(text), "%02d日", zodiac_day_);
+        lv_label_set_text(zodiac_day_label_, text);
+    }
+}
+
+void DesktopUI::AdjustZodiacInput(int action) {
+    switch (action) {
+        case 0: zodiac_year_ = std::max(1900, zodiac_year_ - 10); break;
+        case 1: zodiac_year_ = std::max(1900, zodiac_year_ - 1); break;
+        case 2: zodiac_year_ = std::min(2100, zodiac_year_ + 1); break;
+        case 3: zodiac_year_ = std::min(2100, zodiac_year_ + 10); break;
+        case 4: zodiac_month_ = zodiac_month_ == 1 ? 12 : zodiac_month_ - 1; break;
+        case 5: zodiac_month_ = zodiac_month_ == 12 ? 1 : zodiac_month_ + 1; break;
+        case 6: {
+            const int maximum = days_in_month(zodiac_year_, zodiac_month_);
+            zodiac_day_ = zodiac_day_ == 1 ? maximum : zodiac_day_ - 1;
+            break;
+        }
+        case 7: {
+            const int maximum = days_in_month(zodiac_year_, zodiac_month_);
+            zodiac_day_ = zodiac_day_ == maximum ? 1 : zodiac_day_ + 1;
+            break;
+        }
+        default: return;
+    }
+    zodiac_day_ = std::min(
+        zodiac_day_, days_in_month(zodiac_year_, zodiac_month_));
+    zodiac_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    if (zodiac_reader_image_) {
+        lv_image_set_src(zodiac_reader_image_, nullptr);
+    }
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+    zodiac_has_result_ = false;
+    zodiac_reader_visible_ = false;
+    zodiac_reader_page_ = 0;
+    if (zodiac_action_label_) lv_label_set_text(zodiac_action_label_, "开始推算");
+    if (zodiac_result_label_) lv_label_set_text(zodiac_result_label_, "选择完成后点击开始推算");
+    if (zodiac_hint_label_) lv_label_set_text(
+        zodiac_hint_label_, "详细文案与插画：SD卡 /calendar/zodiac/");
+    RefreshZodiacInput();
+}
+
+void DesktopUI::CalculateZodiac() {
+    QdZodiac::Result result{};
+    const QdZodiac::Status status = QdZodiac::Calculate(
+        {zodiac_year_, zodiac_month_, zodiac_day_}, &result);
+    if (status != QdZodiac::Status::OK) {
+        if (zodiac_result_label_) {
+            lv_label_set_text(zodiac_result_label_, QdZodiac::StatusText(status));
+        }
+        zodiac_has_result_ = false;
+        return;
+    }
+    zodiac_sign_ = result.sign;
+    zodiac_has_result_ = true;
+    zodiac_reader_page_ = 0;
+    char summary[128];
+    snprintf(summary, sizeof(summary), "%s  %s  ·  %s",
+             result.name, result.english_name, result.date_range);
+    if (zodiac_result_label_) lv_label_set_text(zodiac_result_label_, summary);
+    if (zodiac_hint_label_) {
+        snprintf(summary, sizeof(summary), "%s · %s · 守护星 %s",
+                 result.element, result.modality, result.ruling_planet);
+        lv_label_set_text(zodiac_hint_label_, summary);
+    }
+    if (zodiac_action_label_) lv_label_set_text(zodiac_action_label_, "打开详细信息");
+}
+
+void DesktopUI::ShowZodiacReader() {
+    if (!zodiac_has_result_ || !zodiac_reader_group_) return;
+    zodiac_reader_visible_ = true;
+    zodiac_reader_page_ = 0;
+    lv_obj_clear_flag(zodiac_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    if (zodiac_reader_image_) {
+        lv_image_set_src(zodiac_reader_image_, nullptr);
+        lv_obj_add_flag(zodiac_reader_image_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+    if (zodiac_reader_image_status_) {
+        lv_label_set_text(zodiac_reader_image_status_, "正在加载可爱插画...");
+        lv_obj_clear_flag(zodiac_reader_image_status_, LV_OBJ_FLAG_HIDDEN);
+    }
+    RefreshZodiacReader(true);
+}
+
+void DesktopUI::HideZodiacReader() {
+    zodiac_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    zodiac_reader_visible_ = false;
+    zodiac_reader_page_ = 0;
+    if (zodiac_reader_image_) {
+        lv_image_set_src(zodiac_reader_image_, nullptr);
+    }
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+    if (zodiac_reader_group_) {
+        lv_obj_add_flag(zodiac_reader_group_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void DesktopUI::ChangeZodiacReaderPage(int delta) {
+    if (!zodiac_reader_visible_) return;
+    const int next = std::clamp(
+        static_cast<int>(zodiac_reader_page_) + delta, 0,
+        static_cast<int>(QdZodiac::ReaderPageCount()) - 1);
+    if (next == zodiac_reader_page_) return;
+    zodiac_reader_page_ = static_cast<uint8_t>(next);
+    RefreshZodiacReader();
+}
+
+void DesktopUI::RefreshZodiacReader(bool load_image) {
+    if (!zodiac_reader_visible_ || !zodiac_reader_text_label_) return;
+    if (zodiac_reader_section_label_) {
+        lv_label_set_text(zodiac_reader_section_label_, "正在读取");
+    }
+    lv_label_set_text(zodiac_reader_text_label_, "正在从SD卡加载星座内容...");
+
+    struct ZodiacLoadPayload {
+        QdZodiac::Status detail_status = QdZodiac::Status::DETAIL_MISSING;
+        QdZodiac::Status image_status = QdZodiac::Status::IMAGE_MISSING;
+        QdZodiac::ImageFrame image{};
+        char title[48]{};
+        char text[640]{};
+    };
+
+    void* storage = heap_caps_malloc(
+        sizeof(ZodiacLoadPayload), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!storage) {
+        lv_label_set_text(zodiac_reader_text_label_, QdZodiac::StatusText(QdZodiac::Status::NO_MEMORY));
+        return;
+    }
+    auto* payload = new (storage) ZodiacLoadPayload{};
+    const uint32_t request_id =
+        zodiac_load_request_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+    const QdZodiac::Sign sign = zodiac_sign_;
+    const uint8_t page = zodiac_reader_page_;
+    auto* background = Application::GetInstance().GetBackgroundTask();
+    if (!background) {
+        payload->~ZodiacLoadPayload();
+        heap_caps_free(payload);
+        lv_label_set_text(zodiac_reader_text_label_, "后台加载服务不可用");
+        return;
+    }
+
+    background->Schedule([this, payload, request_id, sign, page, load_image]() {
+        auto release_payload = [payload]() {
+            QdZodiac::ReleaseImage(&payload->image);
+            payload->~ZodiacLoadPayload();
+            heap_caps_free(payload);
+        };
+        payload->detail_status = QdZodiac::LoadReaderPage(
+            sign, page, payload->title, sizeof(payload->title),
+            payload->text, sizeof(payload->text));
+        if (load_image) {
+            payload->image_status = QdZodiac::LoadImage(sign, &payload->image);
+        }
+        if (request_id != zodiac_load_request_id_.load(std::memory_order_relaxed)) {
+            release_payload();
+            return;
+        }
+        if (!lvgl_port_lock(500)) {
+            ESP_LOGW(TAG, "Zodiac UI apply lock timeout request=%lu",
+                     static_cast<unsigned long>(request_id));
+            release_payload();
+            return;
+        }
+        const bool current =
+            request_id == zodiac_load_request_id_.load(std::memory_order_relaxed) &&
+            current_page_ == DesktopPage::ZODIAC && zodiac_reader_visible_ &&
+            zodiac_sign_ == sign && zodiac_reader_page_ == page;
+        if (current) {
+            const QdZodiac::Result& metadata = QdZodiac::Metadata(sign);
+            char summary[160];
+            snprintf(summary, sizeof(summary), "%s %s · %s · %s · %s",
+                     metadata.name, metadata.english_name, metadata.date_range,
+                     metadata.element, metadata.ruling_planet);
+            if (zodiac_reader_summary_label_) {
+                lv_label_set_text(zodiac_reader_summary_label_, summary);
+            }
+            if (zodiac_reader_page_label_) {
+                char page_text[16];
+                snprintf(page_text, sizeof(page_text), "%u / %u",
+                         static_cast<unsigned>(page + 1),
+                         static_cast<unsigned>(QdZodiac::ReaderPageCount()));
+                lv_label_set_text(zodiac_reader_page_label_, page_text);
+            }
+            if (payload->detail_status == QdZodiac::Status::OK) {
+                if (zodiac_reader_section_label_) {
+                    lv_label_set_text(zodiac_reader_section_label_, payload->title);
+                }
+                if (zodiac_reader_text_label_) {
+                    lv_label_set_text(zodiac_reader_text_label_, payload->text);
+                }
+            } else {
+                if (zodiac_reader_section_label_) {
+                    lv_label_set_text(zodiac_reader_section_label_, "资料提示");
+                }
+                if (zodiac_reader_text_label_) {
+                    lv_label_set_text(zodiac_reader_text_label_,
+                                      QdZodiac::StatusText(payload->detail_status));
+                }
+            }
+            if (load_image) {
+                if (zodiac_reader_image_) {
+                    lv_image_set_src(zodiac_reader_image_, nullptr);
+                }
+                QdZodiac::ReleaseImage(&zodiac_image_frame_);
+                if (payload->image_status == QdZodiac::Status::OK &&
+                    zodiac_reader_image_) {
+                    zodiac_image_frame_ = payload->image;
+                    payload->image = {};
+                    lv_image_set_src(zodiac_reader_image_, &zodiac_image_frame_.dsc);
+                    lv_obj_center(zodiac_reader_image_);
+                    lv_obj_clear_flag(zodiac_reader_image_, LV_OBJ_FLAG_HIDDEN);
+                    if (zodiac_reader_image_status_) {
+                        lv_obj_add_flag(zodiac_reader_image_status_, LV_OBJ_FLAG_HIDDEN);
+                    }
+                } else {
+                    if (zodiac_reader_image_) {
+                        lv_obj_add_flag(zodiac_reader_image_, LV_OBJ_FLAG_HIDDEN);
+                    }
+                    if (zodiac_reader_image_status_) {
+                        lv_label_set_text(zodiac_reader_image_status_,
+                                          QdZodiac::StatusText(payload->image_status));
+                        lv_obj_clear_flag(zodiac_reader_image_status_, LV_OBJ_FLAG_HIDDEN);
+                    }
+                }
+            }
+        }
+        lvgl_port_unlock();
+        release_payload();
+    });
+}
+
+bool DesktopUI::HandleZodiacTap(uint16_t x, uint16_t y) {
+    auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
+        return x >= left && x < left + width && y >= top && y < top + height;
+    };
+    if (zodiac_reader_visible_) {
+        if (hit(390, 10, 74, 34)) {
+            HideZodiacReader();
+        } else if (hit(16, 270, 96, 36)) {
+            ChangeZodiacReaderPage(-1);
+        } else if (hit(368, 270, 96, 36)) {
+            ChangeZodiacReaderPage(1);
+        } else {
+            return false;
+        }
+        return true;
+    }
+    if (hit(390, 10, 74, 34)) {
+        NavigateBack();
+    } else if (hit(15, 142, 32, 28)) {
+        AdjustZodiacInput(0);
+    } else if (hit(51, 142, 32, 28)) {
+        AdjustZodiacInput(1);
+    } else if (hit(87, 142, 32, 28)) {
+        AdjustZodiacInput(2);
+    } else if (hit(123, 142, 36, 28)) {
+        AdjustZodiacInput(3);
+    } else if (hit(180, 142, 54, 28)) {
+        AdjustZodiacInput(4);
+    } else if (hit(244, 142, 54, 28)) {
+        AdjustZodiacInput(5);
+    } else if (hit(328, 142, 58, 28)) {
+        AdjustZodiacInput(6);
+    } else if (hit(396, 142, 58, 28)) {
+        AdjustZodiacInput(7);
+    } else if (hit(16, 187, 448, 38)) {
+        if (zodiac_has_result_) ShowZodiacReader();
+        else CalculateZodiac();
     } else {
         return false;
     }
@@ -6340,6 +6976,10 @@ void DesktopUI::ReloadUserProfile() {
     const DesktopPage page = current_page_;
     lv_obj_t* root = lv_scr_act();
     lv_obj_clean(root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+#endif
 
     main_page_ = nullptr;
     apps_page_ = nullptr;
@@ -6365,6 +7005,26 @@ void DesktopUI::ReloadUserProfile() {
     bone_weight_has_result_ = false;
     bone_weight_reader_visible_ = false;
     bone_weight_reader_page_ = 0;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    zodiac_page_ = nullptr;
+    zodiac_reader_group_ = nullptr;
+    zodiac_year_label_ = nullptr;
+    zodiac_month_label_ = nullptr;
+    zodiac_day_label_ = nullptr;
+    zodiac_action_label_ = nullptr;
+    zodiac_result_label_ = nullptr;
+    zodiac_hint_label_ = nullptr;
+    zodiac_reader_image_ = nullptr;
+    zodiac_reader_image_status_ = nullptr;
+    zodiac_reader_summary_label_ = nullptr;
+    zodiac_reader_section_label_ = nullptr;
+    zodiac_reader_text_label_ = nullptr;
+    zodiac_reader_page_label_ = nullptr;
+    zodiac_has_result_ = false;
+    zodiac_reader_visible_ = false;
+    zodiac_reader_page_ = 0;
 #endif
     radio_page_ = nullptr;
     music_page_ = nullptr;
@@ -6423,6 +7083,10 @@ void DesktopUI::CycleTheme() {
 
     lv_obj_t* root = lv_scr_act();
     lv_obj_clean(root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    QdZodiac::ReleaseImage(&zodiac_image_frame_);
+#endif
     
     main_page_ = nullptr;
     apps_page_ = nullptr;
@@ -6448,6 +7112,26 @@ void DesktopUI::CycleTheme() {
     bone_weight_has_result_ = false;
     bone_weight_reader_visible_ = false;
     bone_weight_reader_page_ = 0;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
+    CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
+    zodiac_page_ = nullptr;
+    zodiac_reader_group_ = nullptr;
+    zodiac_year_label_ = nullptr;
+    zodiac_month_label_ = nullptr;
+    zodiac_day_label_ = nullptr;
+    zodiac_action_label_ = nullptr;
+    zodiac_result_label_ = nullptr;
+    zodiac_hint_label_ = nullptr;
+    zodiac_reader_image_ = nullptr;
+    zodiac_reader_image_status_ = nullptr;
+    zodiac_reader_summary_label_ = nullptr;
+    zodiac_reader_section_label_ = nullptr;
+    zodiac_reader_text_label_ = nullptr;
+    zodiac_reader_page_label_ = nullptr;
+    zodiac_has_result_ = false;
+    zodiac_reader_visible_ = false;
+    zodiac_reader_page_ = 0;
 #endif
     radio_page_ = nullptr;
     music_page_ = nullptr;
@@ -6893,13 +7577,13 @@ void DesktopUI::UpdateFocusUI() {
         snprintf(app_status, sizeof(app_status), "Done");
         app_color = COLOR_GREEN;
     } else if (focus_running_) {
-        snprintf(app_status, sizeof(app_status), "%lum",
+        snprintf(app_status, sizeof(app_status), "%lu 分钟",
                  static_cast<unsigned long>((focus_remaining_sec_ + 59) / 60));
     } else if (focus_remaining_sec_ != focus_total_sec_) {
         snprintf(app_status, sizeof(app_status), "Paused");
         app_color = COLOR_MUTED;
     } else {
-        snprintf(app_status, sizeof(app_status), "%lu min",
+        snprintf(app_status, sizeof(app_status), "%lu 分钟",
                  static_cast<unsigned long>(focus_total_sec_ / 60));
     }
     SetAppTileStatus(5, app_status, app_color);
@@ -6910,7 +7594,7 @@ void DesktopUI::SetAppTileStatus(uint8_t index, const char* status, lv_color_t c
         return;
     }
     if (app_status_labels_[index] && status) {
-        lv_label_set_text(app_status_labels_[index], status);
+        lv_label_set_text(app_status_labels_[index], localize_app_card_status(status));
     }
     if (app_status_dots_[index]) {
         lv_obj_set_style_bg_color(app_status_dots_[index], color, 0);
@@ -7822,7 +8506,7 @@ void DesktopUI::SetAppsMoreVisible(bool visible) {
     if (apps_more_button_) {
         lv_obj_t* label = lv_obj_get_child(apps_more_button_, 0);
         if (label) {
-            lv_label_set_text(label, visible ? "All Apps" : "More");
+            lv_label_set_text(label, visible ? "全部应用" : "更多");
         }
     }
 }
@@ -7855,64 +8539,82 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_size(shake_lab_home_group_, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(shake_lab_home_group_, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* ask_card = CreatePanel(shake_lab_home_group_, 138, 156, 18, 104);
+    // Four equal cards keep the whole lab visible on the 480x320 panel.
+    // The new "摇卦" card carries the warm ink-and-cinnabar accent.
+    lv_obj_t* ask_card = CreatePanel(shake_lab_home_group_, 106, 150, 14, 106);
     lv_obj_set_style_border_color(ask_card, COLOR_PURPLE, 0);
     lv_obj_set_style_border_width(ask_card, 2, 0);
     lv_obj_t* ask_orb = circle(ask_card, 60, COLOR_PURPLE, LV_OPA_70);
-    lv_obj_align(ask_orb, LV_ALIGN_TOP_MID, 0, 18);
-    lv_obj_t* ask_core = circle(ask_card, 26, COLOR_GOLD, LV_OPA_COVER);
+    lv_obj_align(ask_orb, LV_ALIGN_TOP_MID, 0, 14);
+    lv_obj_t* ask_core = circle(ask_card, 22, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(ask_core, ask_orb, LV_ALIGN_CENTER, 0, 0);
     lv_obj_t* ask_title = label_en(ask_card, "Ask Ball", &style_en);
-    lv_obj_set_style_text_font(ask_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(ask_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_set_style_text_font(ask_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(ask_title, LV_ALIGN_TOP_MID, 0, 86);
     lv_obj_t* ask_cn = label_en(ask_card, "答案球", &style_gold);
     lv_obj_set_style_text_font(ask_cn, qd_cn_font_16(), 0);
-    lv_obj_align(ask_cn, LV_ALIGN_TOP_MID, 0, 116);
+    lv_obj_align(ask_cn, LV_ALIGN_TOP_MID, 0, 110);
 
-    lv_obj_t* dice_card = CreatePanel(shake_lab_home_group_, 138, 156, 171, 104);
+    lv_obj_t* dice_card = CreatePanel(shake_lab_home_group_, 106, 150, 130, 106);
     lv_obj_set_style_border_color(dice_card, COLOR_GREEN, 0);
     lv_obj_set_style_border_width(dice_card, 2, 0);
     lv_obj_t* dice_demo = lv_obj_create(dice_card);
     lv_obj_remove_style_all(dice_demo);
-    lv_obj_set_size(dice_demo, 66, 66);
+    lv_obj_set_size(dice_demo, 58, 58);
     lv_obj_set_style_radius(dice_demo, 10, 0);
     lv_obj_set_style_bg_color(dice_demo, COLOR_CREAM, 0);
     lv_obj_set_style_bg_opa(dice_demo, LV_OPA_COVER, 0);
-    lv_obj_align(dice_demo, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_align(dice_demo, LV_ALIGN_TOP_MID, 0, 14);
     for (int i = 0; i < 5; ++i) {
         lv_obj_t* dot = circle(dice_demo, 9, COLOR_GREEN, LV_OPA_COVER);
-        const int16_t px = (i == 1 || i == 3) ? 46 : (i == 2 ? 28 : 10);
-        const int16_t py = (i < 2) ? 10 : (i < 4 ? 28 : 46);
+        const int16_t px = (i == 1 || i == 3) ? 40 : (i == 2 ? 24 : 8);
+        const int16_t py = (i < 2) ? 8 : (i < 4 ? 24 : 40);
         lv_obj_set_pos(dot, px, py);
     }
     lv_obj_t* dice_title = label_en(dice_card, "Dice", &style_en);
-    lv_obj_set_style_text_font(dice_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(dice_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_set_style_text_font(dice_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(dice_title, LV_ALIGN_TOP_MID, 0, 86);
     lv_obj_t* dice_cn = label_en(dice_card, "骰子", &style_green);
     lv_obj_set_style_text_font(dice_cn, qd_cn_font_16(), 0);
-    lv_obj_align(dice_cn, LV_ALIGN_TOP_MID, 0, 116);
+    lv_obj_align(dice_cn, LV_ALIGN_TOP_MID, 0, 110);
 
-    lv_obj_t* fortune_card = CreatePanel(shake_lab_home_group_, 138, 156, 324, 104);
+    lv_obj_t* fortune_card = CreatePanel(shake_lab_home_group_, 106, 150, 246, 106);
     lv_obj_set_style_border_color(fortune_card, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(fortune_card, 2, 0);
     lv_obj_t* stick = lv_obj_create(fortune_card);
     lv_obj_remove_style_all(stick);
-    lv_obj_set_size(stick, 34, 72);
+    lv_obj_set_size(stick, 30, 62);
     lv_obj_set_style_radius(stick, 8, 0);
     lv_obj_set_style_bg_color(stick, COLOR_GOLD, 0);
     lv_obj_set_style_bg_opa(stick, LV_OPA_COVER, 0);
     lv_obj_set_style_transform_rotation(stick, 80, 0);
-    lv_obj_align(stick, LV_ALIGN_TOP_MID, 0, 13);
+    lv_obj_align(stick, LV_ALIGN_TOP_MID, 0, 11);
     lv_obj_t* fortune_mark = label_en(stick, "签", &style_en);
     lv_obj_set_style_text_font(fortune_mark, &qd_font_lxgw_20, 0);
     lv_obj_set_style_text_color(fortune_mark, COLOR_BG, 0);
     lv_obj_align(fortune_mark, LV_ALIGN_CENTER, 0, 0);
     lv_obj_t* fortune_title = label_en(fortune_card, "Fortune", &style_en);
-    lv_obj_set_style_text_font(fortune_title, &lv_font_montserrat_16, 0);
-    lv_obj_align(fortune_title, LV_ALIGN_TOP_MID, 0, 92);
+    lv_obj_set_style_text_font(fortune_title, &lv_font_montserrat_12, 0);
+    lv_obj_align(fortune_title, LV_ALIGN_TOP_MID, 0, 86);
     lv_obj_t* fortune_cn = label_en(fortune_card, "趣味抽签", &style_gold);
     lv_obj_set_style_text_font(fortune_cn, &qd_font_lxgw_16, 0);
-    lv_obj_align(fortune_cn, LV_ALIGN_TOP_MID, 0, 116);
+    lv_obj_align(fortune_cn, LV_ALIGN_TOP_MID, 0, 110);
+
+    lv_obj_t* divination_card = CreatePanel(shake_lab_home_group_, 106, 150, 362, 106);
+    const lv_color_t cinnabar = lv_color_hex(0xb8423b);
+    lv_obj_set_style_border_color(divination_card, cinnabar, 0);
+    lv_obj_set_style_border_width(divination_card, 2, 0);
+    lv_obj_t* divination_seal = circle(divination_card, 60, cinnabar, LV_OPA_70);
+    lv_obj_set_style_border_color(divination_seal, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(divination_seal, 2, 0);
+    lv_obj_align(divination_seal, LV_ALIGN_TOP_MID, 0, 14);
+    lv_obj_t* divination_mark = label_en(divination_seal, "卦", &style_en);
+    lv_obj_set_style_text_font(divination_mark, &qd_font_lxgw_20, 0);
+    lv_obj_set_style_text_color(divination_mark, COLOR_CREAM, 0);
+    lv_obj_center(divination_mark);
+    lv_obj_t* divination_title = label_en(divination_card, "掌卦", &style_gold);
+    lv_obj_set_style_text_font(divination_title, qd_cn_font_20(), 0);
+    lv_obj_align(divination_title, LV_ALIGN_TOP_MID, 0, 96);
 
     shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
     lv_obj_remove_style_all(shake_lab_mode_group_);
@@ -7920,7 +8622,7 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_clear_flag(shake_lab_mode_group_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
     shake_lab_mode_title_ = label_en(shake_lab_mode_group_, "Ask Ball", &style_en);
-    lv_obj_set_style_text_font(shake_lab_mode_title_, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(shake_lab_mode_title_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_mode_title_, LV_ALIGN_TOP_LEFT, 190, 42);
     lv_obj_t* home = CreateButton(shake_lab_mode_group_, "Home", nullptr);
     lv_obj_set_size(home, 70, 24);
@@ -8022,6 +8724,71 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(shake_lab_fortune_hint_label_, &qd_font_lxgw_16, 0);
     lv_obj_align(shake_lab_fortune_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -10);
 
+    shake_lab_divination_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_divination_group_);
+    lv_obj_set_size(shake_lab_divination_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_divination_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_divination_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t* divination_panel = CreatePanel(shake_lab_divination_group_, 440, 190, 20, 102);
+    lv_obj_set_style_bg_color(divination_panel, lv_color_hex(0x211b1a), 0);
+    lv_obj_set_style_border_color(divination_panel, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(divination_panel, 2, 0);
+    lv_obj_t* image_panel = lv_obj_create(divination_panel);
+    lv_obj_remove_style_all(image_panel);
+    lv_obj_set_size(image_panel, 166, 166);
+    lv_obj_set_style_radius(image_panel, 12, 0);
+    lv_obj_set_style_bg_color(image_panel, lv_color_hex(0xf1e2bd), 0);
+    lv_obj_set_style_bg_opa(image_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(image_panel, cinnabar, 0);
+    lv_obj_set_style_border_width(image_panel, 2, 0);
+    lv_obj_align(image_panel, LV_ALIGN_LEFT_MID, 12, 0);
+    // A canvas displays the decoded RGB565 bytes directly.  Unlike lv_image
+    // it does not take ownership through the image cache, so the worker and
+    // this page have one unambiguous owner for the SD image buffer.
+    shake_lab_divination_image_ = lv_canvas_create(image_panel);
+    lv_obj_center(shake_lab_divination_image_);
+    lv_obj_add_flag(shake_lab_divination_image_, LV_OBJ_FLAG_HIDDEN);
+    shake_lab_divination_image_status_ = label_en(image_panel, "静心一问\n摇动起卦", &style_en);
+    lv_obj_set_style_text_font(shake_lab_divination_image_status_, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(shake_lab_divination_image_status_, COLOR_BG, 0);
+    lv_obj_set_width(shake_lab_divination_image_status_, 140);
+    lv_obj_set_style_text_align(shake_lab_divination_image_status_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(shake_lab_divination_image_status_);
+    for (uint8_t coin = 0; coin < 3; ++coin) {
+        shake_lab_divination_coins_[coin] = circle(image_panel, 30, COLOR_GOLD, LV_OPA_COVER);
+        lv_obj_set_style_border_color(shake_lab_divination_coins_[coin], cinnabar, 0);
+        lv_obj_set_style_border_width(shake_lab_divination_coins_[coin], 2, 0);
+        lv_obj_add_flag(shake_lab_divination_coins_[coin], LV_OBJ_FLAG_HIDDEN);
+    }
+    for (uint8_t line = 0; line < 6; ++line) {
+        for (uint8_t part = 0; part < 2; ++part) {
+            shake_lab_divination_lines_[line][part] = lv_obj_create(image_panel);
+            lv_obj_remove_style_all(shake_lab_divination_lines_[line][part]);
+            lv_obj_set_size(shake_lab_divination_lines_[line][part], 44, 8);
+            lv_obj_set_style_radius(shake_lab_divination_lines_[line][part], 2, 0);
+            lv_obj_set_style_bg_color(shake_lab_divination_lines_[line][part], COLOR_BG, 0);
+            lv_obj_set_style_bg_opa(shake_lab_divination_lines_[line][part], LV_OPA_COVER, 0);
+            lv_obj_add_flag(shake_lab_divination_lines_[line][part], LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    shake_lab_divination_name_label_ = label_en(divination_panel, "静心起卦", &style_gold);
+    lv_obj_set_style_text_font(shake_lab_divination_name_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(shake_lab_divination_name_label_, 230);
+    lv_obj_align(shake_lab_divination_name_label_, LV_ALIGN_TOP_RIGHT, -16, 14);
+    shake_lab_divination_judgment_label_ = label_en(divination_panel, "在心中默念所问，\n平稳摇动设备。", &style_en);
+    lv_obj_set_style_text_font(shake_lab_divination_judgment_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_divination_judgment_label_, 230);
+    lv_label_set_long_mode(shake_lab_divination_judgment_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(shake_lab_divination_judgment_label_, LV_ALIGN_TOP_RIGHT, -16, 52);
+    shake_lab_divination_guidance_label_ = label_en(divination_panel, "轻摇设备，静待卦象。", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_divination_guidance_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_divination_guidance_label_, 230);
+    lv_label_set_long_mode(shake_lab_divination_guidance_label_, LV_LABEL_LONG_WRAP);
+    lv_obj_align(shake_lab_divination_guidance_label_, LV_ALIGN_TOP_RIGHT, -16, 105);
+    shake_lab_divination_hint_label_ = label_en(divination_panel, "准备完成 · 轻摇起卦", &style_green);
+    lv_obj_set_style_text_font(shake_lab_divination_hint_label_, qd_cn_font_16(), 0);
+    lv_obj_align(shake_lab_divination_hint_label_, LV_ALIGN_BOTTOM_RIGHT, -16, -12);
+
     shake_lab_anim_timer_ = lv_timer_create(ShakeLabAnimCb, 80, this);
     lv_timer_pause(shake_lab_anim_timer_);
     UpdateShakeLabDice();
@@ -8040,16 +8807,20 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         return true;
     }
     if (shake_lab_mode_ == ShakeLabMode::HOME) {
-        if (hit(18, 104, 138, 156)) {
+        if (hit(14, 106, 106, 150)) {
             EnterShakeLabMode(ShakeLabMode::ASK_BALL);
             return true;
         }
-        if (hit(171, 104, 138, 156)) {
+        if (hit(130, 106, 106, 150)) {
             EnterShakeLabMode(ShakeLabMode::DICE);
             return true;
         }
-        if (hit(324, 104, 138, 156)) {
+        if (hit(246, 106, 106, 150)) {
             EnterShakeLabMode(ShakeLabMode::FORTUNE);
+            return true;
+        }
+        if (hit(362, 106, 106, 150)) {
+            EnterShakeLabMode(ShakeLabMode::DIVINATION);
             return true;
         }
         return false;
@@ -8108,9 +8879,17 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
             lv_obj_add_flag(shake_lab_fortune_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (shake_lab_divination_group_) {
+        if (mode == ShakeLabMode::DIVINATION) {
+            lv_obj_clear_flag(shake_lab_divination_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_divination_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
     if (shake_lab_mode_title_) {
         const char* title = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
-                            (mode == ShakeLabMode::DICE ? "Dice" : "Fortune Stick");
+                            (mode == ShakeLabMode::DICE ? "Dice" :
+                            (mode == ShakeLabMode::FORTUNE ? "Fortune Stick" : "掌卦"));
         lv_label_set_text(shake_lab_mode_title_, title);
     }
     if (mode == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
@@ -8133,16 +8912,34 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         lv_label_set_text(shake_lab_fortune_explain_label_, "摇动设备，抽取今日之签。");
         lv_label_set_text(shake_lab_fortune_hint_label_, "Shake steadily to draw");
     }
+    if (mode == ShakeLabMode::DIVINATION) {
+        shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+        if (shake_lab_divination_image_) {
+            lv_image_set_src(shake_lab_divination_image_, nullptr);
+            lv_obj_add_flag(shake_lab_divination_image_, LV_OBJ_FLAG_HIDDEN);
+        }
+        QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
+        if (shake_lab_divination_image_status_) {
+            lv_label_set_text(shake_lab_divination_image_status_, "静心一问\n摇动起卦");
+            lv_obj_clear_flag(shake_lab_divination_image_status_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_label_set_text(shake_lab_divination_name_label_, "静心起卦");
+        lv_label_set_text(shake_lab_divination_judgment_label_, "在心中默念所问，\n平稳摇动设备。 ");
+        lv_label_set_text(shake_lab_divination_guidance_label_, "轻摇设备，静待卦象。 ");
+        lv_label_set_text(shake_lab_divination_hint_label_, "准备完成 · 轻摇起卦");
+    }
     shake_lab_sampling_active_ = true;
     if (shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(true);
     }
     const char* mode_name = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
-                            (mode == ShakeLabMode::DICE ? "Dice" : "Fortune");
+                            (mode == ShakeLabMode::DICE ? "Dice" :
+                            (mode == ShakeLabMode::FORTUNE ? "Fortune" : "Divination"));
     ESP_LOGI(TAG, "Shake Lab mode=%s armed", mode_name);
 }
 
 void DesktopUI::LeaveShakeLabMode() {
+    shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed);
     if (shake_lab_anim_timer_) {
         lv_timer_pause(shake_lab_anim_timer_);
     }
@@ -8153,6 +8950,10 @@ void DesktopUI::LeaveShakeLabMode() {
     shake_lab_detector_state_ = ShakeDetector::State::IDLE;
     shake_lab_intensity_ = 0;
     shake_lab_mode_ = ShakeLabMode::HOME;
+    if (shake_lab_divination_image_) {
+        lv_image_set_src(shake_lab_divination_image_, nullptr);
+    }
+    QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
     if (shake_lab_mode_group_) {
         lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -8178,6 +8979,7 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_ask_group_ = nullptr;
     shake_lab_dice_group_ = nullptr;
     shake_lab_fortune_group_ = nullptr;
+    shake_lab_divination_group_ = nullptr;
     shake_lab_ball_ = nullptr;
     shake_lab_answer_label_ = nullptr;
     shake_lab_hint_label_ = nullptr;
@@ -8189,6 +8991,12 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_fortune_poem_label_ = nullptr;
     shake_lab_fortune_explain_label_ = nullptr;
     shake_lab_fortune_hint_label_ = nullptr;
+    shake_lab_divination_image_ = nullptr;
+    shake_lab_divination_image_status_ = nullptr;
+    shake_lab_divination_name_label_ = nullptr;
+    shake_lab_divination_judgment_label_ = nullptr;
+    shake_lab_divination_guidance_label_ = nullptr;
+    shake_lab_divination_hint_label_ = nullptr;
     memset(shake_lab_glow_, 0, sizeof(shake_lab_glow_));
     memset(shake_lab_particles_, 0, sizeof(shake_lab_particles_));
     memset(shake_lab_dice_boxes_, 0, sizeof(shake_lab_dice_boxes_));
@@ -8209,7 +9017,7 @@ void DesktopUI::UpdateShakeLabDice() {
         {true, false, true, false, true, false, false},
         {true, true, false, true, true, false, false},
         {true, true, true, true, true, false, false},
-        {true, true, true, true, true, true, true},
+        {true, true, false, true, true, true, true},
         {false, false, false, false, false, false, false},
     };
     if (shake_lab_dice_count_label_) {
@@ -8281,6 +9089,10 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
         return;
     }
     ++self->shake_lab_anim_tick_;
+    if (self->shake_lab_mode_ == ShakeLabMode::DIVINATION) {
+        self->UpdateShakeLabDivinationVisuals();
+        return;
+    }
     if (self->shake_lab_mode_ == ShakeLabMode::ASK_BALL) {
         self->UpdateShakeLabVisuals();
         return;
@@ -8293,6 +9105,94 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
         }
         self->UpdateShakeLabDice();
     }
+}
+
+void DesktopUI::UpdateShakeLabDivinationVisuals() {
+    const bool moving = shake_lab_divination_sequence_active_ ||
+        shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+        shake_lab_detector_state_ == ShakeDetector::State::SETTLING;
+    for (uint8_t coin = 0; coin < 3; ++coin) {
+        lv_obj_t* obj = shake_lab_divination_coins_[coin];
+        if (!obj) continue;
+        if (!moving) {
+            lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        const float angle = static_cast<float>((shake_lab_anim_tick_ * 18 + coin * 120) % 360) *
+            3.1415926f / 180.0f;
+        const int16_t x = static_cast<int16_t>(68 + std::cos(angle) * 42 - 15);
+        const int16_t y = static_cast<int16_t>(72 + std::sin(angle) * 28 - 15);
+        lv_obj_set_pos(obj, x, y);
+        lv_obj_set_style_bg_color(obj,
+            (shake_lab_anim_tick_ / 2 + coin) % 2 ? COLOR_GOLD : lv_color_hex(0xb8423b), 0);
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!shake_lab_divination_sequence_active_ || shake_lab_anim_tick_ % 5 != 0) return;
+    if (shake_lab_divination_revealed_lines_ < 6) {
+        const uint8_t line = shake_lab_divination_revealed_lines_++;
+        const bool solid = shake_lab_divination_reading_.lines[line] != '0';
+        lv_obj_t* first = shake_lab_divination_lines_[line][0];
+        lv_obj_t* second = shake_lab_divination_lines_[line][1];
+        const int16_t y = 132 - static_cast<int16_t>(line) * 18;
+        if (first) {
+            lv_obj_set_pos(first, 32, y);
+            lv_obj_set_width(first, solid ? 102 : 42);
+            lv_obj_clear_flag(first, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (second) {
+            if (solid) lv_obj_add_flag(second, LV_OBJ_FLAG_HIDDEN);
+            else {
+                lv_obj_set_pos(second, 92, y);
+                lv_obj_set_width(second, 42);
+                lv_obj_clear_flag(second, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        if (shake_lab_divination_hint_label_) {
+            char progress[32];
+            snprintf(progress, sizeof(progress), "第 %u 爻落定 · %u / 6", line + 1, line + 1);
+            lv_label_set_text(shake_lab_divination_hint_label_, progress);
+        }
+        return;
+    }
+    shake_lab_divination_sequence_active_ = false;
+    FinishShakeLabDivinationSequence();
+}
+
+void DesktopUI::StartShakeLabDivinationSequence() {
+    const QdDivination::Status status = QdDivination::Draw(&shake_lab_divination_reading_);
+    if (status != QdDivination::Status::OK) {
+        if (shake_lab_divination_name_label_) lv_label_set_text(shake_lab_divination_name_label_, "掌卦未就绪");
+        if (shake_lab_divination_judgment_label_) lv_label_set_text(shake_lab_divination_judgment_label_, QdDivination::StatusText(status));
+        if (shake_lab_divination_hint_label_) lv_label_set_text(shake_lab_divination_hint_label_, "请检查 SD 卡资源");
+        if (shake_lab_anim_timer_) lv_timer_pause(shake_lab_anim_timer_);
+        return;
+    }
+    if (strlen(shake_lab_divination_reading_.lines) != 6) {
+        snprintf(shake_lab_divination_reading_.lines, sizeof(shake_lab_divination_reading_.lines), "101010");
+    }
+    shake_lab_divination_revealed_lines_ = 0;
+    shake_lab_divination_sequence_active_ = true;
+    shake_lab_anim_tick_ = 0;
+    if (shake_lab_divination_image_) {
+        lv_image_set_src(shake_lab_divination_image_, nullptr);
+        lv_obj_add_flag(shake_lab_divination_image_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
+    if (shake_lab_divination_image_status_) lv_obj_add_flag(shake_lab_divination_image_status_, LV_OBJ_FLAG_HIDDEN);
+    for (auto& row : shake_lab_divination_lines_) {
+        for (lv_obj_t* part : row) if (part) lv_obj_add_flag(part, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_divination_name_label_) lv_label_set_text(shake_lab_divination_name_label_, "三钱定爻");
+    if (shake_lab_divination_judgment_label_) lv_label_set_text(shake_lab_divination_judgment_label_, "六爻将自下而上显现。 ");
+    if (shake_lab_divination_guidance_label_) lv_label_set_text(shake_lab_divination_guidance_label_, "收心静候，勿急于问。 ");
+    if (shake_lab_divination_hint_label_) lv_label_set_text(shake_lab_divination_hint_label_, "钱币落定 · 第 1 爻");
+}
+
+void DesktopUI::FinishShakeLabDivinationSequence() {
+    for (lv_obj_t* coin : shake_lab_divination_coins_) {
+        if (coin) lv_obj_add_flag(coin, LV_OBJ_FLAG_HIDDEN);
+    }
+    RevealShakeLabResult();
 }
 
 void DesktopUI::RevealShakeLabResult() {
@@ -8383,6 +9283,131 @@ void DesktopUI::RevealShakeLabResult() {
         lv_label_set_text(shake_lab_fortune_hint_label_, "解签已显示 · Ready again soon");
         ESP_LOGI(TAG, "Shake Lab Fortune reveal index=%u level=%s", static_cast<unsigned>(index),
                  kFortunes[index].level);
+    } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION) {
+        if (shake_lab_divination_revealed_lines_ < 6) {
+            StartShakeLabDivinationSequence();
+            return;
+        }
+        const QdDivination::Reading& reading = shake_lab_divination_reading_;
+        const QdDivination::Status status = QdDivination::Status::OK;
+        if (status != QdDivination::Status::OK) {
+            if (shake_lab_divination_name_label_) {
+                lv_label_set_text(shake_lab_divination_name_label_, "摇卦资料未就绪");
+            }
+            if (shake_lab_divination_judgment_label_) {
+                lv_label_set_text(shake_lab_divination_judgment_label_, QdDivination::StatusText(status));
+            }
+            if (shake_lab_divination_guidance_label_) {
+                lv_label_set_text(shake_lab_divination_guidance_label_,
+                                  "请将桌面的「摇卦SD资源包」复制到 SD 卡根目录。");
+            }
+            if (shake_lab_divination_hint_label_) {
+                lv_label_set_text(shake_lab_divination_hint_label_, "等待 SD 卡资源");
+            }
+            ESP_LOGW(TAG, "Shake Lab divination draw failed: %s", QdDivination::StatusText(status));
+        } else {
+            if (shake_lab_divination_name_label_) {
+                lv_label_set_text(shake_lab_divination_name_label_, reading.name);
+            }
+            if (shake_lab_divination_judgment_label_) {
+                lv_label_set_text(shake_lab_divination_judgment_label_, reading.judgment);
+            }
+            if (shake_lab_divination_guidance_label_) {
+                lv_label_set_text(shake_lab_divination_guidance_label_, reading.guidance);
+            }
+            if (shake_lab_divination_hint_label_) {
+                lv_label_set_text(shake_lab_divination_hint_label_, "卦已成 · 静观其意");
+            }
+            if (shake_lab_divination_image_) {
+                lv_image_set_src(shake_lab_divination_image_, nullptr);
+                lv_obj_add_flag(shake_lab_divination_image_, LV_OBJ_FLAG_HIDDEN);
+            }
+            QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
+            if (shake_lab_divination_image_status_) {
+                lv_label_set_text(shake_lab_divination_image_status_, "卦象加载中…");
+                lv_obj_clear_flag(shake_lab_divination_image_status_, LV_OBJ_FLAG_HIDDEN);
+            }
+
+            // JPEG decoding and SD I/O are deliberately kept out of the
+            // shake/LVGL callback.  On a busy UI frame, doing that work here
+            // could starve the display task and look like a restart.
+            struct DivinationImagePayload {
+                QdDivination::Status status = QdDivination::Status::IMAGE_MISSING;
+                QdDivination::ImageFrame image{};
+            };
+            void* storage = heap_caps_malloc(sizeof(DivinationImagePayload),
+                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            auto* background = Application::GetInstance().GetBackgroundTask();
+            if (!storage || !background) {
+                if (storage) heap_caps_free(storage);
+                if (shake_lab_divination_image_status_) {
+                    lv_label_set_text(shake_lab_divination_image_status_, "图片后台加载不可用");
+                }
+                ESP_LOGW(TAG, "Shake Lab divination image worker unavailable");
+            } else {
+                auto* payload = new (storage) DivinationImagePayload{};
+                const uint32_t request_id =
+                    shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+                background->Schedule([this, payload, request_id, reading]() {
+                    auto release_payload = [payload]() {
+                        QdDivination::ReleaseImage(&payload->image);
+                        payload->~DivinationImagePayload();
+                        heap_caps_free(payload);
+                    };
+                    payload->status = QdDivination::LoadImage(reading, &payload->image);
+                    if (request_id != shake_lab_divination_load_request_id_.load(std::memory_order_relaxed)) {
+                        release_payload();
+                        return;
+                    }
+                    if (!lvgl_port_lock(500)) {
+                        ESP_LOGW(TAG, "Shake Lab divination image UI lock timeout");
+                        release_payload();
+                        return;
+                    }
+                    const bool current = request_id ==
+                            shake_lab_divination_load_request_id_.load(std::memory_order_relaxed) &&
+                        current_page_ == DesktopPage::SHAKE_LAB &&
+                        shake_lab_mode_ == ShakeLabMode::DIVINATION;
+                    if (current) {
+                        if (shake_lab_divination_image_) {
+                            lv_image_set_src(shake_lab_divination_image_, nullptr);
+                        }
+                        QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
+                        if (payload->status == QdDivination::Status::OK && shake_lab_divination_image_) {
+                            shake_lab_divination_image_frame_ = payload->image;
+                            payload->image = {};
+                            // Keep the decoded pixels outside LVGL's image
+                            // cache.  The canvas merely borrows the buffer;
+                            // QdDivination::ReleaseImage remains its sole
+                            // allocator/free pair when this page is reset.
+                            lv_canvas_set_buffer(
+                                shake_lab_divination_image_,
+                                shake_lab_divination_image_frame_.data,
+                                shake_lab_divination_image_frame_.dsc.header.w,
+                                shake_lab_divination_image_frame_.dsc.header.h,
+                                LV_COLOR_FORMAT_RGB565);
+                            lv_obj_set_size(shake_lab_divination_image_,
+                                            shake_lab_divination_image_frame_.dsc.header.w,
+                                            shake_lab_divination_image_frame_.dsc.header.h);
+                            lv_obj_center(shake_lab_divination_image_);
+                            lv_obj_clear_flag(shake_lab_divination_image_, LV_OBJ_FLAG_HIDDEN);
+                            if (shake_lab_divination_image_status_) {
+                                lv_obj_add_flag(shake_lab_divination_image_status_, LV_OBJ_FLAG_HIDDEN);
+                            }
+                        } else if (shake_lab_divination_image_status_) {
+                            lv_label_set_text(shake_lab_divination_image_status_,
+                                              QdDivination::StatusText(payload->status));
+                            lv_obj_clear_flag(shake_lab_divination_image_status_, LV_OBJ_FLAG_HIDDEN);
+                        }
+                    }
+                    lvgl_port_unlock();
+                    ESP_LOGI(TAG, "Shake Lab divination image id=%s status=%s", reading.id,
+                             QdDivination::StatusText(payload->status));
+                    release_payload();
+                });
+            }
+            ESP_LOGI(TAG, "Shake Lab divination reveal id=%s", reading.id);
+        }
     }
     if (!Application::GetInstance().IsExternalAudioActive()) {
         Application::GetInstance().Schedule([]() {
@@ -8410,6 +9435,10 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Rolling...");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "签筒已动·请继续摇");
+            } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
+                shake_lab_divination_revealed_lines_ = 0;
+                shake_lab_divination_sequence_active_ = false;
+                lv_label_set_text(shake_lab_divination_hint_label_, "阴阳流转 · 请继续摇");
             }
             if (shake_lab_anim_timer_) {
                 lv_timer_resume(shake_lab_anim_timer_);
@@ -8422,6 +9451,8 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Settling...");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "一枝签正在落下……");
+            } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
+                lv_label_set_text(shake_lab_divination_hint_label_, "卦象正在显现……");
             }
             break;
         case ShakeDetector::Transition::SETTLING_TO_REVEAL:
@@ -8434,6 +9465,8 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_dice_total_label_, "Ready to roll again");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "可再次摇签 · Shake again");
+            } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
+                lv_label_set_text(shake_lab_divination_hint_label_, "可再次摇卦 · 静心再问");
             }
             ESP_LOGI(TAG, "Shake Lab cooldown complete");
             break;

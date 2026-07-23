@@ -8,7 +8,8 @@
 class WifiBoard : public Board {
 protected:
     bool wifi_config_mode_ = false;
-    void EnterWifiConfigMode();
+    void EnterWifiConfigMode(bool station_already_started = false);
+    virtual int GetStartupWifiConnectTimeoutMs() const;
     virtual std::string GetBoardJson() override;
 
 public:

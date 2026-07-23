@@ -1,0 +1,4 @@
+# Explicit opt-in profile for the QDTech fast provisioning fallback test.
+# The Kconfig default remains off; name this file in SDKCONFIG_DEFAULTS only
+# for the hardware-validation build.
+CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK=y

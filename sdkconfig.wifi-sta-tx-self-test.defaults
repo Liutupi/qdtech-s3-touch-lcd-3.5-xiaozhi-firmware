@@ -1,0 +1,12 @@
+# Explicit opt-in profile for the QDTech temporary-hotspot Station TX test.
+# All experiment options remain default-off in Kconfig.
+# CONFIG_QDTECH_PROVISIONING_COMPAT is not set
+CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK=y
+CONFIG_QDTECH_EXPERIMENT_NETWORK_FIRST_BOOT=y
+CONFIG_QDTECH_EXPERIMENT_STATELESS_SOFTAP_RF=y
+CONFIG_QDTECH_EXPERIMENT_WIFI_RX_SELF_TEST=y
+CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST=y
+CONFIG_QDTECH_WIFI_STA_TX_SELF_TEST_SSID="MERCURY_A59F"
+# Intentionally blank in the reusable profile. Inject a disposable password
+# only into a local build configuration; never commit real WiFi credentials.
+CONFIG_QDTECH_WIFI_STA_TX_SELF_TEST_PASSWORD=""

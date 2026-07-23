@@ -1,6 +1,9 @@
 #ifndef _WIFI_STATION_H_
 #define _WIFI_STATION_H_
 
+#include "sdkconfig.h"
+#include "qdtech_provisioning_compat.h"
+
 #include <string>
 #include <vector>
 #include <functional>
@@ -36,6 +39,14 @@ public:
     void OnConnected(std::function<void(const std::string& ssid)> on_connected);
     void OnScanBegin(std::function<void()> on_scan_begin);
 
+#ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    void SetTemporaryAuth(const std::string& ssid, const std::string& password);
+    void ClearTemporaryAuth();
+#endif
+#ifdef QDTECH_PROVISIONING_APSTA
+    esp_netif_t* ReleaseForApstaHandoff();
+#endif
+
 private:
     WifiStation();
     ~WifiStation();
@@ -57,6 +68,10 @@ private:
     std::function<void(const std::string& ssid)> on_connected_;
     std::function<void()> on_scan_begin_;
     std::vector<WifiApRecord> connect_queue_;
+#ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
+    std::string temporary_ssid_;
+    std::string temporary_password_;
+#endif
 
     void HandleScanResult();
     void StartConnect();
