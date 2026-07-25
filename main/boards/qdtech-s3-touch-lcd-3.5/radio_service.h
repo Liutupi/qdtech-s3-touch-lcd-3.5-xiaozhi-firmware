@@ -24,6 +24,7 @@ public:
     std::string PlayUrlFromTool(const std::string& title, const std::string& artist, const std::string& url);
     std::string GetStatusJson() const;
     std::string SelectStation(const std::string& station);
+    void SelectStationIndex(int index, int category_filter = -1);
     
     // 新增功能
     void ToggleFavorite(int index);
@@ -34,6 +35,7 @@ public:
     int GetStationCount() const;
     const char* GetStationName(int index) const;
     const char* GetStationCategory(int index) const;
+    int GetStationCategoryId(int index) const;
 
 private:
     enum class Command {
@@ -41,6 +43,7 @@ private:
         STOP,
         NEXT,
         PREV,
+        SELECT_STATION,
         FOCUS_CHANGED,
         PLAY_CUSTOM_URL,
     };
@@ -89,6 +92,9 @@ private:
     bool custom_url_fatal_error_ = false;
     bool last_url_permanent_error_ = false;
     bool skip_reconnect_once_ = false;
+    std::atomic<int> requested_station_index_{-1};
+    std::atomic<int> requested_category_filter_{-1};
+    int active_category_filter_ = -1;
     TickType_t custom_url_speaking_grace_until_ = 0;
     std::atomic<uint32_t> stream_generation_{0};
     int32_t audio_gain_q12_ = 4096;

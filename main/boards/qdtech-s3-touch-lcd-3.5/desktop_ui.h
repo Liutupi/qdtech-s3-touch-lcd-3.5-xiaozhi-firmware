@@ -66,6 +66,13 @@ public:
     void CycleTheme();
     void SetRadioActions(std::function<void()> play_pause, std::function<void()> stop,
                          std::function<void()> next, std::function<void()> prev);
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    void SetRadioDirectoryActions(std::function<int()> station_count,
+                                  std::function<const char*(int)> station_name,
+                                  std::function<int(int)> station_category,
+                                  std::function<void(int, int)> select_station);
+#endif
     void SetMusicActions(std::function<void()> play, std::function<void()> pause,
                          std::function<void()> next);
     void SetRadioState(const char* station, const char* state, const char* meta);
@@ -141,6 +148,13 @@ public:
     std::function<void()> radio_stop_;
     std::function<void()> radio_next_;
     std::function<void()> radio_prev_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    std::function<int()> radio_station_count_;
+    std::function<const char*(int)> radio_station_name_;
+    std::function<int(int)> radio_station_category_;
+    std::function<void(int, int)> radio_select_station_;
+#endif
     std::function<void()> music_play_;
     std::function<void()> music_pause_;
     std::function<void()> music_next_;
@@ -344,6 +358,13 @@ private:
     lv_obj_t* radio_state_label_ = nullptr;
     lv_obj_t* radio_meta_label_ = nullptr;
     lv_timer_t* radio_anim_timer_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    lv_obj_t* radio_directory_overlay_ = nullptr;
+    bool radio_directory_showing_stations_ = false;
+    int radio_directory_category_ = -1;
+    int radio_directory_page_ = 0;
+#endif
 
     // Music request page elements
     lv_obj_t* music_title_label_ = nullptr;
@@ -603,6 +624,16 @@ private:
     bool HandleZodiacTap(uint16_t x, uint16_t y);
 #endif
     void CreateRadioPage(lv_obj_t* root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    void OpenRadioDirectory();
+    void CloseRadioDirectory();
+    void RefreshRadioDirectory();
+    int FindRadioDirectoryStation(int ordinal) const;
+    int GetRadioDirectoryStationCount() const;
+    int GetRadioDirectoryVisibleCategoryCount() const;
+    int GetRadioDirectoryVisibleCategory(int ordinal) const;
+#endif
     void CreateMusicPage(lv_obj_t* root);
     void CreateMediaPage(lv_obj_t* root);
     void CreatePodcastPage(lv_obj_t* root);

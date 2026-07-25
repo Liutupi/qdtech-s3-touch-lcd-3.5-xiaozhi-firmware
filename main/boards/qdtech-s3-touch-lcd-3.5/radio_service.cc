@@ -519,6 +519,25 @@ const char* RadioService::GetStationCategory(int index) const {
     return "";
 }
 
+int RadioService::GetStationCategoryId(int index) const {
+    if (index >= 0 && index < StationCount()) {
+        return static_cast<int>(kStations[index].category);
+    }
+    return -1;
+}
+
+void RadioService::SelectStationIndex(int index, int category_filter) {
+    const int count = StationCount();
+    if (index < 0 || index >= count) {
+        ESP_LOGW(TAG, "SelectStationIndex ignored invalid index=%d count=%d", index, count);
+        return;
+    }
+    requested_category_filter_.store(category_filter, std::memory_order_relaxed);
+    requested_station_index_.store(index, std::memory_order_relaxed);
+    stream_generation_.fetch_add(1, std::memory_order_relaxed);
+    PostCommand(Command::SELECT_STATION);
+}
+
 void RadioService::PlayPause() {
     ESP_LOGI(TAG, "PlayPause requested play_requested=%d", play_requested_.load(std::memory_order_relaxed));
     stream_generation_.fetch_add(1, std::memory_order_relaxed);
@@ -597,6 +616,9 @@ std::string RadioService::SelectStation(const std::string& station) {
         if (Lower(kStations[i].name).find(needle) != std::string::npos) {
             stream_generation_.fetch_add(1, std::memory_order_relaxed);
             playing_custom_url_ = false;
+            // MCP selection historically cycled the full catalog afterwards.
+            // Keep that behavior independent from an earlier on-device filter.
+            active_category_filter_ = -1;
             station_index_ = i;
             play_requested_ = true;
             stop_requested_ = false;
@@ -838,6 +860,24 @@ void RadioService::HandleCommand(Command command) {
             SetUi("Connecting", "Previous station");
             ESP_LOGI(TAG, "radio previous station=%s", kStations[station_index_].name.c_str());
             break;
+        case Command::SELECT_STATION: {
+            const int requested = requested_station_index_.exchange(-1, std::memory_order_relaxed);
+            if (requested < 0 || requested >= count) {
+                ESP_LOGW(TAG, "selected station request out of range index=%d count=%d", requested, count);
+                break;
+            }
+            playing_custom_url_ = false;
+            station_index_ = requested;
+            active_category_filter_ = requested_category_filter_.load(std::memory_order_relaxed);
+            play_requested_ = true;
+            stop_requested_ = false;
+            reconnect_attempt_ = 0;
+            skip_reconnect_once_ = false;
+            SetUi("Connecting", "Selected from directory");
+            ESP_LOGI(TAG, "radio directory selected station=%s category=%d",
+                     kStations[station_index_].name.c_str(), active_category_filter_);
+            break;
+        }
         case Command::FOCUS_CHANGED:
             if (audio_focus_blocked_.load(std::memory_order_relaxed)) {
                 Application::GetInstance().SetExternalAudioActive(false);
@@ -1287,7 +1327,24 @@ void RadioService::NextStation(int delta) {
         station_index_ = 0;
         ESP_LOGW(TAG, "NextStation: station_index_ was out of range, reset to 0");
     }
-    station_index_ = (station_index_ + delta + count) % count;
+    if (active_category_filter_ >= 0) {
+        int candidate = station_index_;
+        bool found = false;
+        for (int attempt = 0; attempt < count; ++attempt) {
+            candidate = (candidate + delta + count) % count;
+            if (static_cast<int>(kStations[candidate].category) == active_category_filter_) {
+                station_index_ = candidate;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ESP_LOGW(TAG, "no stations in active category=%d; keeping current station", active_category_filter_);
+            return;
+        }
+    } else {
+        station_index_ = (station_index_ + delta + count) % count;
+    }
     ESP_LOGI(TAG, "NextStation: new index=%d count=%d name=%s", station_index_, count, kStations[station_index_].name.c_str());
     SaveStationIndex();
 }

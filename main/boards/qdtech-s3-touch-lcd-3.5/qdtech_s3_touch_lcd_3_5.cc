@@ -2510,6 +2510,14 @@ private:
             [this]() { radio_service_.Stop(); },
             [this]() { radio_service_.Next(); },
             [this]() { radio_service_.Prev(); });
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+        desktop_ui->SetRadioDirectoryActions(
+            [this]() { return radio_service_.GetStationCount(); },
+            [this](int index) { return radio_service_.GetStationName(index); },
+            [this](int index) { return radio_service_.GetStationCategoryId(index); },
+            [this](int index, int category) { radio_service_.SelectStationIndex(index, category); });
+#endif
         desktop_ui->SetMusicActions(
             [this]() { radio_service_.Play(); },
             [this]() { radio_service_.Pause(); },

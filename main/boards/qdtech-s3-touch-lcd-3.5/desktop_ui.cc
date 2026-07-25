@@ -50,6 +50,32 @@
 static constexpr int64_t kMusicLyricHoldMs = 12000;
 static constexpr int64_t kMusicControlDebounceMs = 450;
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+struct RadioDirectoryCategory {
+    int id;
+    const char* label;
+};
+
+static constexpr RadioDirectoryCategory kRadioDirectoryCategories[] = {
+    // These are content groups, not a province picker.  Keep the IDs aligned
+    // with RadioCategory while only exposing the curated groups on the SD card.
+    {0, "全国综合"}, {10, "音乐生活"}, {11, "交通出行"},
+    {3, "广东电台"}, {12, "其他地区"},
+};
+static constexpr int kRadioDirectoryCategoriesPerPage = 6;
+static constexpr int kRadioDirectoryStationsPerPage = 5;
+
+static const RadioDirectoryCategory* FindRadioDirectoryCategory(int id) {
+    for (const auto& category : kRadioDirectoryCategories) {
+        if (category.id == id) {
+            return &category;
+        }
+    }
+    return nullptr;
+}
+#endif
+
 LV_FONT_DECLARE(lv_font_montserrat_12);
 LV_FONT_DECLARE(lv_font_montserrat_14);
 LV_FONT_DECLARE(lv_font_montserrat_16);
@@ -1899,6 +1925,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
             lv_timer_pause(radio_anim_timer_);
         }
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    if (page != DesktopPage::RADIO) {
+        CloseRadioDirectory();
+    }
+#endif
     if (music_cover_timer_) {
         if (page == DesktopPage::MUSIC) {
             lv_timer_resume(music_cover_timer_);
@@ -2162,9 +2194,76 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         // press without the matching release and never emit LV_EVENT_CLICKED.
         // Radio buttons intentionally have no LVGL callbacks (see CreateRadioPage),
         // so each completed tap is dispatched exactly once here.
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+        if (radio_directory_overlay_) {
+            if (hit(382, 80, 72, 30)) {
+                if (radio_directory_showing_stations_) {
+                    radio_directory_showing_stations_ = false;
+                    radio_directory_page_ = 0;
+                    RefreshRadioDirectory();
+                } else {
+                    CloseRadioDirectory();
+                }
+                return;
+            }
+            if (!radio_directory_showing_stations_) {
+                if (hit(22, 112, 436, 92)) {
+                    const int column = (x - 22) / 154;
+                    const int row = (y - 112) / 50;
+                    const int item = radio_directory_page_ * kRadioDirectoryCategoriesPerPage + row * 3 + column;
+                    const int category_count = GetRadioDirectoryVisibleCategoryCount();
+                    const int category = GetRadioDirectoryVisibleCategory(item);
+                    if (column >= 0 && column < 3 && row >= 0 && row < 2 && item < category_count && category >= 0) {
+                        radio_directory_category_ = category;
+                        radio_directory_showing_stations_ = true;
+                        radio_directory_page_ = 0;
+                        RefreshRadioDirectory();
+                    }
+                } else if (hit(184, 270, 96, 30) && radio_directory_page_ > 0) {
+                    --radio_directory_page_;
+                    RefreshRadioDirectory();
+                } else if (hit(292, 270, 96, 30)) {
+                    const int category_count = GetRadioDirectoryVisibleCategoryCount();
+                    if ((radio_directory_page_ + 1) * kRadioDirectoryCategoriesPerPage < category_count) {
+                        ++radio_directory_page_;
+                        RefreshRadioDirectory();
+                    }
+                }
+                return;
+            }
+            if (hit(22, 112, 436, 146)) {
+                const int row = (y - 112) / 30;
+                if (row >= 0 && row < kRadioDirectoryStationsPerPage) {
+                    const int index = FindRadioDirectoryStation(radio_directory_page_ * kRadioDirectoryStationsPerPage + row);
+                    if (index >= 0 && radio_select_station_) {
+                        radio_select_station_(index, radio_directory_category_);
+                        CloseRadioDirectory();
+                    }
+                }
+            } else if (hit(22, 270, 96, 30)) {
+                radio_directory_showing_stations_ = false;
+                radio_directory_page_ = 0;
+                RefreshRadioDirectory();
+            } else if (hit(184, 270, 96, 30) && radio_directory_page_ > 0) {
+                --radio_directory_page_;
+                RefreshRadioDirectory();
+            } else if (hit(292, 270, 96, 30) &&
+                       (radio_directory_page_ + 1) * kRadioDirectoryStationsPerPage < GetRadioDirectoryStationCount()) {
+                ++radio_directory_page_;
+                RefreshRadioDirectory();
+            }
+            return;
+        }
+#endif
         if (hit(372, 28, 96, 56)) {
             ESP_LOGI(TAG, "Radio Back tap");
             NavigateBack();
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+        } else if (hit(344, 124, 112, 34)) {
+            OpenRadioDirectory();
+#endif
         } else if (hit(24, 180, 76, 32) && radio_prev_) {
             ESP_LOGI(TAG, "Radio Prev tap");
             radio_prev_();
@@ -4488,6 +4587,14 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(radio_meta_label_, &font_puhui_16_4, 0);
     lv_obj_align(radio_meta_label_, LV_ALIGN_TOP_LEFT, 24, 144);
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    lv_obj_t* directory = CreateButton(radio_page_, "Catalog", nullptr);
+    lv_obj_set_size(directory, 104, 30);
+    lv_obj_align(directory, LV_ALIGN_TOP_LEFT, 344, 124);
+    lv_obj_set_style_text_font(lv_obj_get_child(directory, 0), &lv_font_montserrat_12, 0);
+#endif
+
     // 播放控制按钮
     lv_obj_t* prev = CreateButton(radio_page_, "Prev", nullptr);
     lv_obj_align(prev, LV_ALIGN_TOP_LEFT, 24, 180);
@@ -4529,6 +4636,181 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+void DesktopUI::OpenRadioDirectory() {
+    if (!radio_page_ || !radio_station_count_ || !radio_station_name_ || !radio_station_category_ || !radio_select_station_) {
+        ESP_LOGW(TAG, "radio directory unavailable: service callbacks missing");
+        return;
+    }
+    CloseRadioDirectory();
+    radio_directory_overlay_ = CreatePanel(radio_page_, 456, 236, 12, 72);
+    lv_obj_set_style_bg_color(radio_directory_overlay_, COLOR_SURFACE_2, 0);
+    lv_obj_set_style_bg_opa(radio_directory_overlay_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(radio_directory_overlay_, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(radio_directory_overlay_, 2, 0);
+    radio_directory_showing_stations_ = false;
+    radio_directory_category_ = -1;
+    radio_directory_page_ = 0;
+    RefreshRadioDirectory();
+}
+
+void DesktopUI::CloseRadioDirectory() {
+    if (radio_directory_overlay_) {
+        lv_obj_del(radio_directory_overlay_);
+        radio_directory_overlay_ = nullptr;
+    }
+    radio_directory_showing_stations_ = false;
+    radio_directory_category_ = -1;
+    radio_directory_page_ = 0;
+}
+
+int DesktopUI::GetRadioDirectoryStationCount() const {
+    if (!radio_station_count_ || !radio_station_category_ || radio_directory_category_ < 0) {
+        return 0;
+    }
+    int matches = 0;
+    const int total = radio_station_count_();
+    for (int i = 0; i < total; ++i) {
+        if (radio_station_category_(i) == radio_directory_category_) {
+            ++matches;
+        }
+    }
+    return matches;
+}
+
+int DesktopUI::GetRadioDirectoryVisibleCategoryCount() const {
+    if (!radio_station_count_ || !radio_station_category_) {
+        return 0;
+    }
+    int visible = 0;
+    const int total = radio_station_count_();
+    for (const auto& category : kRadioDirectoryCategories) {
+        for (int i = 0; i < total; ++i) {
+            if (radio_station_category_(i) == category.id) {
+                ++visible;
+                break;
+            }
+        }
+    }
+    return visible;
+}
+
+int DesktopUI::GetRadioDirectoryVisibleCategory(int ordinal) const {
+    if (!radio_station_count_ || !radio_station_category_ || ordinal < 0) {
+        return -1;
+    }
+    int visible = 0;
+    const int total = radio_station_count_();
+    for (const auto& category : kRadioDirectoryCategories) {
+        bool has_station = false;
+        for (int i = 0; i < total; ++i) {
+            if (radio_station_category_(i) == category.id) {
+                has_station = true;
+                break;
+            }
+        }
+        if (has_station && visible++ == ordinal) {
+            return category.id;
+        }
+    }
+    return -1;
+}
+
+int DesktopUI::FindRadioDirectoryStation(int ordinal) const {
+    if (!radio_station_count_ || !radio_station_category_ || ordinal < 0) {
+        return -1;
+    }
+    int matches = 0;
+    const int total = radio_station_count_();
+    for (int i = 0; i < total; ++i) {
+        if (radio_station_category_(i) != radio_directory_category_) {
+            continue;
+        }
+        if (matches++ == ordinal) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void DesktopUI::RefreshRadioDirectory() {
+    if (!radio_directory_overlay_) {
+        return;
+    }
+    lv_obj_clean(radio_directory_overlay_);
+
+    const char* title_text = radio_directory_showing_stations_ ? "电台列表" : "电台分类";
+    lv_obj_t* title = label_en(radio_directory_overlay_, title_text, &style_gold);
+    lv_obj_set_style_text_font(title, qd_cn_font_16(), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 12, 8);
+    lv_obj_t* close = CreateButton(radio_directory_overlay_, radio_directory_showing_stations_ ? "返回" : "关闭", nullptr);
+    lv_obj_set_size(close, 72, 30);
+    lv_obj_align(close, LV_ALIGN_TOP_RIGHT, -12, 6);
+    lv_obj_set_style_text_font(lv_obj_get_child(close, 0), qd_cn_font_16(), 0);
+
+    if (!radio_directory_showing_stations_) {
+        const int category_count = GetRadioDirectoryVisibleCategoryCount();
+        for (int row = 0; row < 2; ++row) {
+            for (int column = 0; column < 3; ++column) {
+                const int item = radio_directory_page_ * kRadioDirectoryCategoriesPerPage + row * 3 + column;
+                const int category_id = GetRadioDirectoryVisibleCategory(item);
+                const auto* category = FindRadioDirectoryCategory(category_id);
+                if (item >= category_count || !category) {
+                    continue;
+                }
+                lv_obj_t* button = CreateButton(radio_directory_overlay_, category->label, nullptr);
+                lv_obj_set_size(button, 128, 36);
+                lv_obj_align(button, LV_ALIGN_TOP_LEFT, 10 + column * 154, 40 + row * 50);
+                lv_obj_set_style_text_font(lv_obj_get_child(button, 0), qd_cn_font_16(), 0);
+            }
+        }
+    } else {
+        const int total = GetRadioDirectoryStationCount();
+        const int start = radio_directory_page_ * kRadioDirectoryStationsPerPage;
+        for (int row = 0; row < kRadioDirectoryStationsPerPage; ++row) {
+            const int index = FindRadioDirectoryStation(start + row);
+            if (index < 0) {
+                break;
+            }
+            lv_obj_t* button = CreateButton(radio_directory_overlay_, radio_station_name_(index), nullptr);
+            lv_obj_set_size(button, 432, 26);
+            lv_obj_align(button, LV_ALIGN_TOP_LEFT, 10, 40 + row * 30);
+            lv_obj_t* label = lv_obj_get_child(button, 0);
+            lv_obj_set_width(label, 410);
+            lv_label_set_long_mode(label, LV_LABEL_LONG_DOT);
+            // Station titles may come from SD radio.json in Chinese.  Use the
+            // same broad-coverage font as the radio status labels rather than
+            // Montserrat, which only contains Latin glyphs.
+            lv_obj_set_style_text_font(label, qd_cn_font_16(), 0);
+        }
+        char page_text[48];
+        snprintf(page_text, sizeof(page_text), "%d 台  %d/%d", total,
+                 radio_directory_page_ + 1,
+                 std::max(1, (total + kRadioDirectoryStationsPerPage - 1) / kRadioDirectoryStationsPerPage));
+        lv_obj_t* info = label_en(radio_directory_overlay_, page_text, &style_muted);
+        lv_obj_set_style_text_font(info, qd_cn_font_16(), 0);
+        lv_obj_align(info, LV_ALIGN_BOTTOM_MID, 0, -10);
+    }
+
+    lv_obj_t* previous = CreateButton(radio_directory_overlay_, "上一页", nullptr);
+    lv_obj_set_size(previous, 96, 30);
+    lv_obj_align(previous, LV_ALIGN_BOTTOM_LEFT, 172, -8);
+    lv_obj_set_style_text_font(lv_obj_get_child(previous, 0), qd_cn_font_16(), 0);
+    lv_obj_t* next = CreateButton(radio_directory_overlay_, "下一页", nullptr);
+    lv_obj_set_size(next, 96, 30);
+    lv_obj_align(next, LV_ALIGN_BOTTOM_LEFT, 280, -8);
+    lv_obj_set_style_text_font(lv_obj_get_child(next, 0), qd_cn_font_16(), 0);
+
+    if (radio_directory_showing_stations_) {
+        lv_obj_t* categories = CreateButton(radio_directory_overlay_, "分类", nullptr);
+        lv_obj_set_size(categories, 128, 30);
+        lv_obj_align(categories, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+        lv_obj_set_style_text_font(lv_obj_get_child(categories, 0), qd_cn_font_16(), 0);
+    }
+}
+#endif
 
 void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     music_page_ = lv_obj_create(root);
@@ -7774,6 +8056,19 @@ void DesktopUI::SetRadioActions(std::function<void()> play_pause, std::function<
     radio_next_ = std::move(next);
     radio_prev_ = std::move(prev);
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
+    CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
+void DesktopUI::SetRadioDirectoryActions(std::function<int()> station_count,
+                                         std::function<const char*(int)> station_name,
+                                         std::function<int(int)> station_category,
+                                         std::function<void(int, int)> select_station) {
+    radio_station_count_ = std::move(station_count);
+    radio_station_name_ = std::move(station_name);
+    radio_station_category_ = std::move(station_category);
+    radio_select_station_ = std::move(select_station);
+}
+#endif
 
 void DesktopUI::SetMusicActions(std::function<void()> play, std::function<void()> pause,
                                 std::function<void()> next) {

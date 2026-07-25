@@ -296,6 +296,17 @@ config QDTECH_EXPERIMENT_CALENDAR_ZODIAC
         demand from /calendar/zodiac on the SD card. Disabled by default so
         the stable Calendar path is unchanged when not selected.
 
+config QDTECH_EXPERIMENT_RADIO_DIRECTORY
+    bool "Enable experimental radio category directory"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds an on-demand category and station picker to the QDTech Radio
+        page. It reuses the existing direct-MP3 RadioService and /sdcard/
+        radio.json catalog, without creating a new media task or network
+        client. Disabled by default until physical audio, touch and memory
+        verification is complete.
+
 config QDTECH_PROVISIONING_COMPAT
     bool
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
