@@ -139,20 +139,20 @@ std::string page_html(const char* url) {
     const auto weather = QdGetCachedWeatherConfig();
     std::string html =
         "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<title>QDTech Config</title><style>"
+        "<title>QDTech 配置</title><style>"
         "body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:24px;background:#f6f0e6;color:#1c1b19}"
         "label{display:block;margin:14px 0 6px;font-weight:600}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #c9bfae;border-radius:8px;font-size:16px}"
         "button{margin-top:18px;width:100%;padding:13px;border:0;border-radius:8px;background:#1c1b19;color:#fff;font-size:16px}"
         "p{color:#6f725f;font-size:14px}.hint{font-size:13px}.box{max-width:420px;margin:auto}</style></head><body><div class=\"box\">"
-        "<h2>QDTech Settings</h2><p>";
+        "<h2>QDTech 设置</h2><p>";
     html += html_escape(url ? url : "http://device-ip/");
     html += "</p><form method=\"post\" action=\"/config\">";
-    html += "<label>Logo</label><input name=\"logo\" maxlength=\"28\" value=\"" + html_escape(profile.logo) + "\">";
-    html += "<label>Name</label><input name=\"name\" maxlength=\"18\" value=\"" + html_escape(profile.owner) + "\">";
-    html += "<label>Weather City</label><input name=\"city\" maxlength=\"31\" value=\"" + html_escape(weather.city) + "\">";
-    html += "<p class=\"hint\">Coordinates are resolved automatically. Current: " +
+    html += "<label>左上角标题</label><input name=\"logo\" maxlength=\"28\" value=\"" + html_escape(profile.logo) + "\">";
+    html += "<label>用户名称</label><input name=\"name\" maxlength=\"18\" value=\"" + html_escape(profile.owner) + "\">";
+    html += "<label>天气城市</label><input name=\"city\" maxlength=\"31\" value=\"" + html_escape(weather.city) + "\">";
+    html += "<p class=\"hint\">坐标将自动查询。当前坐标：" +
             html_escape(weather.latitude) + ", " + html_escape(weather.longitude) + "</p>";
-    html += "<button type=\"submit\">Save</button></form></div></body></html>";
+    html += "<button type=\"submit\">保存设置</button></form></div></body></html>";
     return html;
 }
 
@@ -208,7 +208,7 @@ bool fetch_city_location(const std::string& city, const char* language, QdWeathe
 bool resolve_city_location(const std::string& city, QdWeatherConfig* weather, std::string* error) {
     if (city.empty() || !weather) {
         if (error) {
-            *error = "City required";
+            *error = "请输入天气城市";
         }
         return false;
     }
@@ -219,7 +219,7 @@ bool resolve_city_location(const std::string& city, QdWeatherConfig* weather, st
     }
 
     if (error) {
-        *error = "City not found";
+        *error = "未找到该城市";
     }
     return false;
 }
@@ -242,7 +242,7 @@ void QdWifiConfigServer::Start(DesktopUI* ui, TimeWeatherService* weather_servic
     ESP_LOGI(TAG, "http memory check free_internal=%u largest_internal=%u",
              static_cast<unsigned>(free_internal), static_cast<unsigned>(largest_internal));
     if (free_internal < kMinHttpInternalFree || largest_internal < kMinHttpLargestBlock) {
-        const std::string waiting = config_url + " waiting";
+        const std::string waiting = config_url + " 等待启动";
         SetStatus(waiting.c_str());
         return;
     }
@@ -334,7 +334,7 @@ bool QdWifiConfigServer::ApplyConfig(const char* data, size_t len, std::string* 
     if (update.weather_changed && weather_service_) {
         if (!weather_service_->SetLocation(weather.city, weather.latitude, weather.longitude)) {
             if (error) {
-                *error = "Bad weather location";
+                *error = "天气位置无效";
             }
             return false;
         }
@@ -383,10 +383,10 @@ esp_err_t QdWifiConfigServer::ConfigGetHandler(httpd_req_t* req) {
 esp_err_t QdWifiConfigServer::ConfigPostHandler(httpd_req_t* req) {
     auto* service = static_cast<QdWifiConfigServer*>(req->user_ctx);
     if (!service) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No service");
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "服务不可用");
     }
     if (req->content_len <= 0 || req->content_len > kMaxPostBody) {
-        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad size");
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "提交内容大小无效");
     }
 
     char body[kMaxPostBody + 1] = {};
@@ -394,15 +394,18 @@ esp_err_t QdWifiConfigServer::ConfigPostHandler(httpd_req_t* req) {
     while (received < req->content_len) {
         const int ret = httpd_req_recv(req, body + received, req->content_len - received);
         if (ret <= 0) {
-            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Read failed");
+            return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "读取提交内容失败");
         }
         received += ret;
     }
 
     if (!service->ScheduleApply(body, received)) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Save task failed");
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "保存任务启动失败");
     }
 
     httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_send(req, "<html><body>Saving. <a href=\"/\">Back</a></body></html>", HTTPD_RESP_USE_STRLEN);
+    return httpd_resp_send(
+        req,
+        "<html><head><meta charset=\"utf-8\"></head><body>正在保存。<a href=\"/\">返回设置</a></body></html>",
+        HTTPD_RESP_USE_STRLEN);
 }

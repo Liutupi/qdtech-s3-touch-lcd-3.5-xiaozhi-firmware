@@ -215,7 +215,7 @@ struct ThemePalette {
 
 static constexpr ThemePalette THEMES[] = {
     {
-        "Classic",
+        "经典",
         LV_COLOR_MAKE(0x00, 0x00, 0x00),
         LV_COLOR_MAKE(0x0b, 0x0c, 0x0d),
         LV_COLOR_MAKE(0x12, 0x14, 0x13),
@@ -230,7 +230,7 @@ static constexpr ThemePalette THEMES[] = {
         LV_COLOR_MAKE(0xd7, 0xde, 0xe3),
     },
     {
-        "Cat",
+        "猫咪",
         LV_COLOR_MAKE(0xf6, 0xdb, 0xe8),
         LV_COLOR_MAKE(0xff, 0xf7, 0xfb),
         LV_COLOR_MAKE(0xff, 0xeb, 0xf3),
@@ -245,7 +245,7 @@ static constexpr ThemePalette THEMES[] = {
         LV_COLOR_MAKE(0xff, 0x77, 0xaa),
     },
     {
-        "Tupi Warm",
+        "暖色",
         LV_COLOR_MAKE(0xf6, 0xf0, 0xe6),
         LV_COLOR_MAKE(0xfb, 0xf7, 0xee),
         LV_COLOR_MAKE(0xf4, 0xee, 0xe3),
@@ -365,10 +365,192 @@ static void add_gesture_bubble(lv_obj_t* obj) {
     lv_obj_add_flag(obj, LV_OBJ_FLAG_EVENT_BUBBLE);
 }
 
+static const char* localize_ui_text(const char* text) {
+    struct UiText {
+        const char* source;
+        const char* translated;
+    };
+    static constexpr UiText kUiTexts[] = {
+        {"MON", "周一"}, {"TUE", "周二"}, {"WED", "周三"}, {"THU", "周四"},
+        {"FRI", "周五"}, {"SAT", "周六"}, {"SUN", "周日"},
+        {"Menu", "菜单"}, {"Weather", "天气"}, {"Weather pending", "天气同步中"},
+        {"tupi note", "今日一语"},
+        {"Scanning SD card", "正在扫描 SD 卡"},
+        {"No .nes\n/sdcard/nes", "未找到游戏\n请放入 /sdcard/nes"},
+        {"Back", "返回"}, {"Prev", "上一个"}, {"Start", "开始"}, {"Next", "下一个"},
+        {"Today", "今天"}, {"Month ----", "月份 ----"},
+        {"Minimal monthly view", "月历"},
+        {"Radio", "电台"}, {"CNR China Voice", "中国之声"},
+        {"Ready", "就绪"}, {"Catalog", "电台目录"}, {"Play", "播放"},
+        {"Stop", "停止"}, {"Swipe right: Apps", "右滑返回应用"},
+        {"Pause", "暂停"}, {"Recent", "最近播放"}, {"Clear", "清空"},
+        {"Ask", "点歌"}, {"Again", "再来一首"},
+        {"Media", "媒体"}, {"Third Page", "媒体中心"},
+        {"Tap card to open list  |  Swipe right: Apps", "点击卡片打开列表 · 右滑返回应用"},
+        {"Select one episode", "请选择节目"}, {"No episodes loaded", "暂无节目"},
+        {"Up", "上移"}, {"Open", "打开"}, {"Down", "下移"}, {"List", "列表"},
+        {"Select an episode from list.", "请先从列表选择节目"},
+        {"Focus Timer", "专注计时"}, {"Break Timer", "休息计时"},
+        {"Scan to login", "扫码登录"}, {"Tap anywhere to close", "点击任意位置关闭"},
+        {"Network", "网络"}, {"WiFi Center", "无线网络"}, {"Connection", "连接状态"},
+        {"Waiting for WiFi", "等待无线网络"}, {"Saved: --", "已保存：--"},
+        {"Saved WiFi", "已保存网络"}, {"No saved WiFi networks", "没有已保存的网络"},
+        {"Default", "默认"}, {"Set", "设为默认"},
+        {"Diagnostics", "诊断"}, {"Long-press Settings", "长按设置进入"},
+        {"Refresh", "刷新"}, {"Settings", "设置"}, {"System Configuration", "系统设置"},
+        {"Display & Sound", "显示与声音"}, {"Brightness", "亮度"}, {"Volume", "音量"},
+        {"Appearance", "外观"}, {"Theme", "主题"}, {"Switch", "切换"},
+        {"Location", "地区"}, {"Zhongshan", "中山"}, {"Phone Sync", "手机同步"},
+        {"Profile", "标题"}, {"Owner", "用户"}, {"Phone Web", "手机配置页"},
+        {"Open Web", "打开网页"}, {"WiFi Setup", "无线配网"},
+        {"Restart to pairing hotspot", "重启进入配网热点"}, {"Reconfig", "重新配网"},
+        {"Firmware", "固件"}, {"Version", "版本"}, {"Tap Check", "点击检查"},
+        {"Check", "检查"}, {"Standby", "待机"},
+        {"Shake Lab", "摇一摇实验室"}, {"Ask Ball", "答案球"}, {"Dice", "骰子"},
+        {"Fortune", "趣味抽签"}, {"Fortune Stick", "趣味抽签"}, {"Home", "主页"},
+        {"Shake steadily to reveal", "平稳摇动后揭晓"},
+        {"Choose 1-6 dice, then shake", "选择 1 至 6 枚骰子，然后摇动"},
+        {"1 Die", "1 枚"}, {"LUCKY", "幸运"},
+        {"Shake steadily to draw", "平稳摇动开始抽签"},
+        {"Answer revealed", "答案已揭晓"}, {"Rolling...", "摇动中…"},
+        {"Settling...", "等待停稳…"}, {"Ready to shake again", "可以再次摇动"},
+        {"Ready to roll again", "可以再次掷骰"},
+        {"Playing", "播放中"}, {"Stopped", "已停止"}, {"Buffer", "缓冲中"},
+        {"Buffering", "缓冲中"}, {"Connect", "连接中"}, {"Connecting", "连接中"},
+        {"Paused", "已暂停"}, {"Listening", "正在聆听"}, {"Speaking", "正在说话"},
+        {"Upgrading", "正在升级"}, {"Error", "错误"}, {"Failed", "失败"},
+        {"Refreshing", "刷新中"}, {"Scanning", "扫描中"}, {"Online", "在线"},
+        {"Offline", "离线"}, {"Loading ROM", "载入游戏"}, {"Done", "已完成"},
+        {"Wait", "请稍候"}, {"Update", "可更新"}, {"System", "系统"},
+        {"Latest", "已是最新版"}, {"Ask song", "点歌"}, {"Ask XiaoZhi", "问小智"},
+        {"Episodes", "节目列表"}, {"Replaying", "正在重播"},
+        {"Busy", "正在处理"}, {"No memory", "内存不足"},
+        {"Task failed", "任务启动失败"}, {"WiFi needed", "需要连接无线网络"},
+        {"Checking...", "正在检查…"}, {"Check failed", "检查失败"},
+        {"No OTA asset", "没有适配的升级包"}, {"Need USB flash", "请使用 USB 刷机"},
+        {"Check first", "请先检查更新"}, {"Stop audio first", "请先停止播放"},
+        {"Wait idle", "请稍候"}, {"Updating...", "正在升级…"},
+        {"Update failed", "升级失败"}, {"Select ROM", "选择游戏"},
+        {"SD card not ready", "SD 卡未就绪"}, {"Decode failed", "解码失败"},
+        {"Photos unavailable", "相册不可用"}, {"Open failed", "打开失败"},
+        {"ROM too large", "游戏文件过大"}, {"FC unavailable", "游戏功能不可用"},
+        {"Please wait", "请稍候"}, {"Looking for .nes files", "正在查找 .nes 游戏"},
+        {"No ROM", "没有游戏"}, {"No NES ROMs", "没有找到 NES 游戏"},
+        {"Insert FAT SD with .nes files", "请插入存有 .nes 游戏的 FAT 格式 SD 卡"},
+        {"Checked /nes, /FC, /roms", "已检查 /nes、/FC、/roms"},
+        {"Put .nes files in /nes", "请将 .nes 游戏放入 /nes"},
+        {"No .nes files found\nPut ROMs in /sdcard/nes", "未找到 .nes 游戏\n请放入 /sdcard/nes"},
+        {"Load failed", "载入失败"},
+        {"Phone web already requested", "手机配置页正在打开"},
+        {"Opening phone web", "正在打开手机配置页"},
+        {"Phone web unavailable", "手机配置页不可用"},
+        {"Restarting to WiFi setup", "正在重启进入配网"},
+        {"BLE idle", "蓝牙待机"}, {"WiFi config idle", "手机配置页待机"},
+        {"WiFi config failed", "手机配置页启动失败"},
+        {"WiFi config synced", "手机配置已同步"},
+        {"WiFi config saving", "正在保存手机配置"},
+        {"Default WiFi updated", "默认网络已更新"},
+        {"Waiting for time sync", "等待时间同步"},
+        {"No recent song", "暂无最近播放"}, {"Replaying...", "正在重播…"},
+        {"TODAY", "今日"}, {"No song yet", "暂未点歌"},
+        {"Ask XiaoZhi to play NetEase music", "请小智播放网易云音乐"},
+        {"Tap Ask and say a song name.", "点击点歌并说出歌名"},
+        {"Listening... say a song name.", "正在聆听，请说出歌名"},
+        {"Tell me a song name.", "请说出想听的歌名"},
+        {"No next song cached. Ask XiaoZhi for a fresh song.", "没有缓存的下一首，请重新点歌"},
+        {"No recent songs yet.", "暂无最近播放"},
+        {"Recent songs cleared.", "最近播放已清空"},
+        {"Recent song removed.", "已移除最近播放"},
+        {"Removed from recent.", "已从最近播放移除"},
+        {"Replaying recent song", "正在重播最近歌曲"},
+        {"Replay failed", "重播失败"},
+        {"Replay failed. Ask XiaoZhi for a fresh URL.", "重播失败，请重新点歌"},
+        {"Music", "音乐"}, {"Recent song", "最近播放"},
+        {"Music URL playback", "音乐直链播放"},
+        {"Result", "结果"}, {"Unknown", "未知"},
+        {"Connected", "已连接"}, {"Disconnected", "未连接"},
+        {"disconnected", "未连接"}, {"Charging", "充电中"},
+        {"Unreachable", "无法连接"}, {"Unavailable", "不可用"},
+        {"No station", "暂无电台"}, {"No source", "没有可用源"},
+        {"Tap Play", "点击播放"}, {"Music paused", "音乐已暂停"},
+        {"Selected station", "已选择电台"}, {"Selected from directory", "已从目录选择"},
+        {"No music URL", "没有音乐地址"}, {"Music URL", "音乐地址"},
+        {"XiaoZhi is using audio", "小智正在使用音频"},
+        {"Waiting WiFi", "等待无线网络"}, {"Need network", "需要网络"},
+        {"Music ended", "音乐播放结束"}, {"Reconnecting", "正在重新连接"},
+        {"Music network retry", "音乐网络重试"},
+        {"Music unavailable", "音乐不可用"}, {"Music interrupted", "音乐播放中断"},
+        {"Multiple failures", "多次播放失败"}, {"Stream ended", "音频流已结束"},
+        {"Ask XiaoZhi for next song", "请小智播放下一首"},
+        {"Next station", "下一个电台"}, {"Previous station", "上一个电台"},
+        {"Audio focus restored", "音频已恢复"},
+        {"Opening music URL", "正在打开音乐地址"},
+        {"Trying fallback", "正在尝试备用源"},
+        {"Skipped unavailable station", "已跳过不可用电台"},
+        {"All sources failed", "所有播放源均失败"},
+        {"Opening stream", "正在打开音频流"},
+        {"Fallback source", "备用播放源"}, {"HTTP init failed", "网络初始化失败"},
+        {"Music URL rejected", "音乐地址不可用"},
+        {"Music URL unavailable", "音乐地址不可用"},
+        {"Need full song URL", "需要完整歌曲地址"},
+        {"Filling buffer", "正在填充缓冲区"},
+        {"No decoder memory", "解码内存不足"},
+        {"Music network stall", "音乐网络停滞"},
+        {"Waiting for data", "等待音频数据"}, {"Finding sync", "正在同步音频"},
+        {"Podcast unavailable", "播客不可用"}, {"Not enough memory", "内存不足"},
+        {"No podcast", "暂无播客"}, {"Check /podcast on SD card", "请检查 SD 卡的 /podcast 目录"},
+        {"Opening", "正在打开"}, {"Local MP3", "本地 MP3"}, {"Selected", "已选择"},
+        {"Next episode", "下一期节目"}, {"Previous episode", "上一期节目"},
+        {"List selection", "已从列表选择"}, {"Seek after playback starts", "播放开始后即可跳转"},
+        {"Select an episode", "请选择节目"}, {"Opening file", "正在打开文件"},
+        {"Playback failed", "播放失败"}, {"Selected episode", "已选择节目"},
+        {"No episodes", "暂无节目"}, {"No episodes loaded.", "暂无节目"},
+        {"No description file.", "暂无节目介绍"},
+        {"City required", "请输入天气城市"}, {"City not found", "未找到该城市"},
+        {"Bad weather location", "天气位置无效"},
+    };
+    const char* localized = text ? text : "";
+    for (const auto& item : kUiTexts) {
+        if (strcmp(localized, item.source) == 0) {
+            localized = item.translated;
+            break;
+        }
+    }
+    return localized;
+}
+
+static bool text_has_utf8(const char* text) {
+    if (!text) {
+        return false;
+    }
+    for (const auto* p = reinterpret_cast<const unsigned char*>(text); *p; ++p) {
+        if (*p >= 0x80) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void set_localized_label_text(lv_obj_t* label, const char* text,
+                                     const lv_font_t* chinese_font = nullptr) {
+    if (!label) {
+        return;
+    }
+    const char* localized = localize_ui_text(text);
+    lv_label_set_text(label, localized);
+    if (text_has_utf8(localized)) {
+        lv_obj_set_style_text_font(label, chinese_font ? chinese_font : qd_cn_font_16(), 0);
+    }
+}
+
 static lv_obj_t* label_en(lv_obj_t* parent, const char* text, lv_style_t* style) {
     lv_obj_t* label = lv_label_create(parent);
-    lv_label_set_text(label, text);
+    const char* localized = localize_ui_text(text);
+    lv_label_set_text(label, localized);
     lv_obj_add_style(label, style, 0);
+    if (text_has_utf8(localized)) {
+        lv_obj_set_style_text_font(label, qd_cn_font_16(), 0);
+    }
     add_gesture_bubble(label);
     return label;
 }
@@ -647,11 +829,11 @@ static int days_in_month(int year, int month) {
 
 static const char* month_name(int month) {
     static constexpr const char* kMonthNames[] = {
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
+        "一月", "二月", "三月", "四月", "五月", "六月",
+        "七月", "八月", "九月", "十月", "十一月", "十二月"
     };
     if (month < 1 || month > 12) {
-        return "Month";
+        return "月份";
     }
     return kMonthNames[month - 1];
 }
@@ -2787,7 +2969,7 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
         lv_obj_set_style_shadow_opa(daily_card_panel_, LV_OPA_20, 0);
 
         lv_obj_t* note = label_en(daily_card_panel_, "tupi note", &style_muted);
-        lv_obj_set_style_text_font(note, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(note, qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(note, COLOR_GREEN, 0);
         lv_obj_align(note, LV_ALIGN_TOP_LEFT, 22, 8);
         create_tupi_dot_mark(daily_card_panel_, 98, 10, 6, 3);
@@ -2854,7 +3036,7 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
                      is_tupi_warm_theme() ? 278 :
                      ((is_cat_theme() || is_classic_theme()) ? 218 : 266));
     lv_label_set_long_mode(network_status_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(network_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(network_status_label_, qd_cn_font_16(), 0);
     lv_obj_align(network_status_label_, LV_ALIGN_BOTTOM_LEFT,
                  is_tupi_warm_theme() ? 148 :
                  ((is_cat_theme() || is_classic_theme()) ? 202 : 152),
@@ -2967,7 +3149,7 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_t* shake_cn = label_en(shake_card, "趣味互动", &style_gold);
     lv_obj_set_style_text_font(shake_cn, qd_cn_font_16(), 0);
     lv_obj_align(shake_cn, LV_ALIGN_TOP_LEFT, 22, 50);
-    lv_obj_t* shake_detail = label_en(shake_card, "答案球  ·  骰子", &style_muted);
+    lv_obj_t* shake_detail = label_en(shake_card, "答案球 · 骰子 · 抽签 · 掌卦", &style_muted);
     lv_obj_set_style_text_font(shake_detail, qd_cn_font_16(), 0);
     lv_obj_align(shake_detail, LV_ALIGN_TOP_LEFT, 22, 88);
     lv_obj_t* shake_mark = circle(shake_card, 54, COLOR_GREEN, LV_OPA_50);
@@ -3327,7 +3509,8 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_add_event_cb(key, fc_key_cb, LV_EVENT_PRESS_LOST, reinterpret_cast<void*>(static_cast<uintptr_t>(mask)));
 
         lv_obj_t* label = label_en(key, text, &style_en);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(
+            label, text_has_utf8(lv_label_get_text(label)) ? qd_cn_font_16() : &lv_font_montserrat_14, 0);
         lv_obj_center(label);
         return key;
     };
@@ -3348,7 +3531,8 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
         lv_obj_add_event_cb(key, cb, LV_EVENT_CLICKED, NULL);
 
         lv_obj_t* label = label_en(key, text, &style_gold);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_font(
+            label, text_has_utf8(lv_label_get_text(label)) ? qd_cn_font_16() : &lv_font_montserrat_14, 0);
         lv_obj_center(label);
         return key;
     };
@@ -3439,7 +3623,7 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     calendar_title_label_ = label_en(panel, "Month ----", &style_en);
     lv_obj_set_style_text_color(calendar_title_label_,
                                 themed_color(LV_COLOR_MAKE(0xff, 0xf5, 0xe4), COLOR_TEXT), 0);
-    lv_obj_set_style_text_font(calendar_title_label_, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(calendar_title_label_, qd_cn_font_20(), 0);
     lv_obj_align(calendar_title_label_, LV_ALIGN_TOP_LEFT, 18, 18);
 
     lv_obj_t* top_today = CreateButton(panel, "Today", calendar_today_cb);
@@ -3454,7 +3638,7 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
     lv_label_set_long_mode(calendar_today_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_color(calendar_today_label_,
                                 themed_color(LV_COLOR_MAKE(0x9a, 0x76, 0x5e), COLOR_MUTED), 0);
-    lv_obj_set_style_text_font(calendar_today_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_style_text_font(calendar_today_label_, qd_cn_font_16(), 0);
     lv_obj_align(calendar_today_label_, LV_ALIGN_TOP_LEFT, 18, 50);
 
     lv_obj_t* divider = bar(panel, 268, 1,
@@ -3462,13 +3646,13 @@ void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
                             LV_OPA_COVER);
     lv_obj_align(divider, LV_ALIGN_TOP_LEFT, 18, 76);
 
-    static constexpr const char* kWeekdays[] = {"MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"};
+    static constexpr const char* kWeekdays[] = {"一", "二", "三", "四", "五", "六", "日"};
     for (int col = 0; col < 7; ++col) {
         lv_obj_t* label = label_en(panel, kWeekdays[col], &style_muted);
         lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
         const lv_color_t weekday_color = col >= 5 ? COLOR_GOLD : themed_color(lv_color_make(0xa8, 0x86, 0x6e), COLOR_MUTED);
         lv_obj_set_style_text_color(label, weekday_color, 0);
-        lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(label, qd_cn_font_16(), 0);
         lv_obj_set_width(label, 36);
         lv_obj_align(label, LV_ALIGN_TOP_LEFT, 14 + col * 40, 90);
     }
@@ -4567,7 +4751,7 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
 
     // 标题
     lv_obj_t* title = label_en(radio_page_, "Radio", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     // 返回按钮
@@ -4592,7 +4776,7 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_t* directory = CreateButton(radio_page_, "Catalog", nullptr);
     lv_obj_set_size(directory, 104, 30);
     lv_obj_align(directory, LV_ALIGN_TOP_LEFT, 344, 124);
-    lv_obj_set_style_text_font(lv_obj_get_child(directory, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(directory, 0), qd_cn_font_16(), 0);
 #endif
 
     // 播放控制按钮
@@ -4609,8 +4793,8 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
     lv_obj_align(next, LV_ALIGN_TOP_LEFT, 324, 180);
 
     // 电台数量信息
-    lv_obj_t* info = label_en(radio_page_, "37 stations available", &style_muted);
-    lv_obj_set_style_text_font(info, &lv_font_montserrat_14, 0);
+    lv_obj_t* info = label_en(radio_page_, "可从 SD 卡加载电台目录", &style_muted);
+    lv_obj_set_style_text_font(info, qd_cn_font_16(), 0);
     lv_obj_align(info, LV_ALIGN_TOP_LEFT, 24, 230);
 
     // 音量动态柱
@@ -4633,7 +4817,7 @@ void DesktopUI::CreateRadioPage(lv_obj_t* root) {
 
     // 提示文字
     lv_obj_t* hint = label_en(radio_page_, "Swipe right: Apps", &style_muted);
-    lv_obj_set_style_text_font(hint, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(hint, qd_cn_font_16(), 0);
     lv_obj_align(hint, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
@@ -4827,28 +5011,28 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
 
     lv_obj_t* back = CreateButton(music_page_, "Back", navigate_back_cb);
     lv_obj_set_size(back, 52, 22);
-    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -14, 8);
 
     lv_obj_t* pause = CreateButton(music_page_, "Pause", music_pause_cb);
     lv_obj_set_size(pause, 52, 22);
     lv_obj_set_style_radius(pause, 8, 0);
     lv_obj_set_style_border_color(pause, COLOR_GOLD, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(pause, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(pause, 0), qd_cn_font_16(), 0);
     lv_obj_align(pause, LV_ALIGN_TOP_RIGHT, -14, 36);
 
     lv_obj_t* play = CreateButton(music_page_, "Play", music_play_cb);
     lv_obj_set_size(play, 52, 22);
     lv_obj_set_style_radius(play, 8, 0);
     lv_obj_set_style_border_color(play, COLOR_GREEN, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(play, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(play, 0), qd_cn_font_16(), 0);
     lv_obj_align(play, LV_ALIGN_TOP_RIGHT, -14, 64);
 
     lv_obj_t* next = CreateButton(music_page_, "Next", music_next_cb);
     lv_obj_set_size(next, 52, 22);
     lv_obj_set_style_radius(next, 8, 0);
     lv_obj_set_style_border_color(next, COLOR_PURPLE, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(next, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(next, 0), qd_cn_font_16(), 0);
     lv_obj_align(next, LV_ALIGN_TOP_RIGHT, -14, 92);
 
     lv_obj_t* cover = CreatePanel(music_page_, 128, 112, 18, 18);
@@ -4903,7 +5087,7 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_align(music_artist_label_, LV_ALIGN_TOP_LEFT, 14, 46);
 
     music_line_label_ = label_en(panel, "Ready", &style_gold);
-    lv_obj_set_style_text_font(music_line_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(music_line_label_, qd_cn_font_16(), 0);
     lv_obj_set_width(music_line_label_, 190);
     lv_obj_set_height(music_line_label_, 22);
     lv_obj_set_style_text_letter_space(music_line_label_, 0, 0);
@@ -4935,12 +5119,12 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_align(music_side_lyric_label_, LV_ALIGN_RIGHT_MID, -18, 0);
 
     lv_obj_t* recent_title = label_en(music_page_, "Recent", &style_muted);
-    lv_obj_set_style_text_font(recent_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(recent_title, qd_cn_font_16(), 0);
     lv_obj_align(recent_title, LV_ALIGN_TOP_LEFT, 22, 226);
     music_recent_clear_button_ = CreateButton(music_page_, "Clear", music_recent_clear_cb);
     lv_obj_set_size(music_recent_clear_button_, 58, 22);
     lv_obj_set_style_radius(music_recent_clear_button_, 8, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(music_recent_clear_button_, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(music_recent_clear_button_, 0), qd_cn_font_16(), 0);
     lv_obj_align(music_recent_clear_button_, LV_ALIGN_TOP_LEFT, 252, 224);
     for (size_t i = 0; i < kMusicRecentCount; ++i) {
         lv_obj_t* row = lv_obj_create(music_page_);
@@ -4972,19 +5156,19 @@ void DesktopUI::CreateMusicPage(lv_obj_t* root) {
     lv_obj_set_size(talk, 134, 24);
     lv_obj_set_style_bg_color(talk, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(talk, 0, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(talk, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(talk, 0), qd_cn_font_16(), 0);
     lv_obj_align(talk, LV_ALIGN_TOP_LEFT, 330, 226);
 
     lv_obj_t* again = CreateButton(music_page_, "Again", music_again_cb);
     lv_obj_set_size(again, 134, 24);
     lv_obj_set_style_border_color(again, COLOR_GREEN, 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(again, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(again, 0), qd_cn_font_16(), 0);
     lv_obj_align(again, LV_ALIGN_TOP_LEFT, 330, 258);
 
     lv_obj_t* stop = CreateButton(music_page_, "Stop", music_stop_cb);
     lv_obj_set_size(stop, 134, 24);
     lv_obj_set_style_border_color(stop, lv_color_make(0xff, 0x88, 0x68), 0);
-    lv_obj_set_style_text_font(lv_obj_get_child(stop, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(stop, 0), qd_cn_font_16(), 0);
     lv_obj_align(stop, LV_ALIGN_TOP_LEFT, 330, 290);
 
     music_cover_timer_ = lv_timer_create(MusicCoverTimerCb, 180, this);
@@ -5006,7 +5190,7 @@ void DesktopUI::CreateMediaPage(lv_obj_t* root) {
     CreateStatusBar(media_page_);
 
     lv_obj_t* title = label_en(media_page_, "Media", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(media_page_, "Third Page", &style_muted);
@@ -5198,12 +5382,12 @@ void DesktopUI::CreateFocusPage(lv_obj_t* root) {
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 42);
 
     lv_obj_t* sub = label_en(focus_page_, "Focus Timer", &style_gold);
-    lv_obj_set_style_text_font(sub, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(sub, qd_cn_font_16(), 0);
     lv_obj_align(sub, LV_ALIGN_TOP_LEFT, 118, 46);
     focus_mode_label_ = sub;
     lv_obj_t* back = CreateButton(focus_page_, "Back", navigate_back_cb);
     lv_obj_set_size(back, 52, 24);
-    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -14, 42);
 
     lv_obj_t* left_panel = CreatePanel(focus_page_, 104, 116, 22, 86);
@@ -5547,7 +5731,7 @@ void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
     CreateStatusBar(network_page_);
 
     lv_obj_t* title = label_en(network_page_, "Network", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(network_page_, "WiFi Center", &style_muted);
@@ -5558,7 +5742,7 @@ void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
 
     lv_obj_t* status_panel = CreatePanel(network_page_, 432, 64, 24, 88);
     lv_obj_t* status_title = label_en(status_panel, "Connection", &style_gold);
-    lv_obj_set_style_text_font(status_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(status_title, qd_cn_font_16(), 0);
     lv_obj_align(status_title, LV_ALIGN_TOP_LEFT, 14, 9);
 
     network_detail_label_ = label_en(status_panel, "Waiting for WiFi", &style_green);
@@ -5567,11 +5751,11 @@ void DesktopUI::CreateNetworkPage(lv_obj_t* root) {
     lv_obj_align(network_detail_label_, LV_ALIGN_BOTTOM_LEFT, 14, -10);
 
     network_saved_count_label_ = label_en(status_panel, "Saved: --", &style_muted);
-    lv_obj_set_style_text_font(network_saved_count_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(network_saved_count_label_, qd_cn_font_16(), 0);
     lv_obj_align(network_saved_count_label_, LV_ALIGN_RIGHT_MID, -14, 0);
 
     lv_obj_t* list_title = label_en(network_page_, "Saved WiFi", &style_gold);
-    lv_obj_set_style_text_font(list_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(list_title, qd_cn_font_16(), 0);
     lv_obj_align(list_title, LV_ALIGN_TOP_LEFT, 28, 164);
 
     lv_obj_t* list_panel = CreatePanel(network_page_, 432, 112, 24, 190);
@@ -5608,7 +5792,7 @@ void DesktopUI::CreateDiagnosticsPage(lv_obj_t* root) {
     CreateStatusBar(diagnostics_page_);
 
     lv_obj_t* title = label_en(diagnostics_page_, "Diagnostics", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(diagnostics_page_, "Long-press Settings", &style_muted);
@@ -5632,7 +5816,7 @@ void DesktopUI::CreateDiagnosticsPage(lv_obj_t* root) {
 
     for (size_t i = 0; i < sizeof(diagnostics_labels_) / sizeof(diagnostics_labels_[0]); ++i) {
         diagnostics_labels_[i] = label_en(panel, "--", &style_muted);
-        lv_obj_set_style_text_font(diagnostics_labels_[i], &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(diagnostics_labels_[i], qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(diagnostics_labels_[i], i == 0 ? COLOR_GOLD : COLOR_TEXT, 0);
         lv_obj_set_width(diagnostics_labels_[i], 404);
         lv_label_set_long_mode(diagnostics_labels_[i], LV_LABEL_LONG_DOT);
@@ -5657,53 +5841,53 @@ void DesktopUI::RefreshDiagnostics() {
     const size_t largest_psram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM);
 
     char rows[10][128] = {};
-    snprintf(rows[0], sizeof(rows[0]), "Version: %s  Board: %s",
-             app_desc ? app_desc->version : "unknown", BOARD_NAME);
-    snprintf(rows[1], sizeof(rows[1]), "Running: %s @0x%06lx size=%luKB",
+    snprintf(rows[0], sizeof(rows[0]), "版本：%s  板型：%s",
+             app_desc ? app_desc->version : "未知", BOARD_NAME);
+    snprintf(rows[1], sizeof(rows[1]), "运行分区：%s @0x%06lx 大小=%luKB",
              running ? running->label : "--",
              running ? static_cast<unsigned long>(running->address) : 0UL,
              running ? static_cast<unsigned long>(running->size / 1024) : 0UL);
-    snprintf(rows[2], sizeof(rows[2]), "Next OTA: %s @0x%06lx size=%luKB",
+    snprintf(rows[2], sizeof(rows[2]), "备用分区：%s @0x%06lx 大小=%luKB",
              next ? next->label : "--",
              next ? static_cast<unsigned long>(next->address) : 0UL,
              next ? static_cast<unsigned long>(next->size / 1024) : 0UL);
     if (firmware_update_asset_size_ > 0 && firmware_update_partition_size_ > 0) {
         const long margin_kb = static_cast<long>(firmware_update_partition_size_ / 1024) -
                                static_cast<long>((firmware_update_asset_size_ + 1023) / 1024);
-        snprintf(rows[3], sizeof(rows[3]), "OTA file: %uKB  slot=%uKB  margin=%ldKB",
+        snprintf(rows[3], sizeof(rows[3]), "升级包：%uKB  分区=%uKB  余量=%ldKB",
                  static_cast<unsigned>((firmware_update_asset_size_ + 1023) / 1024),
                  static_cast<unsigned>(firmware_update_partition_size_ / 1024),
                  margin_kb);
     } else {
-        snprintf(rows[3], sizeof(rows[3]), "OTA file: --  slot=%uKB",
+        snprintf(rows[3], sizeof(rows[3]), "升级包：--  分区=%uKB",
                  static_cast<unsigned>((firmware_update_partition_size_ > 0
                      ? firmware_update_partition_size_
                      : (next ? next->size : 0)) / 1024));
     }
-    snprintf(rows[4], sizeof(rows[4]), "Internal heap: free=%uKB largest=%uKB",
+    snprintf(rows[4], sizeof(rows[4]), "内部内存：空闲=%uKB  最大块=%uKB",
              static_cast<unsigned>(free_internal / 1024),
              static_cast<unsigned>(largest_internal / 1024));
-    snprintf(rows[5], sizeof(rows[5]), "PSRAM: free=%uKB largest=%uKB",
+    snprintf(rows[5], sizeof(rows[5]), "外部内存：空闲=%uKB  最大块=%uKB",
              static_cast<unsigned>(free_psram / 1024),
              static_cast<unsigned>(largest_psram / 1024));
     if (wifi.IsConnected()) {
-        snprintf(rows[6], sizeof(rows[6]), "WiFi: %s  %s  RSSI=%ddBm",
+        snprintf(rows[6], sizeof(rows[6]), "WiFi：%s  %s  信号=%ddBm",
                  wifi.GetSsid().c_str(), wifi.GetIpAddress().c_str(), wifi.GetRssi());
     } else {
-        snprintf(rows[6], sizeof(rows[6]), "WiFi: disconnected");
+        snprintf(rows[6], sizeof(rows[6]), "WiFi：未连接");
     }
-    snprintf(rows[7], sizeof(rows[7]), "Saved WiFi: %u profile%s",
-             static_cast<unsigned>(ssid_list.size()), ssid_list.size() == 1 ? "" : "s");
+    snprintf(rows[7], sizeof(rows[7]), "已保存网络：%u 个",
+             static_cast<unsigned>(ssid_list.size()));
     if (battery_level_ < 0) {
-        snprintf(rows[8], sizeof(rows[8]), "Battery: --");
+        snprintf(rows[8], sizeof(rows[8]), "电池：--");
     } else {
-        snprintf(rows[8], sizeof(rows[8]), "Battery: %d%%%s",
-                 battery_level_, battery_charging_ ? " charging" : "");
+        snprintf(rows[8], sizeof(rows[8]), "电池：%d%%%s",
+                 battery_level_, battery_charging_ ? "  充电中" : "");
     }
-    snprintf(rows[9], sizeof(rows[9]), "OTA: %s%s%s",
-             firmware_update_status_.c_str(),
-             firmware_update_busy_ ? " busy" : "",
-             firmware_update_available_ ? " update-ready" : "");
+    snprintf(rows[9], sizeof(rows[9]), "远程升级：%s%s%s",
+             localize_ui_text(firmware_update_status_.c_str()),
+             firmware_update_busy_ ? "  处理中" : "",
+             firmware_update_available_ ? "  可更新" : "");
 
     for (size_t i = 0; i < sizeof(diagnostics_labels_) / sizeof(diagnostics_labels_[0]); ++i) {
         if (diagnostics_labels_[i]) {
@@ -5729,7 +5913,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     CreateStatusBar(settings_page_);
 
     lv_obj_t* title = label_en(settings_page_, "Settings", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 48);
 
     lv_obj_t* sub = label_en(settings_page_, "System Configuration", &style_muted);
@@ -5749,7 +5933,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     add_gesture_bubble(settings_content_);
 
     lv_obj_t* system_title = label_en(settings_content_, "Display & Sound", &style_gold);
-    lv_obj_set_style_text_font(system_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(system_title, qd_cn_font_16(), 0);
     lv_obj_align(system_title, LV_ALIGN_TOP_LEFT, 4, 2);
 
     lv_obj_t* brightness_row = lv_obj_create(settings_content_);
@@ -5793,7 +5977,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_event_cb(settings_volume_slider_, settings_volume_cb, LV_EVENT_RELEASED, NULL);
 
     lv_obj_t* theme_title = label_en(settings_content_, "Appearance", &style_gold);
-    lv_obj_set_style_text_font(theme_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(theme_title, qd_cn_font_16(), 0);
     lv_obj_align(theme_title, LV_ALIGN_TOP_LEFT, 4, 166);
 
     lv_obj_t* theme_row = lv_obj_create(settings_content_);
@@ -5804,7 +5988,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_t* theme_label = label_en(theme_row, "Theme", &style_en);
     lv_obj_align(theme_label, LV_ALIGN_TOP_LEFT, 14, 8);
     settings_theme_value_ = label_en(theme_row, theme().name, &style_muted);
-    lv_obj_set_style_text_font(settings_theme_value_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_theme_value_, qd_cn_font_16(), 0);
     lv_obj_align(settings_theme_value_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
     settings_theme_button_ = lv_btn_create(theme_row);
     lv_obj_set_size(settings_theme_button_, 84, 30);
@@ -5815,11 +5999,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_event_cb(settings_theme_button_, settings_theme_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_align(settings_theme_button_, LV_ALIGN_RIGHT_MID, -14, 0);
     settings_theme_button_label_ = label_en(settings_theme_button_, "Switch", &style_en);
-    lv_obj_set_style_text_font(settings_theme_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_theme_button_label_, qd_cn_font_16(), 0);
     lv_obj_center(settings_theme_button_label_);
 
     lv_obj_t* weather_title = label_en(settings_content_, "Weather", &style_gold);
-    lv_obj_set_style_text_font(weather_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(weather_title, qd_cn_font_16(), 0);
     lv_obj_align(weather_title, LV_ALIGN_TOP_LEFT, 4, 258);
 
     lv_obj_t* weather_row = lv_obj_create(settings_content_);
@@ -5838,11 +6022,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_width(settings_ble_status_label_, 116);
     lv_label_set_long_mode(settings_ble_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(settings_ble_status_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(settings_ble_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_ble_status_label_, qd_cn_font_16(), 0);
     lv_obj_align(settings_ble_status_label_, LV_ALIGN_BOTTOM_RIGHT, -14, -9);
 
     lv_obj_t* profile_title = label_en(settings_content_, "Phone Sync", &style_gold);
-    lv_obj_set_style_text_font(profile_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(profile_title, qd_cn_font_16(), 0);
     lv_obj_align(profile_title, LV_ALIGN_TOP_LEFT, 4, 350);
 
     lv_obj_t* profile_row = lv_obj_create(settings_content_);
@@ -5877,7 +6061,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     settings_wifi_config_status_label_ = label_en(wifi_sync_row, settings_wifi_config_status_.c_str(), &style_muted);
     lv_obj_set_width(settings_wifi_config_status_label_, 210);
     lv_label_set_long_mode(settings_wifi_config_status_label_, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(settings_wifi_config_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_wifi_config_status_label_, qd_cn_font_16(), 0);
     lv_obj_align(settings_wifi_config_status_label_, LV_ALIGN_BOTTOM_LEFT, 14, -9);
     settings_phone_web_button_ = lv_btn_create(wifi_sync_row);
     lv_obj_set_size(settings_phone_web_button_, 104, 30);
@@ -5888,7 +6072,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_event_cb(settings_phone_web_button_, settings_phone_web_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_align(settings_phone_web_button_, LV_ALIGN_RIGHT_MID, -14, 0);
     settings_phone_web_button_label_ = label_en(settings_phone_web_button_, "Open Web", &style_en);
-    lv_obj_set_style_text_font(settings_phone_web_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_phone_web_button_label_, qd_cn_font_16(), 0);
     lv_obj_center(settings_phone_web_button_label_);
 
     lv_obj_t* wifi_setup_row = lv_obj_create(settings_content_);
@@ -5901,7 +6085,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_t* wifi_setup_hint = label_en(wifi_setup_row, "Restart to pairing hotspot", &style_muted);
     lv_obj_set_width(wifi_setup_hint, 210);
     lv_label_set_long_mode(wifi_setup_hint, LV_LABEL_LONG_DOT);
-    lv_obj_set_style_text_font(wifi_setup_hint, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(wifi_setup_hint, qd_cn_font_16(), 0);
     lv_obj_align(wifi_setup_hint, LV_ALIGN_BOTTOM_LEFT, 14, -9);
     settings_reconfigure_wifi_button_ = lv_btn_create(wifi_setup_row);
     lv_obj_set_size(settings_reconfigure_wifi_button_, 104, 30);
@@ -5912,11 +6096,11 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_event_cb(settings_reconfigure_wifi_button_, settings_reconfigure_wifi_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_align(settings_reconfigure_wifi_button_, LV_ALIGN_RIGHT_MID, -14, 0);
     settings_reconfigure_wifi_button_label_ = label_en(settings_reconfigure_wifi_button_, "Reconfig", &style_en);
-    lv_obj_set_style_text_font(settings_reconfigure_wifi_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_reconfigure_wifi_button_label_, qd_cn_font_16(), 0);
     lv_obj_center(settings_reconfigure_wifi_button_label_);
 
     lv_obj_t* firmware_title = label_en(settings_content_, "Firmware", &style_gold);
-    lv_obj_set_style_text_font(firmware_title, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(firmware_title, qd_cn_font_16(), 0);
     lv_obj_align(firmware_title, LV_ALIGN_TOP_LEFT, 4, 616);
 
     lv_obj_t* firmware_row = lv_obj_create(settings_content_);
@@ -5940,7 +6124,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_set_width(settings_firmware_status_label_, 176);
     lv_label_set_long_mode(settings_firmware_status_label_, LV_LABEL_LONG_DOT);
     lv_obj_set_style_text_align(settings_firmware_status_label_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_font(settings_firmware_status_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_firmware_status_label_, qd_cn_font_16(), 0);
     lv_obj_align(settings_firmware_status_label_, LV_ALIGN_BOTTOM_LEFT, 54, -12);
 
     settings_firmware_button_ = lv_btn_create(firmware_row);
@@ -5952,7 +6136,7 @@ void DesktopUI::CreateSettingsPage(lv_obj_t* root) {
     lv_obj_add_event_cb(settings_firmware_button_, settings_firmware_cb, LV_EVENT_CLICKED, NULL);
     lv_obj_align(settings_firmware_button_, LV_ALIGN_BOTTOM_RIGHT, -14, -8);
     settings_firmware_button_label_ = label_en(settings_firmware_button_, "Check", &style_en);
-    lv_obj_set_style_text_font(settings_firmware_button_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(settings_firmware_button_label_, qd_cn_font_16(), 0);
     lv_obj_center(settings_firmware_button_label_);
 }
 
@@ -5966,8 +6150,8 @@ void DesktopUI::UpdateWifiList() {
 
     if (network_saved_count_label_) {
         char count_text[24];
-        snprintf(count_text, sizeof(count_text), "Saved: %u", static_cast<unsigned>(ssid_list.size()));
-        lv_label_set_text(network_saved_count_label_, count_text);
+        snprintf(count_text, sizeof(count_text), "已保存：%u", static_cast<unsigned>(ssid_list.size()));
+        set_localized_label_text(network_saved_count_label_, count_text);
     }
 
     if (ssid_list.empty()) {
@@ -6004,10 +6188,10 @@ void DesktopUI::UpdateWifiList() {
 
         if (i == 0) {
             lv_obj_t* default_label = label_en(item, "Default", &style_green);
-            lv_obj_set_style_text_font(default_label, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(default_label, qd_cn_font_16(), 0);
         } else {
             lv_obj_t* set_label = label_en(item, "Set", &style_muted);
-            lv_obj_set_style_text_font(set_label, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(set_label, qd_cn_font_16(), 0);
         }
     }
 }
@@ -6036,7 +6220,7 @@ void DesktopUI::CreateFaceUI(lv_obj_t* parent) {
 
         xiaozhi_state_label_ = label_en(status_pill, "Standby", &style_gold);
         lv_obj_set_width(xiaozhi_state_label_, 72);
-        lv_obj_set_style_text_font(xiaozhi_state_label_, &lv_font_montserrat_12, 0);
+        lv_obj_set_style_text_font(xiaozhi_state_label_, qd_cn_font_16(), 0);
         lv_label_set_long_mode(xiaozhi_state_label_, LV_LABEL_LONG_DOT);
         lv_obj_align(xiaozhi_state_label_, LV_ALIGN_LEFT_MID, 54, 0);
 
@@ -6236,8 +6420,8 @@ void DesktopUI::RenderCalendar() {
     }
 
     if (calendar_year_ <= 0 || calendar_month_ <= 0) {
-        lv_label_set_text(calendar_title_label_, "Month ----");
-        lv_label_set_text(calendar_today_label_, "Waiting for time sync");
+        set_localized_label_text(calendar_title_label_, "Month ----", qd_cn_font_20());
+        set_localized_label_text(calendar_today_label_, "Waiting for time sync");
         if (calendar_card_day_label_) {
             lv_label_set_text(calendar_card_day_label_, "--");
         }
@@ -6262,9 +6446,9 @@ void DesktopUI::RenderCalendar() {
 
     char title[32];
     snprintf(title, sizeof(title), "%s %04d", month_name(calendar_month_), calendar_year_);
-    lv_label_set_text(calendar_title_label_, title);
+    set_localized_label_text(calendar_title_label_, title, qd_cn_font_20());
 
-    lv_label_set_text(calendar_today_label_, "Minimal monthly view");
+    set_localized_label_text(calendar_today_label_, "Minimal monthly view");
 
     char today_day[8];
     char today_date[24];
@@ -6784,7 +6968,7 @@ void DesktopUI::SetTime(int hour, int minute, int year, int month, int day, cons
 
     if (date_changed) {
         lv_label_set_text(date_label_, date_text);
-        lv_label_set_text(week_label_, weekday ? weekday : "---");
+        set_localized_label_text(week_label_, weekday ? weekday : "---");
     }
     if (date_changed) {
         char app_status[24];
@@ -6953,13 +7137,13 @@ void DesktopUI::SetFcActions(std::function<void()> play_pause, std::function<voi
 
 void DesktopUI::SetFcState(const char* title, const char* detail, const char* rom_list) {
     if (fc_title_label_ && title) {
-        lv_label_set_text(fc_title_label_, title);
+        set_localized_label_text(fc_title_label_, title, qd_cn_font_20());
     }
     if (fc_detail_label_ && detail) {
-        lv_label_set_text(fc_detail_label_, detail);
+        set_localized_label_text(fc_detail_label_, detail);
     }
     if (fc_list_label_ && rom_list) {
-        lv_label_set_text(fc_list_label_, rom_list);
+        set_localized_label_text(fc_list_label_, rom_list);
     }
 
     if (!fc_playing_view_) {
@@ -7125,7 +7309,7 @@ void DesktopUI::ApplyWeatherVisual(int weather_code) {
 void DesktopUI::SetWeather(const char* temperature, const char* summary, int weather_code) {
     if (!weather_temp_label_ || !weather_meta_label_) return;
     lv_label_set_text(weather_temp_label_, temperature ? temperature : "-- C");
-    lv_label_set_text(weather_meta_label_, summary ? summary : "Weather pending");
+    set_localized_label_text(weather_meta_label_, summary ? summary : "Weather pending");
     ApplyWeatherVisual(weather_code);
     if (current_page_ == DesktopPage::MAIN && main_page_) {
         lv_obj_invalidate(main_page_);
@@ -7160,7 +7344,7 @@ void DesktopUI::SetDefaultNetwork(size_t index) {
     ssid_manager.SetDefaultSsid(static_cast<int>(index));
     ESP_LOGI(TAG, "Default WiFi updated: %s", ssid_list[index].ssid.c_str());
     if (network_detail_label_) {
-        lv_label_set_text(network_detail_label_, "Default WiFi updated");
+        set_localized_label_text(network_detail_label_, "Default WiFi updated");
     }
     UpdateWifiList();
 }
@@ -7222,14 +7406,14 @@ void DesktopUI::ReconfigureWifi() {
 void DesktopUI::SetBluetoothConfigStatus(const char* status) {
     settings_ble_status_ = status ? status : "BLE idle";
     if (settings_ble_status_label_) {
-        lv_label_set_text(settings_ble_status_label_, settings_ble_status_.c_str());
+        set_localized_label_text(settings_ble_status_label_, settings_ble_status_.c_str());
     }
 }
 
 void DesktopUI::SetWifiConfigStatus(const char* status) {
     settings_wifi_config_status_ = status ? status : "WiFi config idle";
     if (settings_wifi_config_status_label_) {
-        lv_label_set_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
+        set_localized_label_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
     }
 }
 
@@ -7485,7 +7669,7 @@ void DesktopUI::RefreshSettingsControls() {
     }
 
     if (settings_theme_value_) {
-        lv_label_set_text(settings_theme_value_, theme().name);
+        set_localized_label_text(settings_theme_value_, theme().name);
     }
 
     if (settings_profile_logo_value_ || settings_profile_owner_value_ || brand_label_count_ > 0) {
@@ -7508,10 +7692,10 @@ void DesktopUI::RefreshSettingsControls() {
     }
 
     if (settings_wifi_config_status_label_) {
-        lv_label_set_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
+        set_localized_label_text(settings_wifi_config_status_label_, settings_wifi_config_status_.c_str());
     }
     if (settings_ble_status_label_) {
-        lv_label_set_text(settings_ble_status_label_, settings_ble_status_.c_str());
+        set_localized_label_text(settings_ble_status_label_, settings_ble_status_.c_str());
     }
 }
 
@@ -7839,7 +8023,7 @@ void DesktopUI::UpdateFocusUI() {
         lv_label_set_text(focus_state_label_, state);
     }
     if (focus_mode_label_) {
-        lv_label_set_text(focus_mode_label_, focus_is_work_ ? "Focus Timer" : "Break Timer");
+        set_localized_label_text(focus_mode_label_, focus_is_work_ ? "Focus Timer" : "Break Timer");
     }
     if (focus_start_label_) {
         const char* start_text = focus_running_
@@ -7926,10 +8110,10 @@ void DesktopUI::RefreshAppTileStatuses() {
 void DesktopUI::SetNetworkStatus(const char* status) {
     if (!status) return;
     if (network_status_label_) {
-        lv_label_set_text(network_status_label_, status);
+        set_localized_label_text(network_status_label_, status);
     }
     if (network_detail_label_) {
-        lv_label_set_text(network_detail_label_, status);
+        set_localized_label_text(network_detail_label_, status);
     }
 
     const bool offline = strstr(status, "disconnect") || strstr(status, "Disconnect") ||
@@ -8003,7 +8187,7 @@ void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_availabl
     firmware_update_partition_size_ = partition_size;
 
     if (settings_firmware_status_label_ && status) {
-        lv_label_set_text(settings_firmware_status_label_, status);
+        set_localized_label_text(settings_firmware_status_label_, status);
     }
 
     if (settings_firmware_button_) {
@@ -8026,7 +8210,7 @@ void DesktopUI::SetFirmwareUpdateStatus(const char* status, bool update_availabl
         } else {
             text = busy ? "Wait" : (update_available ? "Update" : (usb_required ? "USB" : "Check"));
         }
-        lv_label_set_text(settings_firmware_button_label_, text);
+        set_localized_label_text(settings_firmware_button_label_, text);
         lv_obj_set_style_text_color(settings_firmware_button_label_,
                                     (update_available || usb_required) && !busy ? COLOR_GOLD : COLOR_TEXT, 0);
         lv_obj_center(settings_firmware_button_label_);
@@ -8096,10 +8280,10 @@ bool DesktopUI::TryAcceptMusicControlTap() {
 void DesktopUI::StartMusicAsk() {
     music_line_ = "Listening... say a song name.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Listening");
+        set_localized_label_text(music_line_label_, "Listening");
     }
     if (music_side_lyric_label_) {
-        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
     }
     SetXiaozhiState("Music", "Tell me a song name.", "thinking");
 
@@ -8117,12 +8301,12 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
         lv_label_set_text(radio_station_label_, station);
     }
     if (radio_state_label_ && state) {
-        lv_label_set_text(radio_state_label_, state);
+        set_localized_label_text(radio_state_label_, state);
         // 更新播放状态
         radio_playing_ = (state && (strcmp(state, "Playing") == 0 || strcmp(state, "Buffering") == 0));
     }
     if (radio_meta_label_ && meta) {
-        lv_label_set_text(radio_meta_label_, meta);
+        set_localized_label_text(radio_meta_label_, meta);
     }
     if (state) {
         if (music_recent_pending_index_ < kMusicRecentCount) {
@@ -8143,7 +8327,7 @@ void DesktopUI::SetRadioState(const char* station, const char* state, const char
                 RefreshMusicRecent();
                 music_line_ = meta && meta[0] ? meta : "Replay failed. Ask XiaoZhi for a fresh URL.";
                 if (music_line_label_) {
-                    lv_label_set_text(music_line_label_, "Error");
+                    set_localized_label_text(music_line_label_, "Error");
                 }
                 SetAppTileStatus(8, "Failed", lv_color_make(0xff, 0x88, 0x68));
             }
@@ -8181,16 +8365,16 @@ void DesktopUI::SetPodcastState(const char* title, const char* state, const char
         lv_label_set_text(podcast_title_label_, title ? title : "Nothing Impossible");
     }
     if (podcast_state_label_) {
-        lv_label_set_text(podcast_state_label_, state ? state : "Ready");
+        set_localized_label_text(podcast_state_label_, state ? state : "Ready");
     }
     if (podcast_meta_label_) {
-        lv_label_set_text(podcast_meta_label_, meta ? meta : "");
+        set_localized_label_text(podcast_meta_label_, meta ? meta : "");
     }
     if (podcast_summary_label_) {
-        lv_label_set_text(podcast_summary_label_, summary ? summary : "");
+        set_localized_label_text(podcast_summary_label_, summary ? summary : "");
     }
     if (podcast_list_label_) {
-        lv_label_set_text(podcast_list_label_, list ? list : "");
+        set_localized_label_text(podcast_list_label_, list ? list : "");
     }
     if (state) {
         lv_color_t color = COLOR_GOLD;
@@ -8279,10 +8463,11 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
     const int64_t now_ms = esp_timer_get_time() / 1000;
     if (xiaozhi_state_label_) {
         if (is_themed_face_gif_theme()) {
-            lv_label_set_text(xiaozhi_state_label_,
-                              themed_face_state_text(Application::GetInstance().GetDeviceState()));
+            set_localized_label_text(
+                xiaozhi_state_label_,
+                themed_face_state_text(Application::GetInstance().GetDeviceState()));
         } else {
-            lv_label_set_text(xiaozhi_state_label_, state ? state : "Standby");
+            set_localized_label_text(xiaozhi_state_label_, state ? state : "Standby");
         }
     }
     if (xiaozhi_message_label_) {
@@ -8298,7 +8483,7 @@ void DesktopUI::SetXiaozhiState(const char* state, const char* message, const ch
         }
     }
     if (xiaozhi_hint_label_) {
-        lv_label_set_text(xiaozhi_hint_label_, state ? state : "");
+        set_localized_label_text(xiaozhi_hint_label_, state ? state : "");
     }
     if (emotion) {
         emotion_ = emotion;
@@ -8365,9 +8550,9 @@ void DesktopUI::RefreshMusicRecent() {
         if (music_recent_labels_[i]) {
             const bool pending = has_track && i == music_recent_pending_index_;
             const bool failed = has_track && i == music_recent_failed_index_;
-            std::string text = pending ? "Replaying..." :
-                               (failed ? music_recent_failed_reason_ :
-                                (has_track ? music_recent_[i].title : "No recent song"));
+            std::string text = pending ? localize_ui_text("Replaying...") :
+                               (failed ? localize_ui_text(music_recent_failed_reason_.c_str()) :
+                                (has_track ? music_recent_[i].title : localize_ui_text("No recent song")));
             if (has_track && !pending && !failed && !music_recent_[i].artist.empty()) {
                 text += " - ";
                 text += music_recent_[i].artist;
@@ -8405,10 +8590,10 @@ void DesktopUI::ClearMusicRecent() {
     RefreshMusicRecent();
     music_line_ = had_recent ? "Recent songs cleared." : "No recent songs yet.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Ready");
+        set_localized_label_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
-        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
     }
 }
 
@@ -8429,10 +8614,10 @@ void DesktopUI::RemoveMusicRecent(size_t index) {
     RefreshMusicRecent();
     music_line_ = removed_title.empty() ? "Recent song removed." : "Removed from recent.";
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Ready");
+        set_localized_label_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
-        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
     }
 }
 
@@ -8477,10 +8662,10 @@ void DesktopUI::ReplayNextMusicRecent() {
     if (kMusicRecentCount < 2 || music_recent_[1].url.empty()) {
         music_line_ = "No next song cached. Ask XiaoZhi for a fresh song.";
         if (music_line_label_) {
-            lv_label_set_text(music_line_label_, "Ready");
+            set_localized_label_text(music_line_label_, "Ready");
         }
         if (music_side_lyric_label_) {
-            lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+            set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
         }
         SetAppTileStatus(8, "Ask XiaoZhi", COLOR_GOLD);
         return;
@@ -8492,10 +8677,10 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
     if (index >= kMusicRecentCount || music_recent_[index].url.empty()) {
         music_line_ = "No recent songs yet.";
         if (music_line_label_) {
-            lv_label_set_text(music_line_label_, "Ready");
+            set_localized_label_text(music_line_label_, "Ready");
         }
         if (music_side_lyric_label_) {
-            lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+            set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
         }
         return;
     }
@@ -8509,16 +8694,16 @@ void DesktopUI::ReplayMusicRecent(size_t index) {
     music_artist_ = track.artist.empty() ? "Recent song" : track.artist;
     music_line_ = "Replaying recent song";
     if (music_title_label_) {
-        lv_label_set_text(music_title_label_, music_title_.c_str());
+        set_localized_label_text(music_title_label_, music_title_.c_str(), qd_cn_font_20());
     }
     if (music_artist_label_) {
-        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+        set_localized_label_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Replaying");
+        set_localized_label_text(music_line_label_, "Replaying");
     }
     if (music_side_lyric_label_) {
-        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
     }
     RefreshMusicRecent();
     SetAppTileStatus(8, music_title_.c_str(), COLOR_GREEN);
@@ -8552,13 +8737,13 @@ void DesktopUI::SetMusicLyric(const char* title, const char* artist, const char*
     music_artist_ = next_artist;
     music_line_ = clean_line;
     if (music_title_label_) {
-        lv_label_set_text(music_title_label_, music_title_.c_str());
+        set_localized_label_text(music_title_label_, music_title_.c_str(), qd_cn_font_20());
     }
     if (music_artist_label_) {
-        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+        set_localized_label_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Playing");
+        set_localized_label_text(music_line_label_, "Playing");
     }
     if (music_side_lyric_label_) {
         lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
@@ -8597,16 +8782,16 @@ void DesktopUI::ClearMusicLyric() {
     music_artist_ = "Ask XiaoZhi to play NetEase music";
     music_line_ = "Tap Ask and say a song name.";
     if (music_title_label_) {
-        lv_label_set_text(music_title_label_, music_title_.c_str());
+        set_localized_label_text(music_title_label_, music_title_.c_str(), qd_cn_font_20());
     }
     if (music_artist_label_) {
-        lv_label_set_text(music_artist_label_, music_artist_.c_str());
+        set_localized_label_text(music_artist_label_, music_artist_.c_str());
     }
     if (music_line_label_) {
-        lv_label_set_text(music_line_label_, "Ready");
+        set_localized_label_text(music_line_label_, "Ready");
     }
     if (music_side_lyric_label_) {
-        lv_label_set_text(music_side_lyric_label_, music_line_.c_str());
+        set_localized_label_text(music_side_lyric_label_, music_line_.c_str(), qd_cn_font_20());
     }
     if (music_lyric_label_) {
         lv_label_set_text(music_lyric_label_, "");
@@ -8820,9 +9005,9 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_bg_color(shake_lab_page_, COLOR_BG, 0);
 
     lv_obj_t* title = label_en(shake_lab_page_, "Shake Lab", &style_en);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 24, 32);
-    lv_obj_t* subtitle = label_en(shake_lab_page_, "摇一摇实验室", &style_gold);
+    lv_obj_t* subtitle = label_en(shake_lab_page_, "重力感应趣味工具", &style_gold);
     lv_obj_set_style_text_font(subtitle, qd_cn_font_16(), 0);
     lv_obj_align(subtitle, LV_ALIGN_TOP_LEFT, 24, 58);
     lv_obj_t* back = CreateButton(shake_lab_page_, "Back", nullptr);
@@ -8844,9 +9029,9 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_t* ask_core = circle(ask_card, 22, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(ask_core, ask_orb, LV_ALIGN_CENTER, 0, 0);
     lv_obj_t* ask_title = label_en(ask_card, "Ask Ball", &style_en);
-    lv_obj_set_style_text_font(ask_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(ask_title, qd_cn_font_16(), 0);
     lv_obj_align(ask_title, LV_ALIGN_TOP_MID, 0, 86);
-    lv_obj_t* ask_cn = label_en(ask_card, "答案球", &style_gold);
+    lv_obj_t* ask_cn = label_en(ask_card, "心中一问", &style_gold);
     lv_obj_set_style_text_font(ask_cn, qd_cn_font_16(), 0);
     lv_obj_align(ask_cn, LV_ALIGN_TOP_MID, 0, 110);
 
@@ -8867,9 +9052,9 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
         lv_obj_set_pos(dot, px, py);
     }
     lv_obj_t* dice_title = label_en(dice_card, "Dice", &style_en);
-    lv_obj_set_style_text_font(dice_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(dice_title, qd_cn_font_16(), 0);
     lv_obj_align(dice_title, LV_ALIGN_TOP_MID, 0, 86);
-    lv_obj_t* dice_cn = label_en(dice_card, "骰子", &style_green);
+    lv_obj_t* dice_cn = label_en(dice_card, "最多六枚", &style_green);
     lv_obj_set_style_text_font(dice_cn, qd_cn_font_16(), 0);
     lv_obj_align(dice_cn, LV_ALIGN_TOP_MID, 0, 110);
 
@@ -8889,9 +9074,9 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_color(fortune_mark, COLOR_BG, 0);
     lv_obj_align(fortune_mark, LV_ALIGN_CENTER, 0, 0);
     lv_obj_t* fortune_title = label_en(fortune_card, "Fortune", &style_en);
-    lv_obj_set_style_text_font(fortune_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(fortune_title, qd_cn_font_16(), 0);
     lv_obj_align(fortune_title, LV_ALIGN_TOP_MID, 0, 86);
-    lv_obj_t* fortune_cn = label_en(fortune_card, "趣味抽签", &style_gold);
+    lv_obj_t* fortune_cn = label_en(fortune_card, "每日一签", &style_gold);
     lv_obj_set_style_text_font(fortune_cn, &qd_font_lxgw_16, 0);
     lv_obj_align(fortune_cn, LV_ALIGN_TOP_MID, 0, 110);
 
@@ -8945,7 +9130,7 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_align(shake_lab_answer_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(shake_lab_answer_label_, LV_ALIGN_TOP_MID, 0, 156);
     shake_lab_hint_label_ = label_en(shake_lab_ask_group_, "Shake steadily to reveal", &style_muted);
-    lv_obj_set_style_text_font(shake_lab_hint_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(shake_lab_hint_label_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_hint_label_, LV_ALIGN_BOTTOM_MID, 0, -14);
 
     shake_lab_dice_group_ = lv_obj_create(shake_lab_mode_group_);
@@ -8982,10 +9167,10 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
         }
     }
     shake_lab_dice_total_label_ = label_en(shake_lab_dice_group_, "Choose 1-6 dice, then shake", &style_muted);
-    lv_obj_set_style_text_font(shake_lab_dice_total_label_, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(shake_lab_dice_total_label_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -25);
     shake_lab_dice_lucky_label_ = label_en(shake_lab_dice_group_, "LUCKY", &style_gold);
-    lv_obj_set_style_text_font(shake_lab_dice_lucky_label_, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(shake_lab_dice_lucky_label_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_RIGHT, -18, -8);
     lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
 
@@ -9185,16 +9370,16 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         const char* title = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
                             (mode == ShakeLabMode::DICE ? "Dice" :
                             (mode == ShakeLabMode::FORTUNE ? "Fortune Stick" : "掌卦"));
-        lv_label_set_text(shake_lab_mode_title_, title);
+        set_localized_label_text(shake_lab_mode_title_, title);
     }
     if (mode == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
         lv_label_set_text(shake_lab_answer_label_, "在心里想一个问题，\n然后摇一摇。");
-        lv_label_set_text(shake_lab_hint_label_, "Shake steadily to reveal");
+        set_localized_label_text(shake_lab_hint_label_, "Shake steadily to reveal");
         UpdateShakeLabVisuals();
     }
     if (mode == ShakeLabMode::DICE) {
         if (shake_lab_dice_total_label_) {
-            lv_label_set_text(shake_lab_dice_total_label_, "Choose 1-6 dice, then shake");
+            set_localized_label_text(shake_lab_dice_total_label_, "Choose 1-6 dice, then shake");
         }
         if (shake_lab_dice_lucky_label_) {
             lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
@@ -9205,7 +9390,7 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         lv_label_set_text(shake_lab_fortune_number_label_, "诚心摇签·静待签来");
         lv_label_set_text(shake_lab_fortune_poem_label_, "手持签筒轻轻摇，\n一枝缘分自会来。");
         lv_label_set_text(shake_lab_fortune_explain_label_, "摇动设备，抽取今日之签。");
-        lv_label_set_text(shake_lab_fortune_hint_label_, "Shake steadily to draw");
+        set_localized_label_text(shake_lab_fortune_hint_label_, "Shake steadily to draw");
     }
     if (mode == ShakeLabMode::DIVINATION) {
         shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed);
@@ -9317,8 +9502,7 @@ void DesktopUI::UpdateShakeLabDice() {
     };
     if (shake_lab_dice_count_label_) {
         char count_text[16];
-        snprintf(count_text, sizeof(count_text), "%u %s", shake_lab_dice_count_,
-                 shake_lab_dice_count_ == 1 ? "Die" : "Dice");
+        snprintf(count_text, sizeof(count_text), "%u 枚", shake_lab_dice_count_);
         lv_label_set_text(shake_lab_dice_count_label_, count_text);
     }
     for (int die = 0; die < 6; ++die) {
@@ -9508,7 +9692,7 @@ void DesktopUI::RevealShakeLabResult() {
             lv_label_set_text(shake_lab_answer_label_, kAnswers[index]);
         }
         if (shake_lab_hint_label_) {
-            lv_label_set_text(shake_lab_hint_label_, "Answer revealed");
+            set_localized_label_text(shake_lab_hint_label_, "Answer revealed");
         }
         ESP_LOGI(TAG, "Shake Lab Ask Ball reveal index=%u", static_cast<unsigned>(index));
     } else if (shake_lab_mode_ == ShakeLabMode::DICE) {
@@ -9521,11 +9705,11 @@ void DesktopUI::RevealShakeLabResult() {
         }
         UpdateShakeLabDice();
         if (shake_lab_dice_total_label_) {
-            char total[32];
+            char total[48];
             if (shake_lab_dice_count_ == 1) {
-                snprintf(total, sizeof(total), "Result: %u", shake_lab_dice_values_state_[0]);
+                snprintf(total, sizeof(total), "结果：%u", shake_lab_dice_values_state_[0]);
             } else {
-                snprintf(total, sizeof(total), "%u dice  Total: %u", shake_lab_dice_count_, sum);
+                snprintf(total, sizeof(total), "%u 枚骰子  总点数：%u", shake_lab_dice_count_, sum);
             }
             lv_label_set_text(shake_lab_dice_total_label_, total);
         }
@@ -9575,7 +9759,7 @@ void DesktopUI::RevealShakeLabResult() {
         lv_label_set_text(shake_lab_fortune_number_label_, number);
         lv_label_set_text(shake_lab_fortune_poem_label_, kFortunes[index].poem);
         lv_label_set_text(shake_lab_fortune_explain_label_, kFortunes[index].explain);
-        lv_label_set_text(shake_lab_fortune_hint_label_, "解签已显示 · Ready again soon");
+        lv_label_set_text(shake_lab_fortune_hint_label_, "解签已显示 · 稍后可再次摇签");
         ESP_LOGI(TAG, "Shake Lab Fortune reveal index=%u level=%s", static_cast<unsigned>(index),
                  kFortunes[index].level);
     } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION) {
@@ -9727,7 +9911,7 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
             if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
                 lv_label_set_text(shake_lab_answer_label_, "摇晃已感应");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
-                lv_label_set_text(shake_lab_dice_total_label_, "Rolling...");
+                set_localized_label_text(shake_lab_dice_total_label_, "Rolling...");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "签筒已动·请继续摇");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
@@ -9743,7 +9927,7 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
             if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
                 lv_label_set_text(shake_lab_answer_label_, "正在感应……");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
-                lv_label_set_text(shake_lab_dice_total_label_, "Settling...");
+                set_localized_label_text(shake_lab_dice_total_label_, "Settling...");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "一枝签正在落下……");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
@@ -9755,11 +9939,11 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
             break;
         case ShakeDetector::Transition::COOLDOWN_COMPLETE:
             if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_hint_label_) {
-                lv_label_set_text(shake_lab_hint_label_, "Ready to shake again");
+                set_localized_label_text(shake_lab_hint_label_, "Ready to shake again");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {
-                lv_label_set_text(shake_lab_dice_total_label_, "Ready to roll again");
+                set_localized_label_text(shake_lab_dice_total_label_, "Ready to roll again");
             } else if (shake_lab_mode_ == ShakeLabMode::FORTUNE && shake_lab_fortune_hint_label_) {
-                lv_label_set_text(shake_lab_fortune_hint_label_, "可再次摇签 · Shake again");
+                lv_label_set_text(shake_lab_fortune_hint_label_, "可再次摇签");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
                 lv_label_set_text(shake_lab_divination_hint_label_, "可再次摇卦 · 静心再问");
             }

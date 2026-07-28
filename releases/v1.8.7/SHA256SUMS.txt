@@ -1,0 +1,4 @@
+1c6bf317210acecc51eae1454b5fba0698cec2e92f7e3dd396ca8b6c40b4fc53  qdtech-s3-touch-lcd-3.5-v1.8.7-app.bin
+0bfb68c780df5a86a0271fb86b0911bfc6e3c138dc3bb83b46df68daae0c4fd5  qdtech-s3-touch-lcd-3.5-v1.8.7-full.bin
+61daa497ca32c433889ecaaa585f107ff3955e4e8fadf2857b9d126c81c6a460  qdtech-s3-touch-lcd-3.5-v1.8.7-firmware.zip
+4c90dd22588481c45a5331d6844aa1fd4002ee1a0a6830dc1ad5d2a0f5514dce  qdtech-s3-touch-lcd-3.5-v1.8.7-sdcard.zip
