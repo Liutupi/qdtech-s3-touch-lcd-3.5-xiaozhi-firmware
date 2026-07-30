@@ -18,6 +18,8 @@ enum class Game : uint8_t {
     SOKOBAN,
     MATCH3,
     MOTION_MAZE,
+    TILE_2048,
+    FREECELL,
 };
 
 enum class Status : uint8_t {

@@ -232,10 +232,10 @@ private:
     lv_obj_t* puzzle_arcade_title_ = nullptr;
     lv_obj_t* puzzle_arcade_status_ = nullptr;
     lv_obj_t* puzzle_arcade_board_ = nullptr;
-    lv_obj_t* puzzle_arcade_game_cards_[5]{};
-    lv_obj_t* puzzle_arcade_game_labels_[5]{};
+    lv_obj_t* puzzle_arcade_game_cards_[7]{};
+    lv_obj_t* puzzle_arcade_game_labels_[7]{};
     enum class PuzzleArcadeView : uint8_t {
-        HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE
+        HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE, TILE_2048, FREECELL
     };
     PuzzleArcadeView puzzle_arcade_view_ = PuzzleArcadeView::HOME;
     QdPuzzleArcade::Game puzzle_arcade_selected_ = QdPuzzleArcade::Game::SUDOKU;
@@ -263,6 +263,23 @@ private:
     int8_t puzzle_match3_selected_ = -1;
     uint16_t puzzle_match3_score_ = 0;
     uint8_t puzzle_match3_moves_left_ = 0;
+    uint16_t puzzle_2048_cells_[16]{};
+    uint32_t puzzle_2048_score_ = 0;
+    uint16_t puzzle_2048_best_tile_ = 0;
+    bool puzzle_2048_won_ = false;
+    bool puzzle_2048_game_over_ = false;
+    uint8_t puzzle_freecell_tableau_[8][13]{};
+    uint8_t puzzle_freecell_tableau_count_[8]{};
+    uint8_t puzzle_freecell_cells_[4]{};
+    uint8_t puzzle_freecell_foundations_[4]{};
+    int8_t puzzle_freecell_selected_column_ = -1;
+    int8_t puzzle_freecell_selected_index_ = -1;
+    uint16_t puzzle_freecell_moves_ = 0;
+    uint8_t puzzle_freecell_undo_tableau_[8][13]{};
+    uint8_t puzzle_freecell_undo_count_[8]{};
+    uint8_t puzzle_freecell_undo_cells_[4]{};
+    uint8_t puzzle_freecell_undo_foundations_[4]{};
+    bool puzzle_freecell_can_undo_ = false;
     QdPuzzleArcade::MazeLevel puzzle_maze_{};
     uint16_t puzzle_maze_level_index_ = 0;
     uint16_t puzzle_maze_level_count_ = 0;
@@ -724,6 +741,16 @@ private:
     void MovePuzzleSokoban(int dx, int dy);
     void LoadPuzzleMatch3();
     bool ResolvePuzzleMatch3();
+    void ResetPuzzle2048();
+    bool MovePuzzle2048(int dx, int dy);
+    void SpawnPuzzle2048Tile();
+    bool CanMovePuzzle2048() const;
+    void ResetPuzzleFreecell();
+    bool MovePuzzleFreecellToColumn(uint8_t destination);
+    bool MovePuzzleFreecellToCell(uint8_t destination);
+    bool MovePuzzleFreecellToFoundation();
+    void SavePuzzleFreecellUndo();
+    void UndoPuzzleFreecell();
     void LoadPuzzleMaze(int delta);
     void MovePuzzleMaze(int dx, int dy);
     void SetPuzzleMazeSampling(bool active);

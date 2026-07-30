@@ -1,20 +1,26 @@
 {
   "format": 1,
-  "firmware": "v1.8.8",
+  "firmware": "v1.8.11",
   "encoding": "UTF-8",
   "counts": {
     "sudoku": 96,
     "code_lock": 120,
     "sokoban": 36,
     "match3": 60,
-    "motion_maze": 48
+    "motion_maze": 48,
+    "tile_2048": 1,
+    "freecell": 1
   },
   "covers": [
     "sudoku.jpg",
     "code_lock.jpg",
     "sokoban.jpg",
     "match3.jpg",
-    "motion_maze.jpg"
+    "motion_maze.jpg",
+    "tile_2048.jpg",
+    "freecell.jpg"
   ],
-  "motion_maze_runtime": "reserved_for_phase_2"
+  "motion_maze_runtime": "playable",
+  "tile_2048_runtime": "playable",
+  "freecell_runtime": "playable"
 }

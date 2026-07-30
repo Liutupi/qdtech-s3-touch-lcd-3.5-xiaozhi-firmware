@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and validate the v1.8.8 SD-backed puzzle arcade content."""
+"""Generate and validate the v1.8.11 SD-backed puzzle arcade content."""
 
 from __future__ import annotations
 
@@ -146,6 +146,10 @@ def write_match3(root: Path) -> int:
 
 
 SOKOBAN_BASES = [
+    ["########", "# .  . #", "# $##$ #", "#   @  #", "########"],
+    ["########", "#  .   #", "#  $   #", "# ## # #", "# $ .@ #", "########"],
+    ["########", "# . #  #", "# $ $ .#", "#   ## #", "# @    #", "########"],
+    ["#########", "# .   . #", "# $ # $ #", "#   #   #", "#   @   #", "#########"],
     ["######", "# .  #", "# $  #", "#  @ #", "######"],
     ["#######", "#  .  #", "#  $  #", "#  #  #", "#  @  #", "#######"],
     ["########", "# . .  #", "# $ $  #", "#   @  #", "########"],
@@ -158,6 +162,14 @@ SOKOBAN_BASES = [
 def mirror_level(rows: list[str]) -> list[str]:
     swap = str.maketrans({"@": "@", "+": "+", "$": "$", "*": "*"})
     return [row[::-1].translate(swap) for row in rows]
+
+
+def flip_level(rows: list[str]) -> list[str]:
+    return list(reversed(rows))
+
+
+def rotate_level(rows: list[str]) -> list[str]:
+    return ["".join(row[x] for row in reversed(rows)) for x in range(len(rows[0]))]
 
 
 def sokoban_solvable(rows: list[str]) -> bool:
@@ -203,15 +215,23 @@ def sokoban_solvable(rows: list[str]) -> bool:
 def write_sokoban(root: Path) -> int:
     path = root / "sokoban" / "levels.tsv"
     path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = path.read_text(encoding="utf-8").splitlines()
+        records = [line for line in existing if line and not line.startswith("#")]
+        if len(records) == 36 and all("硬核" in line for line in records):
+            return len(records)
     rows = ["# id\tname\twidth\theight\trows"]
     levels: list[list[str]] = []
     for base in SOKOBAN_BASES:
-        for level in (base, mirror_level(base)):
+        variants = (base, mirror_level(base), flip_level(base),
+                    mirror_level(flip_level(base)), rotate_level(base),
+                    mirror_level(rotate_level(base)))
+        for level in variants:
             assert len({len(r) for r in level}) == 1
             assert sokoban_solvable(level)
             levels.append(level)
-    # Reuse validated layouts with distinct presentation order; firmware remains tiny.
-    levels = (levels * 3)[:36]
+    # Six geometric variants per base create 36 distinct, solver-verified boards.
+    levels = levels[:36]
     for i, level in enumerate(levels, 1):
         name = f"漫画小屋 {i:02d}"
         rows.append(f"SKB{i:03d}\t{name}\t{len(level[0])}\t{len(level)}\t{'/'.join(level)}")
@@ -258,16 +278,19 @@ def write_metadata(root: Path, counts: dict[str, int]) -> None:
     (root / "covers").mkdir(parents=True, exist_ok=True)
     manifest = {
         "format": 1,
-        "firmware": "v1.8.8",
+        "firmware": "v1.8.11",
         "encoding": "UTF-8",
         "counts": counts,
-        "covers": ["sudoku.jpg", "code_lock.jpg", "sokoban.jpg", "match3.jpg", "motion_maze.jpg"],
-        "motion_maze_runtime": "reserved_for_phase_2",
+        "covers": ["sudoku.jpg", "code_lock.jpg", "sokoban.jpg", "match3.jpg",
+                   "motion_maze.jpg", "tile_2048.jpg", "freecell.jpg"],
+        "motion_maze_runtime": "playable",
+        "tile_2048_runtime": "playable",
+        "freecell_runtime": "playable",
     }
     (root / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (root / "README.txt").write_text(
-        "QDTech v1.8.8 益智游戏馆 SD 资源\n"
+        "QDTech v1.8.11 益智游戏馆 SD 资源\n"
         "请把 games 文件夹复制到 SD 卡根目录。\n"
         "数独、密码锁、推箱子、消消乐在第一阶段开放；体感迷宫仅预置资源，第二阶段开放。\n"
         "文件统一为 UTF-8，封面为 640x360 JPEG。\n",
@@ -297,7 +320,8 @@ def validate(root: Path) -> None:
         if not path.is_file() or path.stat().st_size == 0:
             raise RuntimeError(f"missing generated file: {path}")
         path.read_text(encoding="utf-8")
-    for name in ("sudoku", "code_lock", "sokoban", "match3", "motion_maze"):
+    for name in ("sudoku", "code_lock", "sokoban", "match3", "motion_maze",
+                 "tile_2048", "freecell"):
         cover = root / "covers" / f"{name}.jpg"
         if cover.exists() and cover.stat().st_size > 256 * 1024:
             raise RuntimeError(f"cover exceeds firmware limit: {cover}")
@@ -315,6 +339,8 @@ def main() -> None:
         "sokoban": write_sokoban(root),
         "match3": write_match3(root),
         "motion_maze": write_mazes(root, rng),
+        "tile_2048": 1,
+        "freecell": 1,
     }
     write_metadata(root, counts)
     validate(root)
