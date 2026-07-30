@@ -8,6 +8,10 @@
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
 #include "zodiac_service.h"
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+#include "puzzle_arcade_service.h"
+#endif
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -35,6 +39,10 @@ enum class DesktopPage {
     FOCUS,
     HOURGLASS,
     SHAKE_LAB,
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    PUZZLE_ARCADE,
+#endif
     XIAOZHI,
     NETWORK,
     SETTINGS,
@@ -106,6 +114,11 @@ public:
     bool IsHourglassPage() const { return current_page_ == DesktopPage::HOURGLASS; }
     void SetShakeLabSamplingCallback(std::function<void(bool)> callback);
     void UpdateShakeLabDetector(const ShakeDetector::Result& result);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    void SetPuzzleMazeSamplingCallback(std::function<void(bool)> callback);
+    void UpdatePuzzleMazeMotion(int16_t accel_y, int16_t accel_z, int64_t sample_ms);
+#endif
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
     void OpenPhoneWeb();
@@ -209,6 +222,62 @@ private:
     lv_obj_t* network_page_ = nullptr;
     lv_obj_t* settings_page_ = nullptr;
     lv_obj_t* diagnostics_page_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    lv_obj_t* puzzle_arcade_page_ = nullptr;
+    lv_obj_t* puzzle_arcade_home_group_ = nullptr;
+    lv_obj_t* puzzle_arcade_game_group_ = nullptr;
+    lv_obj_t* puzzle_arcade_cover_ = nullptr;
+    lv_obj_t* puzzle_arcade_cover_status_ = nullptr;
+    lv_obj_t* puzzle_arcade_title_ = nullptr;
+    lv_obj_t* puzzle_arcade_status_ = nullptr;
+    lv_obj_t* puzzle_arcade_board_ = nullptr;
+    lv_obj_t* puzzle_arcade_game_cards_[5]{};
+    lv_obj_t* puzzle_arcade_game_labels_[5]{};
+    enum class PuzzleArcadeView : uint8_t {
+        HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE
+    };
+    PuzzleArcadeView puzzle_arcade_view_ = PuzzleArcadeView::HOME;
+    QdPuzzleArcade::Game puzzle_arcade_selected_ = QdPuzzleArcade::Game::SUDOKU;
+    QdPuzzleArcade::ImageFrame puzzle_arcade_cover_frame_{};
+    std::atomic<uint32_t> puzzle_arcade_cover_request_id_{0};
+    QdPuzzleArcade::SudokuPuzzle puzzle_sudoku_{};
+    char puzzle_sudoku_values_[81]{};
+    int8_t puzzle_sudoku_selected_cell_ = -1;
+    QdPuzzleArcade::LockChallenge puzzle_lock_{};
+    char puzzle_lock_input_[5]{};
+    uint8_t puzzle_lock_input_len_ = 0;
+    char puzzle_lock_guesses_[8][5]{};
+    uint8_t puzzle_lock_exact_[8]{};
+    uint8_t puzzle_lock_misplaced_[8]{};
+    uint8_t puzzle_lock_guess_count_ = 0;
+    QdPuzzleArcade::SokobanLevel puzzle_sokoban_{};
+    char puzzle_sokoban_cells_[QdPuzzleArcade::kSokobanMaxWidth *
+                               QdPuzzleArcade::kSokobanMaxHeight]{};
+    uint16_t puzzle_sokoban_level_index_ = 0;
+    uint16_t puzzle_sokoban_level_count_ = 0;
+    uint16_t puzzle_sokoban_moves_ = 0;
+    uint16_t puzzle_sokoban_pushes_ = 0;
+    QdPuzzleArcade::Match3Level puzzle_match3_{};
+    uint8_t puzzle_match3_cells_[64]{};
+    int8_t puzzle_match3_selected_ = -1;
+    uint16_t puzzle_match3_score_ = 0;
+    uint8_t puzzle_match3_moves_left_ = 0;
+    QdPuzzleArcade::MazeLevel puzzle_maze_{};
+    uint16_t puzzle_maze_level_index_ = 0;
+    uint16_t puzzle_maze_level_count_ = 0;
+    uint16_t puzzle_maze_moves_ = 0;
+    int8_t puzzle_maze_player_x_ = 0;
+    int8_t puzzle_maze_player_y_ = 0;
+    int16_t puzzle_maze_baseline_y_ = 0;
+    int16_t puzzle_maze_baseline_z_ = 0;
+    int16_t puzzle_maze_filtered_y_ = 0;
+    int16_t puzzle_maze_filtered_z_ = 0;
+    uint8_t puzzle_maze_calibration_samples_ = 0;
+    int64_t puzzle_maze_last_move_ms_ = 0;
+    bool puzzle_maze_won_ = false;
+    std::function<void(bool)> puzzle_maze_sampling_callback_;
+#endif
     DesktopPage current_page_ = DesktopPage::MAIN;
 
     // Main page elements
@@ -640,6 +709,27 @@ private:
     void CreateFocusPage(lv_obj_t* root);
     void CreateHourglassPage(lv_obj_t* root);
     void CreateShakeLabPage(lv_obj_t* root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    void CreatePuzzleArcadePage(lv_obj_t* root);
+    void ReleasePuzzleArcadePage();
+    bool HandlePuzzleArcadeTap(uint16_t x, uint16_t y);
+    void ShowPuzzleArcadeHome();
+    void SelectPuzzleArcadeGame(QdPuzzleArcade::Game game);
+    void EnterPuzzleArcadeGame();
+    void LoadPuzzleArcadeCover();
+    void LoadPuzzleSudoku();
+    void LoadPuzzleLock();
+    void LoadPuzzleSokoban(int delta);
+    void MovePuzzleSokoban(int dx, int dy);
+    void LoadPuzzleMatch3();
+    bool ResolvePuzzleMatch3();
+    void LoadPuzzleMaze(int delta);
+    void MovePuzzleMaze(int dx, int dy);
+    void SetPuzzleMazeSampling(bool active);
+    void RefreshPuzzleArcadeBoard();
+    static void PuzzleArcadeDrawCb(lv_event_t* event);
+#endif
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);
     void CreateSettingsPage(lv_obj_t* root);

@@ -307,6 +307,18 @@ config QDTECH_EXPERIMENT_RADIO_DIRECTORY
         client. Disabled by default until physical audio, touch and memory
         verification is complete.
 
+config QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    bool "Enable experimental SD-backed puzzle arcade"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds a lazy-created QDTech puzzle arcade containing Sudoku, a
+        code-breaking lock game, Sokoban, and a match-three game. Puzzle
+        packs, levels, and optional JPEG cover art are read on demand from
+        /sdcard/games/.
+        The option adds no task, does not change touch parsing or BMI270
+        sampling, and stays disabled by default until physical verification.
+
 config QDTECH_PROVISIONING_COMPAT
     bool
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

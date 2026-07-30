@@ -59,6 +59,8 @@ static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
 static constexpr int64_t kBmi270LowRatePollMs = 250;
 static constexpr int64_t kShakeLabSampleIntervalMs = 30;
 static constexpr int64_t kShakeLabUiUpdateIntervalMs = 80;
+static constexpr int64_t kPuzzleMazeSampleIntervalMs = 40;
+static constexpr int64_t kPuzzleMazeUiUpdateIntervalMs = 80;
 static constexpr int64_t kTouchActivityHoldMs = 800;
 static constexpr int64_t kShakeLabTouchSettleMs = 120;
 static constexpr int64_t kShakeLabTouchSkipLogIntervalMs = 2000;
@@ -1292,6 +1294,12 @@ private:
             qd_display->GetDesktopUI()->SetShakeLabSamplingCallback([this](bool active) {
                 shake_lab_sampling_active_.store(active, std::memory_order_relaxed);
             });
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+            qd_display->GetDesktopUI()->SetPuzzleMazeSamplingCallback([this](bool active) {
+                puzzle_maze_sampling_active_.store(active, std::memory_order_relaxed);
+            });
+#endif
         }
         if (!i2c_bus_) {
             return;
@@ -1366,6 +1374,24 @@ private:
         });
         return true;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    bool PublishPuzzleMazeUpdate(int16_t accel_y, int16_t accel_z, int64_t sample_ms) {
+        if (!display_) {
+            return false;
+        }
+        Application::GetInstance().Schedule([this, accel_y, accel_z, sample_ms]() {
+            if (!display_) return;
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            if (!lvgl_port_lock(pdMS_TO_TICKS(50))) return;
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->UpdatePuzzleMazeMotion(accel_y, accel_z, sample_ms);
+            }
+            lvgl_port_unlock();
+        });
+        return true;
+    }
+#endif
     bool ExitHourglassFromBmi270() {
         if (!display_) {
             return false;
@@ -1390,12 +1416,60 @@ private:
         int64_t last_log_ms = 0;
         int64_t last_shake_touch_skip_log_ms = 0;
         int64_t last_shake_i2c_error_log_ms = 0;
+        int64_t last_maze_ui_update_ms = 0;
+        int64_t last_maze_sample_log_ms = 0;
         bool hourglass_active = false;
         bool shake_sampling_was_active = false;
+        bool maze_sampling_was_active = false;
 
         while (true) {
             const int64_t loop_ms = esp_timer_get_time() / 1000;
             const bool shake_sampling_active = shake_lab_sampling_active_.load(std::memory_order_relaxed);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+            const bool maze_sampling_active =
+                puzzle_maze_sampling_active_.load(std::memory_order_relaxed);
+            if (maze_sampling_active && !shake_sampling_active) {
+                if (!maze_sampling_was_active) {
+                    maze_sampling_was_active = true;
+                    last_maze_ui_update_ms = 0;
+                    ESP_LOGI(TAG, "Puzzle Maze BMI270 sampling enabled interval=%dms",
+                             static_cast<int>(kPuzzleMazeSampleIntervalMs));
+                }
+                const int64_t touch_active_until =
+                    touch_active_until_ms_.load(std::memory_order_relaxed);
+                const bool touch_is_down =
+                    touch_cached_down_.load(std::memory_order_acquire);
+                const bool touch_recently_released =
+                    touch_active_until > 0 &&
+                    loop_ms < touch_active_until - kTouchActivityHoldMs +
+                                  kShakeLabTouchSettleMs;
+                if (touch_is_down || touch_recently_released) {
+                    vTaskDelay(pdMS_TO_TICKS(kPuzzleMazeSampleIntervalMs));
+                    continue;
+                }
+                int16_t x = 0, y = 0, z = 0, gx = 0, gy = 0, gz = 0;
+                if (Bmi270ReadSample(x, y, z, gx, gy, gz, pdMS_TO_TICKS(20)) !=
+                    Bmi270SampleStatus::OK) {
+                    vTaskDelay(pdMS_TO_TICKS(kPuzzleMazeSampleIntervalMs));
+                    continue;
+                }
+                if (loop_ms - last_maze_ui_update_ms >= kPuzzleMazeUiUpdateIntervalMs) {
+                    PublishPuzzleMazeUpdate(y, z, loop_ms);
+                    last_maze_ui_update_ms = loop_ms;
+                }
+                if (loop_ms - last_maze_sample_log_ms >= 1000) {
+                    ESP_LOGI(TAG, "Puzzle Maze sample y=%d z=%d", y, z);
+                    last_maze_sample_log_ms = loop_ms;
+                }
+                vTaskDelay(pdMS_TO_TICKS(kPuzzleMazeSampleIntervalMs));
+                continue;
+            }
+            if (maze_sampling_was_active) {
+                maze_sampling_was_active = false;
+                ESP_LOGI(TAG, "Puzzle Maze BMI270 sampling disabled");
+            }
+#endif
             if (shake_sampling_active) {
                 if (!shake_sampling_was_active) {
                     shake_detector_.Arm(loop_ms);
@@ -2798,6 +2872,10 @@ private:
     int64_t bmi270_baseline_mag_sq_ = 0;
     std::atomic<int64_t> touch_active_until_ms_{0};
     std::atomic<bool> shake_lab_sampling_active_{false};
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    std::atomic<bool> puzzle_maze_sampling_active_{false};
+#endif
     ShakeDetector shake_detector_;
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;

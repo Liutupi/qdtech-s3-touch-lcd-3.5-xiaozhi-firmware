@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "firmware": "v1.8.8",
+  "encoding": "UTF-8",
+  "counts": {
+    "sudoku": 96,
+    "code_lock": 120,
+    "sokoban": 36,
+    "match3": 60,
+    "motion_maze": 48
+  },
+  "covers": [
+    "sudoku.jpg",
+    "code_lock.jpg",
+    "sokoban.jpg",
+    "match3.jpg",
+    "motion_maze.jpg"
+  ],
+  "motion_maze_runtime": "reserved_for_phase_2"
+}

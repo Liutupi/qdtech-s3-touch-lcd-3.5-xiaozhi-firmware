@@ -1882,6 +1882,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_fc = current_page_ == DesktopPage::FC;
     const bool was_xiaozhi = current_page_ == DesktopPage::XIAOZHI;
     const bool was_shake_lab = current_page_ == DesktopPage::SHAKE_LAB;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    const bool was_puzzle_arcade = current_page_ == DesktopPage::PUZZLE_ARCADE;
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
     const bool was_bone_weight = current_page_ == DesktopPage::BONE_WEIGHT;
@@ -1926,6 +1930,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (shake_lab_page_) {
         lv_obj_add_flag(shake_lab_page_, LV_OBJ_FLAG_HIDDEN);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    if (puzzle_arcade_page_) {
+        lv_obj_add_flag(puzzle_arcade_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
     lv_obj_add_flag(radio_page_, LV_OBJ_FLAG_HIDDEN);
     if (music_page_) {
         lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
@@ -2050,6 +2060,19 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Shake Lab page enter");
             break;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+        case DesktopPage::PUZZLE_ARCADE:
+            if (!puzzle_arcade_page_) {
+                CreatePuzzleArcadePage(lv_scr_act());
+            }
+            if (puzzle_arcade_page_) {
+                lv_obj_clear_flag(puzzle_arcade_page_, LV_OBJ_FLAG_HIDDEN);
+                ShowPuzzleArcadeHome();
+            }
+            ESP_LOGI(TAG, "Puzzle Arcade page enter");
+            break;
+#endif
         case DesktopPage::XIAOZHI:
             EnsureThemedFaceGif();
             lv_obj_clear_flag(xiaozhi_page_, LV_OBJ_FLAG_HIDDEN);
@@ -2125,6 +2148,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
         ESP_LOGI(TAG, "Shake Lab page exit");
         ReleaseShakeLabPage();
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    if (was_puzzle_arcade && page != DesktopPage::PUZZLE_ARCADE) {
+        ReleasePuzzleArcadePage();
+    }
+#endif
 
     const bool is_photo = page == DesktopPage::PHOTO;
     if (photo_active_callback_ && was_photo != is_photo) {
@@ -2335,6 +2364,13 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         HandleShakeLabTap(x, y);
         return;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    if (current_page_ == DesktopPage::PUZZLE_ARCADE) {
+        HandlePuzzleArcadeTap(x, y);
+        return;
+    }
+#endif
 
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
@@ -2636,6 +2672,12 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         if (hit(24, 90, 432, 142)) {
             ShowPage(DesktopPage::SHAKE_LAB);
         }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+        else if (hit(24, 240, 432, 48)) {
+            ShowPage(DesktopPage::PUZZLE_ARCADE);
+        }
+#endif
         return;
     }
     if (x >= 24 && x < 446 && y >= 76 && y < 76 + 5 * 45) {
@@ -3156,6 +3198,28 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_align(shake_mark, LV_ALIGN_RIGHT_MID, -30, 0);
     lv_obj_t* shake_dot = circle(shake_card, 18, COLOR_GOLD, LV_OPA_COVER);
     lv_obj_align_to(shake_dot, shake_mark, LV_ALIGN_CENTER, 0, 0);
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    lv_obj_t* puzzle_card = CreatePanel(apps_more_group_, 432, 48, 24, 240);
+    lv_obj_set_style_bg_color(puzzle_card, COLOR_CREAM, 0);
+    lv_obj_set_style_border_color(puzzle_card, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(puzzle_card, 2, 0);
+    lv_obj_t* puzzle_icon = circle(puzzle_card, 30, COLOR_PURPLE, LV_OPA_70);
+    lv_obj_align(puzzle_icon, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_t* puzzle_star = label_en(puzzle_icon, "*", &style_en);
+    lv_obj_set_style_text_font(puzzle_star, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(puzzle_star, COLOR_CREAM, 0);
+    lv_obj_center(puzzle_star);
+    lv_obj_t* puzzle_title = label_en(puzzle_card, "益智游戏馆", &style_en);
+    lv_obj_set_style_text_font(puzzle_title, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(puzzle_title, COLOR_TEXT, 0);
+    lv_obj_align(puzzle_title, LV_ALIGN_LEFT_MID, 54, -9);
+    lv_obj_t* puzzle_detail = label_en(
+        puzzle_card, "数独 · 密码锁 · 推箱子", &style_muted);
+    lv_obj_set_style_text_font(puzzle_detail, qd_cn_font_16(), 0);
+    lv_obj_align(puzzle_detail, LV_ALIGN_LEFT_MID, 178, 8);
+#endif
 
     lv_obj_t* hint = label_en(apps_page_, "右滑返回主页", &style_muted);
     lv_obj_set_style_text_font(hint, qd_cn_font_16(), 0);
@@ -9957,3 +10021,1081 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
         UpdateShakeLabVisuals();
     }
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+namespace {
+constexpr int kPuzzleGridX = 15;
+constexpr int kPuzzleGridY = 8;
+constexpr int kPuzzleCell = 27;
+
+const char* PuzzleGameTitle(QdPuzzleArcade::Game game) {
+    switch (game) {
+        case QdPuzzleArcade::Game::SUDOKU: return "数独花园";
+        case QdPuzzleArcade::Game::CODE_LOCK: return "密码侦探";
+        case QdPuzzleArcade::Game::SOKOBAN: return "萌宠推箱";
+        case QdPuzzleArcade::Game::MATCH3: return "甜点消消乐";
+        case QdPuzzleArcade::Game::MOTION_MAZE: return "体感迷宫";
+    }
+    return "益智游戏馆";
+}
+}  // namespace
+
+void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
+    puzzle_arcade_page_ = lv_obj_create(root);
+    lv_obj_add_style(puzzle_arcade_page_, &style_screen, 0);
+    lv_obj_set_size(puzzle_arcade_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(puzzle_arcade_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(puzzle_arcade_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(puzzle_arcade_page_, media_gesture_cb, LV_EVENT_GESTURE, nullptr);
+    lv_obj_set_style_bg_color(puzzle_arcade_page_, lv_color_hex(0xfff4ef), 0);
+
+    lv_obj_t* title = label_en(puzzle_arcade_page_, "益智游戏馆", &style_en);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(0x453a48), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 22, 18);
+    lv_obj_t* subtitle = label_en(puzzle_arcade_page_, "可爱漫画益智小天地", &style_gold);
+    lv_obj_set_style_text_font(subtitle, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(subtitle, lv_color_hex(0x8a6878), 0);
+    lv_obj_align(subtitle, LV_ALIGN_TOP_LEFT, 22, 44);
+
+    puzzle_arcade_home_group_ = lv_obj_create(puzzle_arcade_page_);
+    lv_obj_remove_style_all(puzzle_arcade_home_group_);
+    lv_obj_set_size(puzzle_arcade_home_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(puzzle_arcade_home_group_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* cover_panel = CreatePanel(puzzle_arcade_home_group_, 196, 174, 14, 76);
+    lv_obj_set_style_bg_color(cover_panel, lv_color_hex(0xfffcf8), 0);
+    lv_obj_set_style_border_color(cover_panel, lv_color_hex(0xd89a55), 0);
+    lv_obj_set_style_border_width(cover_panel, 2, 0);
+    lv_obj_set_style_radius(cover_panel, 18, 0);
+    lv_obj_set_style_shadow_color(cover_panel, lv_color_hex(0xd9b9ad), 0);
+    lv_obj_set_style_shadow_width(cover_panel, 7, 0);
+    lv_obj_set_style_shadow_opa(cover_panel, LV_OPA_20, 0);
+    puzzle_arcade_cover_ = lv_image_create(cover_panel);
+    lv_obj_set_size(puzzle_arcade_cover_, 180, 120);
+    lv_obj_align(puzzle_arcade_cover_, LV_ALIGN_TOP_MID, 0, 5);
+    puzzle_arcade_cover_status_ = label_en(cover_panel, "正在翻开画册…", &style_muted);
+    lv_obj_set_style_text_font(puzzle_arcade_cover_status_, qd_cn_font_16(), 0);
+    lv_obj_set_width(puzzle_arcade_cover_status_, 176);
+    lv_obj_set_style_text_align(puzzle_arcade_cover_status_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(puzzle_arcade_cover_status_, LV_ALIGN_BOTTOM_MID, 0, -8);
+
+    static constexpr const char* names[] = {
+        "数独花园", "密码侦探", "萌宠推箱", "甜点消消乐", "体感迷宫"
+    };
+    static constexpr const char* icons[] = {"数", "密", "箱", "糖", "迷"};
+    static constexpr const char* tags[] = {"推理", "逻辑", "空间", "消除", "体感"};
+    static constexpr uint32_t card_colors[] = {
+        0xf7dca8, 0xe7d7f2, 0xd5ead9, 0xf6d7df, 0xd5e8f5
+    };
+    for (int i = 0; i < 5; ++i) {
+        const lv_color_t color = lv_color_hex(card_colors[i]);
+        lv_obj_t* card = CreatePanel(puzzle_arcade_home_group_, 244, 34, 222, 72 + i * 38);
+        lv_obj_set_style_bg_color(card, lv_color_hex(0xfffcfa), 0);
+        lv_obj_set_style_border_color(card, color, 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+        lv_obj_set_style_radius(card, 14, 0);
+        puzzle_arcade_game_cards_[i] = card;
+        lv_obj_t* dot = circle(card, 22, color, LV_OPA_COVER);
+        lv_obj_align(dot, LV_ALIGN_LEFT_MID, 10, 0);
+        lv_obj_t* icon = label_en(dot, icons[i], &style_en);
+        lv_obj_set_style_text_font(icon, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_color(icon, lv_color_hex(0x453a48), 0);
+        lv_obj_center(icon);
+        lv_obj_t* name = label_en(card, names[i], &style_en);
+        lv_obj_set_style_text_font(name, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_color(name, lv_color_hex(0x453a48), 0);
+        lv_obj_align(name, LV_ALIGN_LEFT_MID, 44, 0);
+        puzzle_arcade_game_labels_[i] = name;
+        lv_obj_t* tag = label_en(card, tags[i], &style_muted);
+        lv_obj_set_style_text_font(tag, qd_cn_font_16(), 0);
+        lv_obj_set_style_text_color(tag, lv_color_hex(0x7b6675), 0);
+        lv_obj_align(tag, LV_ALIGN_RIGHT_MID, -12, 0);
+    }
+    lv_obj_t* open = CreateButton(puzzle_arcade_home_group_, "开始游戏", nullptr);
+    lv_obj_set_size(open, 154, 36);
+    lv_obj_set_style_radius(open, 16, 0);
+    lv_obj_set_style_bg_color(open, lv_color_hex(0xf2cad7), 0);
+    lv_obj_set_style_border_color(open, lv_color_hex(0xc96f8d), 0);
+    lv_obj_set_style_border_width(open, 1, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(open, 0), qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(open, 0), lv_color_hex(0x453a48), 0);
+    lv_obj_align(open, LV_ALIGN_TOP_LEFT, 222, 266);
+    lv_obj_t* back = CreateButton(puzzle_arcade_home_group_, "返回", nullptr);
+    lv_obj_set_size(back, 82, 36);
+    lv_obj_set_style_radius(back, 16, 0);
+    lv_obj_set_style_bg_color(back, lv_color_hex(0xfffcfa), 0);
+    lv_obj_set_style_border_color(back, lv_color_hex(0xd8b8c2), 0);
+    lv_obj_set_style_border_width(back, 1, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(back, 0), lv_color_hex(0x453a48), 0);
+    lv_obj_align(back, LV_ALIGN_TOP_LEFT, 384, 266);
+
+    puzzle_arcade_game_group_ = lv_obj_create(puzzle_arcade_page_);
+    lv_obj_remove_style_all(puzzle_arcade_game_group_);
+    lv_obj_set_size(puzzle_arcade_game_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(puzzle_arcade_game_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(puzzle_arcade_game_group_, LV_OBJ_FLAG_HIDDEN);
+
+    // Keep game metadata in a dedicated toolbar. The board never draws into
+    // this region, so long titles and status text cannot overlap the puzzle.
+    lv_obj_t* game_toolbar = CreatePanel(puzzle_arcade_game_group_, 464, 42, 8, 6);
+    lv_obj_set_style_bg_color(game_toolbar, lv_color_hex(0xfff8f4), 0);
+    lv_obj_set_style_border_color(game_toolbar, lv_color_hex(0xe4b6c5), 0);
+    lv_obj_set_style_border_width(game_toolbar, 1, 0);
+    lv_obj_set_style_radius(game_toolbar, 14, 0);
+    lv_obj_set_style_shadow_width(game_toolbar, 4, 0);
+    lv_obj_set_style_shadow_opa(game_toolbar, LV_OPA_10, 0);
+
+    puzzle_arcade_title_ = label_en(game_toolbar, "数独花园", &style_en);
+    lv_obj_set_style_text_font(puzzle_arcade_title_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(puzzle_arcade_title_, lv_color_hex(0x453a48), 0);
+    lv_obj_set_width(puzzle_arcade_title_, 112);
+    lv_label_set_long_mode(puzzle_arcade_title_, LV_LABEL_LONG_DOT);
+    lv_obj_align(puzzle_arcade_title_, LV_ALIGN_LEFT_MID, 12, 0);
+    puzzle_arcade_status_ = label_en(game_toolbar, "", &style_gold);
+    lv_obj_set_style_text_font(puzzle_arcade_status_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(puzzle_arcade_status_, lv_color_hex(0x735f70), 0);
+    lv_obj_set_width(puzzle_arcade_status_, 246);
+    lv_label_set_long_mode(puzzle_arcade_status_, LV_LABEL_LONG_DOT);
+    lv_obj_align(puzzle_arcade_status_, LV_ALIGN_LEFT_MID, 130, 0);
+    lv_obj_t* game_home = CreateButton(game_toolbar, "主页", nullptr);
+    lv_obj_set_size(game_home, 66, 30);
+    lv_obj_set_style_radius(game_home, 12, 0);
+    lv_obj_set_style_bg_color(game_home, lv_color_hex(0xf6dce5), 0);
+    lv_obj_set_style_border_color(game_home, lv_color_hex(0xc96f8d), 0);
+    lv_obj_set_style_border_width(game_home, 1, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(game_home, 0), qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(lv_obj_get_child(game_home, 0), lv_color_hex(0x453a48), 0);
+    lv_obj_align(game_home, LV_ALIGN_RIGHT_MID, -6, 0);
+
+    puzzle_arcade_board_ = lv_obj_create(puzzle_arcade_game_group_);
+    lv_obj_remove_style_all(puzzle_arcade_board_);
+    lv_obj_set_size(puzzle_arcade_board_, 480, 266);
+    lv_obj_align(puzzle_arcade_board_, LV_ALIGN_TOP_LEFT, 0, 52);
+    lv_obj_clear_flag(puzzle_arcade_board_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(puzzle_arcade_board_, PuzzleArcadeDrawCb, LV_EVENT_DRAW_MAIN, this);
+}
+
+void DesktopUI::ReleasePuzzleArcadePage() {
+    SetPuzzleMazeSampling(false);
+    puzzle_arcade_cover_request_id_.fetch_add(1, std::memory_order_relaxed);
+    if (puzzle_arcade_page_) {
+        lv_obj_delete(puzzle_arcade_page_);
+    }
+    puzzle_arcade_page_ = nullptr;
+    puzzle_arcade_home_group_ = nullptr;
+    puzzle_arcade_game_group_ = nullptr;
+    puzzle_arcade_cover_ = nullptr;
+    puzzle_arcade_cover_status_ = nullptr;
+    puzzle_arcade_title_ = nullptr;
+    puzzle_arcade_status_ = nullptr;
+    puzzle_arcade_board_ = nullptr;
+    memset(puzzle_arcade_game_cards_, 0, sizeof(puzzle_arcade_game_cards_));
+    memset(puzzle_arcade_game_labels_, 0, sizeof(puzzle_arcade_game_labels_));
+    QdPuzzleArcade::ReleaseImage(&puzzle_arcade_cover_frame_);
+    puzzle_arcade_view_ = PuzzleArcadeView::HOME;
+}
+
+void DesktopUI::ShowPuzzleArcadeHome() {
+    SetPuzzleMazeSampling(false);
+    puzzle_arcade_view_ = PuzzleArcadeView::HOME;
+    if (puzzle_arcade_home_group_) lv_obj_clear_flag(puzzle_arcade_home_group_, LV_OBJ_FLAG_HIDDEN);
+    if (puzzle_arcade_game_group_) lv_obj_add_flag(puzzle_arcade_game_group_, LV_OBJ_FLAG_HIDDEN);
+    SelectPuzzleArcadeGame(puzzle_arcade_selected_);
+}
+
+void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
+    puzzle_arcade_selected_ = game;
+    static constexpr uint32_t selected_colors[] = {
+        0xffedca, 0xf3e8fa, 0xe5f3e7, 0xfbe7ec, 0xe5f2fa
+    };
+    static constexpr uint32_t border_colors[] = {
+        0xd89a55, 0x9a73b4, 0x6f9a7c, 0xc96f8d, 0x6594b3
+    };
+    for (int i = 0; i < 5; ++i) {
+        if (!puzzle_arcade_game_cards_[i]) continue;
+        const bool selected = i == static_cast<int>(game);
+        lv_obj_set_style_bg_color(puzzle_arcade_game_cards_[i],
+                                  lv_color_hex(selected ? selected_colors[i] : 0xfffcfa), 0);
+        lv_obj_set_style_border_color(puzzle_arcade_game_cards_[i],
+                                      lv_color_hex(border_colors[i]), 0);
+        lv_obj_set_style_border_width(puzzle_arcade_game_cards_[i], selected ? 2 : 1, 0);
+        lv_obj_set_style_shadow_color(puzzle_arcade_game_cards_[i],
+                                      lv_color_hex(border_colors[i]), 0);
+        lv_obj_set_style_shadow_width(puzzle_arcade_game_cards_[i], selected ? 5 : 0, 0);
+        lv_obj_set_style_shadow_opa(puzzle_arcade_game_cards_[i],
+                                    selected ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+        if (puzzle_arcade_game_labels_[i]) {
+            lv_obj_set_style_text_color(puzzle_arcade_game_labels_[i],
+                                        lv_color_hex(0x453a48), 0);
+        }
+    }
+    if (puzzle_arcade_cover_status_) {
+        lv_label_set_text(puzzle_arcade_cover_status_,
+                          game == QdPuzzleArcade::Game::MOTION_MAZE ?
+                              "倾斜设备，带小猫走出迷宫" : PuzzleGameTitle(game));
+        lv_obj_clear_flag(puzzle_arcade_cover_status_, LV_OBJ_FLAG_HIDDEN);
+    }
+    LoadPuzzleArcadeCover();
+}
+
+void DesktopUI::LoadPuzzleArcadeCover() {
+    struct CoverPayload {
+        QdPuzzleArcade::Status status = QdPuzzleArcade::Status::IMAGE_MISSING;
+        QdPuzzleArcade::ImageFrame frame{};
+    };
+    void* storage = heap_caps_malloc(sizeof(CoverPayload), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    auto* worker = Application::GetInstance().GetBackgroundTask();
+    if (!storage || !worker) {
+        if (storage) heap_caps_free(storage);
+        if (puzzle_arcade_cover_status_) lv_label_set_text(puzzle_arcade_cover_status_, "封面加载服务不可用");
+        return;
+    }
+    auto* payload = new (storage) CoverPayload{};
+    const auto game = puzzle_arcade_selected_;
+    const uint32_t request =
+        puzzle_arcade_cover_request_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+    worker->Schedule([this, payload, game, request]() {
+        payload->status = QdPuzzleArcade::LoadCover(game, &payload->frame);
+        if (request != puzzle_arcade_cover_request_id_.load(std::memory_order_relaxed) ||
+            !lvgl_port_lock(500)) {
+            QdPuzzleArcade::ReleaseImage(&payload->frame);
+            payload->~CoverPayload();
+            heap_caps_free(payload);
+            return;
+        }
+        const bool current = current_page_ == DesktopPage::PUZZLE_ARCADE &&
+                             puzzle_arcade_page_ && puzzle_arcade_cover_ &&
+                             request == puzzle_arcade_cover_request_id_.load(std::memory_order_relaxed);
+        if (current && payload->status == QdPuzzleArcade::Status::OK) {
+            QdPuzzleArcade::ReleaseImage(&puzzle_arcade_cover_frame_);
+            puzzle_arcade_cover_frame_ = payload->frame;
+            payload->frame = {};
+            lv_image_set_src(puzzle_arcade_cover_, &puzzle_arcade_cover_frame_.dsc);
+            lv_obj_set_size(puzzle_arcade_cover_,
+                            puzzle_arcade_cover_frame_.dsc.header.w,
+                            puzzle_arcade_cover_frame_.dsc.header.h);
+            lv_obj_align(puzzle_arcade_cover_, LV_ALIGN_TOP_MID, 0, 8);
+            lv_obj_add_flag(puzzle_arcade_cover_status_, LV_OBJ_FLAG_HIDDEN);
+        } else if (current && puzzle_arcade_cover_status_) {
+            lv_label_set_text(puzzle_arcade_cover_status_,
+                              QdPuzzleArcade::StatusText(payload->status));
+            lv_obj_clear_flag(puzzle_arcade_cover_status_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lvgl_port_unlock();
+        QdPuzzleArcade::ReleaseImage(&payload->frame);
+        payload->~CoverPayload();
+        heap_caps_free(payload);
+    });
+}
+
+void DesktopUI::EnterPuzzleArcadeGame() {
+    SetPuzzleMazeSampling(false);
+    if (puzzle_arcade_home_group_) lv_obj_add_flag(puzzle_arcade_home_group_, LV_OBJ_FLAG_HIDDEN);
+    if (puzzle_arcade_game_group_) lv_obj_clear_flag(puzzle_arcade_game_group_, LV_OBJ_FLAG_HIDDEN);
+    if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::SUDOKU) {
+        puzzle_arcade_view_ = PuzzleArcadeView::SUDOKU;
+        LoadPuzzleSudoku();
+    } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::CODE_LOCK) {
+        puzzle_arcade_view_ = PuzzleArcadeView::CODE_LOCK;
+        LoadPuzzleLock();
+    } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::SOKOBAN) {
+        puzzle_arcade_view_ = PuzzleArcadeView::SOKOBAN;
+        LoadPuzzleSokoban(0);
+    } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::MATCH3) {
+        puzzle_arcade_view_ = PuzzleArcadeView::MATCH3;
+        LoadPuzzleMatch3();
+    } else {
+        puzzle_arcade_view_ = PuzzleArcadeView::MOTION_MAZE;
+        LoadPuzzleMaze(0);
+        SetPuzzleMazeSampling(true);
+    }
+}
+
+void DesktopUI::LoadPuzzleSudoku() {
+    const auto status = QdPuzzleArcade::LoadRandomSudoku(&puzzle_sudoku_);
+    memset(puzzle_sudoku_values_, 0, sizeof(puzzle_sudoku_values_));
+    for (int i = 0; i < 81; ++i) {
+        puzzle_sudoku_values_[i] = puzzle_sudoku_.puzzle[i] == '.' ? 0 : puzzle_sudoku_.puzzle[i];
+    }
+    puzzle_sudoku_selected_cell_ = -1;
+    lv_label_set_text(puzzle_arcade_title_, "数独花园");
+    lv_label_set_text(puzzle_arcade_status_,
+                      status == QdPuzzleArcade::Status::OK ? "点选空格，再选数字" :
+                                                            QdPuzzleArcade::StatusText(status));
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::LoadPuzzleLock() {
+    const auto status = QdPuzzleArcade::LoadRandomLockChallenge(&puzzle_lock_);
+    puzzle_lock_input_len_ = 0;
+    puzzle_lock_input_[0] = '\0';
+    puzzle_lock_guess_count_ = 0;
+    memset(puzzle_lock_guesses_, 0, sizeof(puzzle_lock_guesses_));
+    memset(puzzle_lock_exact_, 0, sizeof(puzzle_lock_exact_));
+    memset(puzzle_lock_misplaced_, 0, sizeof(puzzle_lock_misplaced_));
+    lv_label_set_text(puzzle_arcade_title_, "密码侦探");
+    lv_label_set_text(puzzle_arcade_status_,
+                      status == QdPuzzleArcade::Status::OK ? "破解四位不重复数字" :
+                                                            QdPuzzleArcade::StatusText(status));
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::LoadPuzzleSokoban(int delta) {
+    if (delta < 0 && puzzle_sokoban_level_index_ > 0) --puzzle_sokoban_level_index_;
+    if (delta > 0 && (puzzle_sokoban_level_count_ == 0 ||
+                      puzzle_sokoban_level_index_ + 1 < puzzle_sokoban_level_count_)) {
+        ++puzzle_sokoban_level_index_;
+    }
+    const auto status = QdPuzzleArcade::LoadSokobanLevel(
+        puzzle_sokoban_level_index_, &puzzle_sokoban_, &puzzle_sokoban_level_count_);
+    memcpy(puzzle_sokoban_cells_, puzzle_sokoban_.cells, sizeof(puzzle_sokoban_cells_));
+    puzzle_sokoban_moves_ = 0;
+    puzzle_sokoban_pushes_ = 0;
+    lv_label_set_text(puzzle_arcade_title_, "萌宠推箱");
+    char text[80];
+    if (status == QdPuzzleArcade::Status::OK) {
+        snprintf(text, sizeof(text), "第 %u/%u 关 · %s",
+                 puzzle_sokoban_level_index_ + 1, puzzle_sokoban_level_count_,
+                 puzzle_sokoban_.name);
+    } else {
+        snprintf(text, sizeof(text), "%s", QdPuzzleArcade::StatusText(status));
+    }
+    lv_label_set_text(puzzle_arcade_status_, text);
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::MovePuzzleSokoban(int dx, int dy) {
+    const int width = puzzle_sokoban_.width;
+    const int height = puzzle_sokoban_.height;
+    int player = -1;
+    for (int y = 0; y < height && player < 0; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const char c = puzzle_sokoban_cells_[y * QdPuzzleArcade::kSokobanMaxWidth + x];
+            if (c == '@' || c == '+') player = y * QdPuzzleArcade::kSokobanMaxWidth + x;
+        }
+    }
+    if (player < 0) return;
+    const int px = player % QdPuzzleArcade::kSokobanMaxWidth;
+    const int py = player / QdPuzzleArcade::kSokobanMaxWidth;
+    const int nx = px + dx, ny = py + dy, bx = nx + dx, by = ny + dy;
+    if (nx < 0 || ny < 0 || nx >= width || ny >= height) return;
+    const int next = ny * QdPuzzleArcade::kSokobanMaxWidth + nx;
+    char target = puzzle_sokoban_cells_[next];
+    if (target == '#') return;
+    if (target == '$' || target == '*') {
+        if (bx < 0 || by < 0 || bx >= width || by >= height) return;
+        const int beyond = by * QdPuzzleArcade::kSokobanMaxWidth + bx;
+        const char beyond_cell = puzzle_sokoban_cells_[beyond];
+        if (beyond_cell != ' ' && beyond_cell != '.') return;
+        puzzle_sokoban_cells_[beyond] = beyond_cell == '.' ? '*' : '$';
+        puzzle_sokoban_cells_[next] = target == '*' ? '.' : ' ';
+        ++puzzle_sokoban_pushes_;
+    }
+    const char old = puzzle_sokoban_cells_[player];
+    target = puzzle_sokoban_cells_[next];
+    puzzle_sokoban_cells_[player] = old == '+' ? '.' : ' ';
+    puzzle_sokoban_cells_[next] = target == '.' ? '+' : '@';
+    ++puzzle_sokoban_moves_;
+    bool won = true;
+    for (char c : puzzle_sokoban_cells_) won = won && c != '$';
+    char text[80];
+    snprintf(text, sizeof(text), won ? "过关啦！步数 %u · 推动 %u" : "步数 %u · 推动 %u",
+             puzzle_sokoban_moves_, puzzle_sokoban_pushes_);
+    lv_label_set_text(puzzle_arcade_status_, text);
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::LoadPuzzleMatch3() {
+    const auto status = QdPuzzleArcade::LoadRandomMatch3Level(&puzzle_match3_);
+    puzzle_match3_score_ = 0;
+    puzzle_match3_selected_ = -1;
+    puzzle_match3_moves_left_ =
+        status == QdPuzzleArcade::Status::OK ? puzzle_match3_.moves : 0;
+    for (int row = 0; row < 8; ++row) {
+        for (int col = 0; col < 8; ++col) {
+            uint8_t value = 0;
+            do {
+                value = static_cast<uint8_t>(esp_random() % 6);
+            } while ((col >= 2 && puzzle_match3_cells_[row * 8 + col - 1] == value &&
+                      puzzle_match3_cells_[row * 8 + col - 2] == value) ||
+                     (row >= 2 && puzzle_match3_cells_[(row - 1) * 8 + col] == value &&
+                      puzzle_match3_cells_[(row - 2) * 8 + col] == value));
+            puzzle_match3_cells_[row * 8 + col] = value;
+        }
+    }
+    lv_label_set_text(puzzle_arcade_title_, "甜点消消乐");
+    char text[96];
+    if (status == QdPuzzleArcade::Status::OK) {
+        snprintf(text, sizeof(text), "%s · 目标 %u · %u 步",
+                 puzzle_match3_.name, puzzle_match3_.target_score, puzzle_match3_.moves);
+    } else {
+        snprintf(text, sizeof(text), "%s", QdPuzzleArcade::StatusText(status));
+    }
+    lv_label_set_text(puzzle_arcade_status_, text);
+    RefreshPuzzleArcadeBoard();
+}
+
+bool DesktopUI::ResolvePuzzleMatch3() {
+    bool any = false;
+    for (int cascade = 0; cascade < 8; ++cascade) {
+        bool marked[64]{};
+        bool found = false;
+        for (int row = 0; row < 8; ++row) {
+            for (int col = 0; col < 6; ++col) {
+                const uint8_t value = puzzle_match3_cells_[row * 8 + col];
+                if (value == puzzle_match3_cells_[row * 8 + col + 1] &&
+                    value == puzzle_match3_cells_[row * 8 + col + 2]) {
+                    found = true;
+                    int end = col + 3;
+                    while (end < 8 && puzzle_match3_cells_[row * 8 + end] == value) ++end;
+                    for (int x = col; x < end; ++x) marked[row * 8 + x] = true;
+                    col = end - 2;
+                }
+            }
+        }
+        for (int col = 0; col < 8; ++col) {
+            for (int row = 0; row < 6; ++row) {
+                const uint8_t value = puzzle_match3_cells_[row * 8 + col];
+                if (value == puzzle_match3_cells_[(row + 1) * 8 + col] &&
+                    value == puzzle_match3_cells_[(row + 2) * 8 + col]) {
+                    found = true;
+                    int end = row + 3;
+                    while (end < 8 && puzzle_match3_cells_[end * 8 + col] == value) ++end;
+                    for (int y = row; y < end; ++y) marked[y * 8 + col] = true;
+                    row = end - 2;
+                }
+            }
+        }
+        if (!found) break;
+        any = true;
+        for (bool cell : marked) if (cell) puzzle_match3_score_ += 10;
+        for (int col = 0; col < 8; ++col) {
+            int write = 7;
+            for (int row = 7; row >= 0; --row) {
+                if (!marked[row * 8 + col]) {
+                    puzzle_match3_cells_[write-- * 8 + col] =
+                        puzzle_match3_cells_[row * 8 + col];
+                }
+            }
+            while (write >= 0) puzzle_match3_cells_[write-- * 8 + col] = esp_random() % 6;
+        }
+    }
+    return any;
+}
+
+void DesktopUI::SetPuzzleMazeSamplingCallback(std::function<void(bool)> callback) {
+    puzzle_maze_sampling_callback_ = std::move(callback);
+}
+
+void DesktopUI::SetPuzzleMazeSampling(bool active) {
+    if (puzzle_maze_sampling_callback_) {
+        puzzle_maze_sampling_callback_(active);
+    }
+}
+
+void DesktopUI::LoadPuzzleMaze(int delta) {
+    if (delta < 0 && puzzle_maze_level_index_ > 0) {
+        --puzzle_maze_level_index_;
+    }
+    if (delta > 0 &&
+        (puzzle_maze_level_count_ == 0 ||
+         puzzle_maze_level_index_ + 1 < puzzle_maze_level_count_)) {
+        ++puzzle_maze_level_index_;
+    }
+    const auto status = QdPuzzleArcade::LoadMazeLevel(
+        puzzle_maze_level_index_, &puzzle_maze_, &puzzle_maze_level_count_);
+    puzzle_maze_moves_ = 0;
+    puzzle_maze_won_ = false;
+    puzzle_maze_player_x_ = 0;
+    puzzle_maze_player_y_ = 0;
+    puzzle_maze_baseline_y_ = 0;
+    puzzle_maze_baseline_z_ = 0;
+    puzzle_maze_filtered_y_ = 0;
+    puzzle_maze_filtered_z_ = 0;
+    puzzle_maze_calibration_samples_ = 0;
+    puzzle_maze_last_move_ms_ = 0;
+    if (status == QdPuzzleArcade::Status::OK) {
+        for (int y = 0; y < puzzle_maze_.height; ++y) {
+            for (int x = 0; x < puzzle_maze_.width; ++x) {
+                if (puzzle_maze_.cells[y * QdPuzzleArcade::kMazeMaxWidth + x] == 'S') {
+                    puzzle_maze_player_x_ = x;
+                    puzzle_maze_player_y_ = y;
+                }
+            }
+        }
+    }
+    lv_label_set_text(puzzle_arcade_title_, "体感迷宫");
+    char text[80];
+    if (status == QdPuzzleArcade::Status::OK) {
+        snprintf(text, sizeof(text), "第 %u/%u 关 · 请平放校准",
+                 puzzle_maze_level_index_ + 1, puzzle_maze_level_count_);
+    } else {
+        snprintf(text, sizeof(text), "%s", QdPuzzleArcade::StatusText(status));
+    }
+    lv_label_set_text(puzzle_arcade_status_, text);
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::MovePuzzleMaze(int dx, int dy) {
+    if (puzzle_maze_won_ || (dx == 0 && dy == 0)) return;
+    const int nx = puzzle_maze_player_x_ + dx;
+    const int ny = puzzle_maze_player_y_ + dy;
+    if (nx < 0 || ny < 0 || nx >= puzzle_maze_.width || ny >= puzzle_maze_.height) return;
+    const char target =
+        puzzle_maze_.cells[ny * QdPuzzleArcade::kMazeMaxWidth + nx];
+    if (target == '#') return;
+    puzzle_maze_player_x_ = nx;
+    puzzle_maze_player_y_ = ny;
+    ++puzzle_maze_moves_;
+    if (target == 'G') {
+        puzzle_maze_won_ = true;
+        SetPuzzleMazeSampling(false);
+        char text[72];
+        snprintf(text, sizeof(text), "到达终点！共移动 %u 步", puzzle_maze_moves_);
+        lv_label_set_text(puzzle_arcade_status_, text);
+    } else {
+        char text[72];
+        snprintf(text, sizeof(text), "倾斜控制小猫 · %u 步", puzzle_maze_moves_);
+        lv_label_set_text(puzzle_arcade_status_, text);
+    }
+}
+
+void DesktopUI::UpdatePuzzleMazeMotion(int16_t accel_y, int16_t accel_z,
+                                       int64_t sample_ms) {
+    if (current_page_ != DesktopPage::PUZZLE_ARCADE ||
+        puzzle_arcade_view_ != PuzzleArcadeView::MOTION_MAZE ||
+        puzzle_maze_won_) {
+        return;
+    }
+    constexpr int kCalibrationSamples = 12;
+    if (puzzle_maze_calibration_samples_ < kCalibrationSamples) {
+        const int n = puzzle_maze_calibration_samples_;
+        puzzle_maze_baseline_y_ =
+            static_cast<int16_t>((puzzle_maze_baseline_y_ * n + accel_y) / (n + 1));
+        puzzle_maze_baseline_z_ =
+            static_cast<int16_t>((puzzle_maze_baseline_z_ * n + accel_z) / (n + 1));
+        puzzle_maze_filtered_y_ = accel_y;
+        puzzle_maze_filtered_z_ = accel_z;
+        ++puzzle_maze_calibration_samples_;
+        if (puzzle_maze_calibration_samples_ == kCalibrationSamples) {
+            lv_label_set_text(puzzle_arcade_status_, "校准完成 · 轻轻倾斜设备");
+        }
+        RefreshPuzzleArcadeBoard();
+        return;
+    }
+
+    puzzle_maze_filtered_y_ =
+        static_cast<int16_t>((puzzle_maze_filtered_y_ * 3 + accel_y) / 4);
+    puzzle_maze_filtered_z_ =
+        static_cast<int16_t>((puzzle_maze_filtered_z_ * 3 + accel_z) / 4);
+    const int tilt_x = puzzle_maze_filtered_y_ - puzzle_maze_baseline_y_;
+    const int tilt_y = puzzle_maze_filtered_z_ - puzzle_maze_baseline_z_;
+    // A gentle 4-6 degree tilt is enough to move one cell. The original
+    // threshold was too high for this board's landscape mounting and made
+    // blocked opening directions feel completely unresponsive.
+    constexpr int kTiltThreshold = 110;
+    constexpr int64_t kMoveRepeatMs = 220;
+    if (sample_ms - puzzle_maze_last_move_ms_ >= kMoveRepeatMs) {
+        int dx = 0;
+        int dy = 0;
+        if (std::abs(tilt_x) >= std::abs(tilt_y) &&
+            std::abs(tilt_x) >= kTiltThreshold) {
+            dx = tilt_x > 0 ? -1 : 1;
+        } else if (std::abs(tilt_y) >= kTiltThreshold) {
+            dy = tilt_y > 0 ? -1 : 1;
+        }
+        if (dx != 0 || dy != 0) {
+            MovePuzzleMaze(dx, dy);
+            puzzle_maze_last_move_ms_ = sample_ms;
+        }
+    }
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::RefreshPuzzleArcadeBoard() {
+    if (puzzle_arcade_board_) lv_obj_invalidate(puzzle_arcade_board_);
+}
+
+bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
+    auto hit = [x, y](int l, int t, int w, int h) {
+        return x >= l && x < l + w && y >= t && y < t + h;
+    };
+    if (puzzle_arcade_view_ == PuzzleArcadeView::HOME) {
+        if (hit(222, 72, 244, 190)) {
+            const int item = (y - 72) / 38;
+            if (item >= 0 && item < 5) {
+                SelectPuzzleArcadeGame(static_cast<QdPuzzleArcade::Game>(item));
+            }
+        } else if (hit(222, 266, 154, 36)) {
+            EnterPuzzleArcadeGame();
+        } else if (hit(384, 266, 82, 36)) {
+            NavigateBack();
+        }
+        return true;
+    }
+    if (hit(398, 10, 70, 36)) {
+        ShowPuzzleArcadeHome();
+        return true;
+    }
+    const int by = static_cast<int>(y) - 52;
+    auto board_hit = [x, by](int l, int t, int w, int h) {
+        return x >= l && x < l + w && by >= t && by < t + h;
+    };
+    if (puzzle_arcade_view_ == PuzzleArcadeView::SUDOKU) {
+        if (x >= kPuzzleGridX && x < kPuzzleGridX + 9 * kPuzzleCell &&
+            by >= kPuzzleGridY && by < kPuzzleGridY + 9 * kPuzzleCell) {
+            const int col = (x - kPuzzleGridX) / kPuzzleCell;
+            const int row = (by - kPuzzleGridY) / kPuzzleCell;
+            const int index = row * 9 + col;
+            if (puzzle_sudoku_.puzzle[index] == '.') puzzle_sudoku_selected_cell_ = index;
+        } else if (x >= 286 && x < 448 && by >= 12 && by < 174) {
+            const int col = (x - 286) / 54;
+            const int row = (by - 12) / 54;
+            const int number = row * 3 + col + 1;
+            if (number <= 9 && puzzle_sudoku_selected_cell_ >= 0) {
+                puzzle_sudoku_values_[puzzle_sudoku_selected_cell_] = '0' + number;
+            }
+        } else if (board_hit(286, 236, 74, 28)) {
+            LoadPuzzleSudoku();
+        } else if (board_hit(370, 236, 78, 28) && puzzle_sudoku_selected_cell_ >= 0) {
+            puzzle_sudoku_values_[puzzle_sudoku_selected_cell_] = 0;
+        } else if (board_hit(286, 194, 162, 32)) {
+            bool full = true, correct = true;
+            for (int i = 0; i < 81; ++i) {
+                full = full && puzzle_sudoku_values_[i] != 0;
+                correct = correct && puzzle_sudoku_values_[i] == puzzle_sudoku_.solution[i];
+            }
+            lv_label_set_text(puzzle_arcade_status_,
+                              correct ? "全部正确，太棒啦！" :
+                              (full ? "还有数字需要调整" : "继续加油，还没有填完"));
+        }
+        RefreshPuzzleArcadeBoard();
+        return true;
+    }
+    if (puzzle_arcade_view_ == PuzzleArcadeView::CODE_LOCK) {
+        if (x >= 282 && x < 444 && by >= 10 && by < 226) {
+            const int col = (x - 282) / 54;
+            const int row = (by - 10) / 54;
+            const int digit = row * 3 + col + 1;
+            if (digit >= 1 && digit <= 9 && puzzle_lock_input_len_ < 4) {
+                puzzle_lock_input_[puzzle_lock_input_len_++] = '0' + digit;
+                puzzle_lock_input_[puzzle_lock_input_len_] = '\0';
+            }
+        } else if (board_hit(282, 236, 50, 28) && puzzle_lock_input_len_ < 4) {
+            puzzle_lock_input_[puzzle_lock_input_len_++] = '0';
+            puzzle_lock_input_[puzzle_lock_input_len_] = '\0';
+        } else if (board_hit(338, 236, 50, 28) && puzzle_lock_input_len_ > 0) {
+            puzzle_lock_input_[--puzzle_lock_input_len_] = '\0';
+        } else if (board_hit(394, 236, 54, 28) && puzzle_lock_input_len_ == 4 &&
+                   puzzle_lock_guess_count_ < 8) {
+            bool unique = true;
+            for (int i = 0; i < 4; ++i) for (int j = i + 1; j < 4; ++j)
+                unique = unique && puzzle_lock_input_[i] != puzzle_lock_input_[j];
+            if (!unique) {
+                lv_label_set_text(puzzle_arcade_status_, "四个数字不能重复");
+            } else {
+                const int row = puzzle_lock_guess_count_;
+                memcpy(puzzle_lock_guesses_[row], puzzle_lock_input_, 5);
+                for (int i = 0; i < 4; ++i) {
+                    if (puzzle_lock_input_[i] == puzzle_lock_.code[i]) {
+                        ++puzzle_lock_exact_[row];
+                    } else if (strchr(puzzle_lock_.code, puzzle_lock_input_[i])) {
+                        ++puzzle_lock_misplaced_[row];
+                    }
+                }
+                ++puzzle_lock_guess_count_;
+                puzzle_lock_input_len_ = 0;
+                puzzle_lock_input_[0] = '\0';
+                lv_label_set_text(puzzle_arcade_status_,
+                    puzzle_lock_exact_[row] == 4 ? "密码破解成功！" : "A=位置正确，B=数字正确");
+            }
+        } else if (board_hit(18, 236, 92, 28)) {
+            LoadPuzzleLock();
+        }
+        RefreshPuzzleArcadeBoard();
+        return true;
+    }
+    if (puzzle_arcade_view_ == PuzzleArcadeView::SOKOBAN) {
+        if (board_hit(348, 20, 46, 46)) MovePuzzleSokoban(0, -1);
+        else if (board_hit(298, 70, 46, 46)) MovePuzzleSokoban(-1, 0);
+        else if (board_hit(348, 70, 46, 46)) MovePuzzleSokoban(0, 1);
+        else if (board_hit(398, 70, 46, 46)) MovePuzzleSokoban(1, 0);
+        else if (board_hit(286, 236, 50, 28)) LoadPuzzleSokoban(-1);
+        else if (board_hit(342, 236, 50, 28)) LoadPuzzleSokoban(0);
+        else if (board_hit(398, 236, 50, 28)) LoadPuzzleSokoban(1);
+        return true;
+    }
+    if (puzzle_arcade_view_ == PuzzleArcadeView::MATCH3) {
+        const int grid_y = 60;
+        if (x >= 14 && x < 238 && y >= grid_y && y < grid_y + 224 &&
+            puzzle_match3_moves_left_ > 0) {
+            const int col = (x - 14) / 28;
+            const int row = (y - grid_y) / 28;
+            const int index = row * 8 + col;
+            if (puzzle_match3_selected_ < 0) {
+                puzzle_match3_selected_ = index;
+            } else {
+                const int old = puzzle_match3_selected_;
+                const int old_row = old / 8, old_col = old % 8;
+                if (std::abs(old_row - row) + std::abs(old_col - col) == 1) {
+                    std::swap(puzzle_match3_cells_[old], puzzle_match3_cells_[index]);
+                    if (ResolvePuzzleMatch3()) {
+                        --puzzle_match3_moves_left_;
+                    } else {
+                        std::swap(puzzle_match3_cells_[old], puzzle_match3_cells_[index]);
+                        lv_label_set_text(puzzle_arcade_status_, "这一步不能消除，再试试");
+                    }
+                    char text[80];
+                    if (puzzle_match3_score_ >= puzzle_match3_.target_score) {
+                        snprintf(text, sizeof(text), "目标完成！得分 %u", puzzle_match3_score_);
+                    } else if (puzzle_match3_moves_left_ == 0) {
+                        snprintf(text, sizeof(text), "步数用完啦 · 得分 %u", puzzle_match3_score_);
+                    } else {
+                        snprintf(text, sizeof(text), "得分 %u/%u · 剩余 %u 步",
+                                 puzzle_match3_score_, puzzle_match3_.target_score,
+                                 puzzle_match3_moves_left_);
+                    }
+                    lv_label_set_text(puzzle_arcade_status_, text);
+                    puzzle_match3_selected_ = -1;
+                } else {
+                    puzzle_match3_selected_ = index;
+                }
+            }
+        } else if (board_hit(292, 234, 136, 30)) {
+            LoadPuzzleMatch3();
+        }
+        RefreshPuzzleArcadeBoard();
+        return true;
+    }
+    if (puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
+        if (board_hit(364, 140, 96, 30)) {
+            puzzle_maze_calibration_samples_ = 0;
+            puzzle_maze_baseline_y_ = 0;
+            puzzle_maze_baseline_z_ = 0;
+            lv_label_set_text(puzzle_arcade_status_, "请平放设备，正在重新校准");
+            SetPuzzleMazeSampling(true);
+        } else if (board_hit(364, 178, 96, 30)) {
+            LoadPuzzleMaze(0);
+            SetPuzzleMazeSampling(true);
+        } else if (board_hit(364, 226, 44, 32)) {
+            LoadPuzzleMaze(-1);
+            SetPuzzleMazeSampling(true);
+        } else if (board_hit(416, 226, 44, 32)) {
+            LoadPuzzleMaze(1);
+            SetPuzzleMazeSampling(true);
+        }
+        RefreshPuzzleArcadeBoard();
+        return true;
+    }
+    return true;
+}
+
+void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
+    auto* self = static_cast<DesktopUI*>(lv_event_get_user_data(event));
+    auto* object = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_layer_t* layer = lv_event_get_layer(event);
+    if (!self || !object || !layer) return;
+    lv_area_t object_area;
+    lv_obj_get_coords(object, &object_area);
+    const int ox = object_area.x1, oy = object_area.y1;
+    // Game art uses its own high-contrast palette. Global themes include a
+    // light-on-dark classic palette, which made digits disappear on pastel
+    // puzzle cards.
+    const lv_color_t game_ink = lv_color_hex(0x403744);
+    const lv_color_t game_muted = lv_color_hex(0x715f70);
+    const lv_color_t game_purple = lv_color_hex(0x76508f);
+    const lv_color_t game_green = lv_color_hex(0x47785f);
+    const lv_color_t game_gold = lv_color_hex(0xb66f25);
+    const lv_color_t game_pink = lv_color_hex(0xc95f7e);
+    const lv_color_t game_line = lv_color_hex(0xd8c4ca);
+    const lv_color_t game_paper = lv_color_hex(0xfffbf7);
+    auto rect = [&](int x, int y, int w, int h, lv_color_t color, int radius = 5,
+                    lv_color_t border = COLOR_LINE, int border_width = 1,
+                    bool shadow = false) {
+        lv_draw_rect_dsc_t d;
+        lv_draw_rect_dsc_init(&d);
+        d.bg_color = color; d.bg_opa = LV_OPA_COVER; d.radius = radius;
+        d.border_color = border; d.border_width = border_width; d.border_opa = LV_OPA_COVER;
+        if (shadow) {
+            d.shadow_color = lv_color_hex(0x9b7d68);
+            d.shadow_width = 5;
+            d.shadow_offset_y = 2;
+            d.shadow_opa = LV_OPA_20;
+        }
+        lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_rect(layer, &d, &a);
+    };
+    auto text = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                    const lv_font_t* font = qd_cn_font_16(),
+                    lv_text_align_t align = LV_TEXT_ALIGN_CENTER) {
+        lv_draw_label_dsc_t d;
+        lv_draw_label_dsc_init(&d);
+        d.color = color; d.font = font; d.text = value; d.align = align;
+        // Custom draw tasks are rendered after this callback returns. Copy all
+        // text so stack-built digits and score strings remain valid.
+        d.text_local = 1;
+        lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_label(layer, &d, &a);
+    };
+    auto button = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                      const lv_font_t* font = qd_cn_font_16()) {
+        const lv_color_t fill = lv_color_mix(color, game_paper, 84);
+        rect(x, y, w, h, fill, 11, color, 2, false);
+        text(x, y + 2, w, h - 2, value, game_ink, font);
+    };
+
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::SUDOKU) {
+        rect(8, 2, 258, 252, game_paper, 13, game_gold, 2, true);
+        rect(278, 2, 184, 184, lv_color_hex(0xf8f1fb), 15, game_purple, 2, true);
+        for (int row = 0; row < 9; ++row) {
+            for (int col = 0; col < 9; ++col) {
+                const int index = row * 9 + col;
+                const bool selected = index == self->puzzle_sudoku_selected_cell_;
+                const bool alternate = ((row / 3) + (col / 3)) % 2;
+                rect(kPuzzleGridX + col * kPuzzleCell, kPuzzleGridY + row * kPuzzleCell,
+                     kPuzzleCell, kPuzzleCell,
+                     selected ? lv_color_hex(0xffdfa0) :
+                     (alternate ? lv_color_hex(0xfff2dc) : game_paper), 2,
+                     (row % 3 == 0 || col % 3 == 0) ? game_gold : game_line,
+                     (row % 3 == 0 || col % 3 == 0) ? 2 : 1);
+                const char value = self->puzzle_sudoku_values_[index];
+                if (value) {
+                    char label[2]{value, 0};
+                    text(kPuzzleGridX + col * kPuzzleCell,
+                         kPuzzleGridY + row * kPuzzleCell + 3,
+                         kPuzzleCell, kPuzzleCell - 3, label,
+                         self->puzzle_sudoku_.puzzle[index] == '.' ? game_purple : game_ink,
+                         &lv_font_montserrat_20);
+                }
+            }
+        }
+        for (int n = 1; n <= 9; ++n) {
+            char label[2]{static_cast<char>('0' + n), 0};
+            button(286 + ((n - 1) % 3) * 54, 12 + ((n - 1) / 3) * 54,
+                   48, 48, label, game_purple, &lv_font_montserrat_20);
+        }
+        button(286, 194, 162, 32, "检查答案", game_green);
+        button(286, 236, 74, 28, "新题", game_gold);
+        button(370, 236, 78, 28, "清除", game_purple);
+        return;
+    }
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::CODE_LOCK) {
+        rect(10, 2, 252, 226, game_paper, 15, game_gold, 2, true);
+        rect(274, 2, 188, 226, lv_color_hex(0xf8f1fb), 15, game_purple, 2, true);
+        rect(18, 10, 236, 46, lv_color_hex(0xfff5e8), 14, game_purple, 2, false);
+        char input[12] = "_  _  _  _";
+        for (int i = 0; i < self->puzzle_lock_input_len_; ++i) input[i * 3] = self->puzzle_lock_input_[i];
+        text(18, 18, 236, 28, input, game_purple, &lv_font_montserrat_20);
+        text(18, 62, 236, 22, "侦探记录", game_ink, qd_cn_font_16(), LV_TEXT_ALIGN_LEFT);
+        for (int i = 0; i < self->puzzle_lock_guess_count_; ++i) {
+            char line[32];
+            snprintf(line, sizeof(line), "%d.  %s    %uA %uB", i + 1,
+                     self->puzzle_lock_guesses_[i], self->puzzle_lock_exact_[i],
+                     self->puzzle_lock_misplaced_[i]);
+            text(18, 86 + i * 18, 236, 18, line, game_ink,
+                 &lv_font_montserrat_14, LV_TEXT_ALIGN_LEFT);
+        }
+        for (int n = 1; n <= 9; ++n) {
+            char label[2]{static_cast<char>('0' + n), 0};
+            button(282 + ((n - 1) % 3) * 54, 10 + ((n - 1) / 3) * 54,
+                   48, 48, label, game_purple, &lv_font_montserrat_20);
+        }
+        button(18, 236, 92, 28, "新密码", game_gold);
+        button(282, 236, 50, 28, "0", game_purple);
+        button(338, 236, 50, 28, "删", game_gold);
+        button(394, 236, 54, 28, "确定", game_green);
+        return;
+    }
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::SOKOBAN) {
+        const int width = self->puzzle_sokoban_.width;
+        const int height = self->puzzle_sokoban_.height;
+        const int tile = std::min(28, std::min(260 / std::max(1, width),
+                                               224 / std::max(1, height)));
+        const int start_x = 12 + (260 - width * tile) / 2;
+        const int start_y = 12 + (224 - height * tile) / 2;
+        rect(8, 2, 264, 232, lv_color_hex(0xeff8f1), 15, game_green, 2, true);
+        rect(282, 2, 180, 184, game_paper, 15, game_gold, 2, true);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const char c = self->puzzle_sokoban_cells_[
+                    y * QdPuzzleArcade::kSokobanMaxWidth + x];
+                lv_color_t floor = (x + y) % 2 ? lv_color_hex(0xfff3df) : game_paper;
+                rect(start_x + x * tile, start_y + y * tile, tile, tile,
+                     c == '#' ? lv_color_hex(0x806552) : floor, 3, game_line, 1);
+                if (c == '.' || c == '*' || c == '+') {
+                    rect(start_x + x * tile + tile / 3, start_y + y * tile + tile / 3,
+                         std::max(5, tile / 3), std::max(5, tile / 3),
+                         game_gold, LV_RADIUS_CIRCLE, game_gold, 0);
+                }
+                if (c == '$' || c == '*') {
+                    rect(start_x + x * tile + 3, start_y + y * tile + 3,
+                         tile - 6, tile - 6, lv_color_hex(0xe6a85c), 5, game_gold, 2);
+                    rect(start_x + x * tile + tile / 2 - 2, start_y + y * tile + 6,
+                         4, tile - 12, lv_color_hex(0xffd98a), 2,
+                         lv_color_hex(0xffd98a), 0);
+                    rect(start_x + x * tile + 6, start_y + y * tile + tile / 2 - 2,
+                         tile - 12, 4, lv_color_hex(0xffd98a), 2,
+                         lv_color_hex(0xffd98a), 0);
+                }
+                if (c == '@' || c == '+') {
+                    rect(start_x + x * tile + 3, start_y + y * tile + 3,
+                         tile - 6, tile - 6, lv_color_hex(0xd7b5e9),
+                         LV_RADIUS_CIRCLE, game_purple, 2);
+                    const int face_x = start_x + x * tile;
+                    const int face_y = start_y + y * tile;
+                    rect(face_x + tile / 3, face_y + tile / 3,
+                         3, 4, game_ink, LV_RADIUS_CIRCLE, game_ink, 0);
+                    rect(face_x + tile * 2 / 3 - 2, face_y + tile / 3,
+                         3, 4, game_ink, LV_RADIUS_CIRCLE, game_ink, 0);
+                    rect(face_x + tile / 3, face_y + tile * 2 / 3,
+                         tile / 3, 2, game_ink, 1, game_ink, 0);
+                }
+            }
+        }
+        button(348, 20, 46, 46, "上", game_green);
+        button(298, 70, 46, 46, "左", game_green);
+        button(348, 70, 46, 46, "下", game_green);
+        button(398, 70, 46, 46, "右", game_green);
+        text(286, 132, 162, 52, "把星星箱子\n推到金色圆点", game_ink);
+        button(286, 236, 50, 28, "上关", game_gold);
+        button(342, 236, 50, 28, "重来", game_purple);
+        button(398, 236, 50, 28, "下关", game_green);
+        return;
+    }
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
+        const int width = self->puzzle_maze_.width;
+        const int height = self->puzzle_maze_.height;
+        const int tile = std::min(19, std::min(323 / std::max(1, width),
+                                               209 / std::max(1, height)));
+        const int start_x = 15 + (323 - width * tile) / 2;
+        const int start_y = 10 + (209 - height * tile) / 2;
+        rect(8, 2, 338, 226, lv_color_hex(0xf2f7fb), 16,
+             lv_color_hex(0x6b94ad), 2, true);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const char cell =
+                    self->puzzle_maze_.cells[y * QdPuzzleArcade::kMazeMaxWidth + x];
+                const int px = start_x + x * tile;
+                const int py = start_y + y * tile;
+                if (cell == '#') {
+                    rect(px, py, tile, tile, lv_color_hex(0x64859b), 3,
+                         lv_color_hex(0x4c6c80), 1);
+                    rect(px + 3, py + 3, std::max(3, tile - 6), 3,
+                         lv_color_hex(0x91b0c2), 2, lv_color_hex(0x91b0c2), 0);
+                } else {
+                    const lv_color_t floor =
+                        (x + y) % 2 ? lv_color_hex(0xfffaf3) : lv_color_hex(0xfff4e6);
+                    rect(px, py, tile, tile, floor, 2, lv_color_hex(0xeadfd2), 1);
+                }
+                if (cell == 'G') {
+                    rect(px + 3, py + 3, tile - 6, tile - 6,
+                         lv_color_hex(0xf4c85d), LV_RADIUS_CIRCLE,
+                         lv_color_hex(0xb66f25), 1);
+                    rect(px + tile / 2 - 2, py + tile / 2 - 2, 4, 4,
+                         game_paper, LV_RADIUS_CIRCLE, game_paper, 0);
+                }
+            }
+        }
+        if (width > 0 && height > 0) {
+            const int px = start_x + self->puzzle_maze_player_x_ * tile;
+            const int py = start_y + self->puzzle_maze_player_y_ * tile;
+            rect(px + 2, py + 3, tile - 4, tile - 5,
+                 lv_color_hex(0xe995ad), LV_RADIUS_CIRCLE, game_pink, 1, true);
+            rect(px + 4, py + 1, 5, 6, lv_color_hex(0xe995ad), 2, game_pink, 1);
+            rect(px + tile - 9, py + 1, 5, 6, lv_color_hex(0xe995ad), 2,
+                 game_pink, 1);
+            rect(px + 6, py + 8, 2, 2, game_ink, LV_RADIUS_CIRCLE, game_ink, 0);
+            rect(px + tile - 8, py + 8, 2, 2, game_ink,
+                 LV_RADIUS_CIRCLE, game_ink, 0);
+        }
+
+        rect(354, 2, 118, 216, game_paper, 16, lv_color_hex(0x6b94ad), 2, true);
+        text(362, 14, 102, 22, "倾斜导航", game_ink);
+        text(362, 38, 102, 20,
+             self->puzzle_maze_calibration_samples_ < 12 ? "平放校准中" : "轻倾即可移动",
+             game_muted);
+        rect(377, 64, 72, 62, lv_color_hex(0xeaf3f8), 14,
+             lv_color_hex(0x92b4c8), 1);
+        rect(411, 72, 3, 46, lv_color_hex(0xc2d7e3), 2,
+             lv_color_hex(0xc2d7e3), 0);
+        rect(385, 94, 56, 3, lv_color_hex(0xc2d7e3), 2,
+             lv_color_hex(0xc2d7e3), 0);
+        const int tilt_x = self->puzzle_maze_filtered_y_ - self->puzzle_maze_baseline_y_;
+        const int tilt_y = self->puzzle_maze_filtered_z_ - self->puzzle_maze_baseline_z_;
+        const int bubble_x = 407 + std::clamp(tilt_x / 30, -22, 22);
+        const int bubble_y = 89 + std::clamp(tilt_y / 30, -20, 20);
+        rect(bubble_x, bubble_y, 12, 12, lv_color_hex(0xe995ad),
+             LV_RADIUS_CIRCLE, game_pink, 1, true);
+        button(364, 140, 96, 30, "重新校准", lv_color_hex(0x6b94ad));
+        button(364, 178, 96, 30, "重新开始", game_pink);
+        button(364, 226, 44, 32, "上关", game_gold);
+        button(416, 226, 44, 32, "下关", game_green);
+        return;
+    }
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::MATCH3) {
+        static constexpr lv_color_t candy_colors[] = {
+            LV_COLOR_MAKE(0xf2, 0xa0, 0x9a), LV_COLOR_MAKE(0xf1, 0xc4, 0x62),
+            LV_COLOR_MAKE(0x91, 0xc4, 0x8a), LV_COLOR_MAKE(0xa9, 0x98, 0xd5),
+            LV_COLOR_MAKE(0x80, 0xb9, 0xd7), LV_COLOR_MAKE(0xe7, 0x91, 0xbb),
+        };
+        rect(8, 2, 236, 236, lv_color_hex(0xfff0f3), 18,
+             game_pink, 2, true);
+        for (int row = 0; row < 8; ++row) {
+            for (int col = 0; col < 8; ++col) {
+                const int index = row * 8 + col;
+                const bool selected = index == self->puzzle_match3_selected_;
+                const int type = self->puzzle_match3_cells_[index] % 6;
+                const int x = 14 + col * 28;
+                const int y = 8 + row * 28;
+                rect(x, y, 26, 26, lv_color_hex(0xfff8f5), 8,
+                     selected ? game_ink : lv_color_hex(0xe9cbd3),
+                     selected ? 3 : 1);
+                const lv_color_t candy = candy_colors[type];
+                if (type == 0) {
+                    rect(x + 4, y + 4, 18, 18, candy, LV_RADIUS_CIRCLE, candy, 0, true);
+                    rect(x + 8, y + 6, 6, 4, lv_color_white(),
+                         LV_RADIUS_CIRCLE, lv_color_white(), 0);
+                } else if (type == 1) {
+                    rect(x + 2, y + 7, 22, 13, candy, 7, candy, 0, true);
+                    rect(x + 8, y + 8, 3, 11, game_paper, 2, game_paper, 0);
+                    rect(x + 15, y + 8, 3, 11, game_paper, 2, game_paper, 0);
+                } else if (type == 2) {
+                    rect(x + 4, y + 4, 18, 18, candy, 5, candy, 0, true);
+                    rect(x + 7, y + 7, 7, 4, lv_color_white(),
+                         LV_RADIUS_CIRCLE, lv_color_white(), 0);
+                } else if (type == 3) {
+                    rect(x + 1, y + 9, 7, 9, candy, 2, candy, 0);
+                    rect(x + 18, y + 9, 7, 9, candy, 2, candy, 0);
+                    rect(x + 6, y + 5, 14, 17, candy, 7, candy, 0, true);
+                    rect(x + 9, y + 7, 5, 3, lv_color_white(),
+                         LV_RADIUS_CIRCLE, lv_color_white(), 0);
+                } else if (type == 4) {
+                    rect(x + 3, y + 3, 20, 20, candy, LV_RADIUS_CIRCLE, candy, 0, true);
+                    rect(x + 9, y + 9, 8, 8, lv_color_hex(0xfff8f5),
+                         LV_RADIUS_CIRCLE, lv_color_hex(0xfff8f5), 0);
+                } else {
+                    rect(x + 3, y + 6, 20, 15, candy, 8, candy, 0, true);
+                    rect(x + 4, y + 12, 18, 3, game_paper, 2, game_paper, 0);
+                    rect(x + 8, y + 8, 6, 3, lv_color_white(),
+                         LV_RADIUS_CIRCLE, lv_color_white(), 0);
+                }
+            }
+        }
+        rect(258, 2, 204, 224, game_paper, 18, game_pink, 2, true);
+        rect(270, 18, 180, 78, lv_color_hex(0xfff3f5), 16, game_pink, 2);
+        char score[48];
+        snprintf(score, sizeof(score), "%u / %u",
+                 self->puzzle_match3_score_, self->puzzle_match3_.target_score);
+        text(270, 28, 180, 25, "甜蜜得分", game_ink);
+        text(270, 57, 180, 28, score, game_purple, &lv_font_montserrat_20);
+        char moves[32];
+        snprintf(moves, sizeof(moves), "还可走 %u 步", self->puzzle_match3_moves_left_);
+        text(270, 112, 180, 28, moves, game_ink);
+        text(270, 148, 180, 54, "点两个相邻甜点\n凑齐三个就会消除", game_muted);
+        button(292, 234, 136, 30, "换一关", game_pink);
+    }
+}
+#endif
