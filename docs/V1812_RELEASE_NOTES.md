@@ -1,8 +1,8 @@
-# QDTech v1.8.12 发布记录
+# QDTech v1.8.12 候选版本记录
 
 发布日期：2026-07-31
 
-源码发布提交：`15f9e0ea`（`release: v1.8.12 playable freecell`）。
+源码候选提交：`15f9e0ea`（`release: v1.8.12 playable freecell`）。
 
 ## 范围
 
@@ -23,12 +23,14 @@
 - 启动日志确认 8 MB PSRAM、固件 `1.8.12`、Wi-Fi 连接、MQTT、SNTP、天气 HTTP 200 正常；未见 panic、断言或内存不足。
 - App SHA-256：`8511e942e2cd23d79638340f5c548ee7199139f1136eea8ffeada2932162c2d6`。
 
-## 发布资产
+## 候选资产
 
 - OTA / App-only：`qdtech-s3-touch-lcd-3.5-v1.8.12-app.bin`，偏移 `0x100000`。
 - 完整恢复：`qdtech-s3-touch-lcd-3.5-v1.8.12-full.bin`，偏移 `0x0`。
 - 分离烧录包：`qdtech-s3-touch-lcd-3.5-v1.8.12-firmware.zip`。
 - SD 卡资源未改动；继续使用 v1.8.11 的 `games/puzzle_arcade` 目录即可。
+
+这些候选资产不作为公开 Release；公开发布版本已递增为 v1.8.13。
 
 发布资产 SHA-256：
 
