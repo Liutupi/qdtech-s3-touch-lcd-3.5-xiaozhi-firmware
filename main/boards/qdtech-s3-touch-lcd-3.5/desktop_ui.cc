@@ -10187,6 +10187,11 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
 void DesktopUI::ReleasePuzzleArcadePage() {
     SetPuzzleMazeSampling(false);
     puzzle_arcade_cover_request_id_.fetch_add(1, std::memory_order_relaxed);
+    if (puzzle_freecell_game_) {
+        puzzle_freecell_game_->~Game();
+        heap_caps_free(puzzle_freecell_game_);
+        puzzle_freecell_game_ = nullptr;
+    }
     if (puzzle_arcade_page_) {
         lv_obj_delete(puzzle_arcade_page_);
     }
@@ -10665,104 +10670,133 @@ void DesktopUI::ResetPuzzle2048() {
     RefreshPuzzleArcadeBoard();
 }
 
-void DesktopUI::ResetPuzzleFreecell() {
-    uint8_t deck[52];
-    for (uint8_t i = 0; i < 52; ++i) deck[i] = i;
-    for (int i = 51; i > 0; --i) std::swap(deck[i], deck[esp_random() % (i + 1)]);
-    memset(puzzle_freecell_tableau_count_, 0, sizeof(puzzle_freecell_tableau_count_));
-    memset(puzzle_freecell_cells_, 0xff, sizeof(puzzle_freecell_cells_));
-    memset(puzzle_freecell_foundations_, 0, sizeof(puzzle_freecell_foundations_));
-    for (uint8_t i = 0; i < 52; ++i) {
-        const uint8_t column = i % 8;
-        puzzle_freecell_tableau_[column][puzzle_freecell_tableau_count_[column]++] = deck[i];
+bool DesktopUI::EnsurePuzzleFreecellGame() {
+    if (puzzle_freecell_game_) return true;
+    void* storage = heap_caps_malloc(sizeof(QdFreecell::Game),
+                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!storage) return false;
+    puzzle_freecell_game_ = new (storage) QdFreecell::Game{};
+    ESP_LOGI(TAG, "FreeCell state allocated size=%u",
+             static_cast<unsigned>(sizeof(QdFreecell::Game)));
+    return true;
+}
+
+void DesktopUI::SetPuzzleFreecellStatus(const char* message) {
+    if (!puzzle_arcade_status_) return;
+    if (!puzzle_freecell_game_) {
+        lv_label_set_text(puzzle_arcade_status_, message ? message : "牌局不可用");
+        return;
     }
-    puzzle_freecell_selected_column_ = -1;
-    puzzle_freecell_selected_index_ = -1;
-    puzzle_freecell_moves_ = 0;
+    char status[96];
+    snprintf(status, sizeof(status), "%s · %u步", message ? message : "",
+             puzzle_freecell_game_->Moves());
+    lv_label_set_text(puzzle_arcade_status_, status);
+}
+
+void DesktopUI::SetPuzzleFreecellMoveError(QdFreecell::MoveResult result) {
+    const char* message = "这张牌暂时不能放这里";
+    switch (result) {
+        case QdFreecell::MoveResult::NO_SELECTION:
+            message = "请先点选一张牌";
+            break;
+        case QdFreecell::MoveResult::SAME_SOURCE:
+            message = "已取消选择";
+            if (puzzle_freecell_game_) puzzle_freecell_game_->ClearSelection();
+            break;
+        case QdFreecell::MoveResult::DESTINATION_OCCUPIED:
+            message = "这个空当已经有牌";
+            break;
+        case QdFreecell::MoveResult::WRONG_TABLEAU_ORDER:
+            message = "只能放到异色大一号牌上";
+            break;
+        case QdFreecell::MoveResult::WRONG_FOUNDATION:
+            message = "请按同花色 A 到 K 收牌";
+            break;
+        case QdFreecell::MoveResult::TOO_MANY_CARDS:
+            message = "空当或空列不足，不能搬这么多张";
+            break;
+        case QdFreecell::MoveResult::COLUMN_FULL:
+            message = "这一列已经放不下了";
+            break;
+        case QdFreecell::MoveResult::INVALID_SELECTION:
+            message = "请选择可移动的牌";
+            break;
+        case QdFreecell::MoveResult::OK:
+            message = "移动成功";
+            break;
+    }
+    SetPuzzleFreecellStatus(message);
+}
+
+void DesktopUI::ResetPuzzleFreecell() {
     lv_label_set_text(puzzle_arcade_title_, "空当接龙");
-    lv_label_set_text(puzzle_arcade_status_, "点选牌，再点目标列或空位");
+    if (!EnsurePuzzleFreecellGame()) {
+        lv_label_set_text(puzzle_arcade_status_, "内存不足，无法创建牌局");
+        RefreshPuzzleArcadeBoard();
+        return;
+    }
+    uint32_t deal = esp_random() % 32000u + 1u;
+    if (deal == 11982u) deal = 1u;
+    puzzle_freecell_game_->NewDeal(deal);
+    char status[72];
+    snprintf(status, sizeof(status), "牌局 #%lu · 点牌再点目标",
+             static_cast<unsigned long>(deal));
+    SetPuzzleFreecellStatus(status);
     RefreshPuzzleArcadeBoard();
 }
 
-void DesktopUI::SavePuzzleFreecellUndo() {
-    memcpy(puzzle_freecell_undo_tableau_, puzzle_freecell_tableau_, sizeof(puzzle_freecell_tableau_));
-    memcpy(puzzle_freecell_undo_count_, puzzle_freecell_tableau_count_, sizeof(puzzle_freecell_tableau_count_));
-    memcpy(puzzle_freecell_undo_cells_, puzzle_freecell_cells_, sizeof(puzzle_freecell_cells_));
-    memcpy(puzzle_freecell_undo_foundations_, puzzle_freecell_foundations_, sizeof(puzzle_freecell_foundations_));
-    puzzle_freecell_can_undo_ = true;
-}
-
 void DesktopUI::UndoPuzzleFreecell() {
-    if (!puzzle_freecell_can_undo_) return;
-    memcpy(puzzle_freecell_tableau_, puzzle_freecell_undo_tableau_, sizeof(puzzle_freecell_tableau_));
-    memcpy(puzzle_freecell_tableau_count_, puzzle_freecell_undo_count_, sizeof(puzzle_freecell_tableau_count_));
-    memcpy(puzzle_freecell_cells_, puzzle_freecell_undo_cells_, sizeof(puzzle_freecell_cells_));
-    memcpy(puzzle_freecell_foundations_, puzzle_freecell_undo_foundations_, sizeof(puzzle_freecell_foundations_));
-    puzzle_freecell_can_undo_ = false;
-    if (puzzle_freecell_moves_) --puzzle_freecell_moves_;
-    puzzle_freecell_selected_column_ = -1;
-    lv_label_set_text(puzzle_arcade_status_, "已撤销一步");
+    if (!puzzle_freecell_game_ || !puzzle_freecell_game_->Undo()) {
+        SetPuzzleFreecellStatus("没有可以撤销的步骤");
+        return;
+    }
+    SetPuzzleFreecellStatus("已撤销一步");
     RefreshPuzzleArcadeBoard();
 }
 
 bool DesktopUI::MovePuzzleFreecellToColumn(uint8_t destination) {
-    if (destination >= 8 || puzzle_freecell_selected_column_ < 0) return false;
-    const uint8_t source = static_cast<uint8_t>(puzzle_freecell_selected_column_);
-    const uint8_t first = static_cast<uint8_t>(puzzle_freecell_selected_index_);
-    if (source == destination || first >= puzzle_freecell_tableau_count_[source]) return false;
-    const uint8_t card = puzzle_freecell_tableau_[source][first];
-    const uint8_t rank = card % 13;
-    if (puzzle_freecell_tableau_count_[destination]) {
-        const uint8_t target = puzzle_freecell_tableau_[destination][puzzle_freecell_tableau_count_[destination] - 1];
-        if ((card / 13) % 2 == (target / 13) % 2 || rank + 1 != target % 13) return false;
-    } else if (rank != 12) {
+    if (!puzzle_freecell_game_) return false;
+    const auto result = puzzle_freecell_game_->MoveToTableau(destination);
+    if (result != QdFreecell::MoveResult::OK) {
+        SetPuzzleFreecellMoveError(result);
+        RefreshPuzzleArcadeBoard();
         return false;
     }
-    SavePuzzleFreecellUndo();
-    const uint8_t count = puzzle_freecell_tableau_count_[source] - first;
-    memcpy(&puzzle_freecell_tableau_[destination][puzzle_freecell_tableau_count_[destination]],
-           &puzzle_freecell_tableau_[source][first], count);
-    puzzle_freecell_tableau_count_[destination] += count;
-    puzzle_freecell_tableau_count_[source] = first;
-    ++puzzle_freecell_moves_;
-    puzzle_freecell_selected_column_ = -1;
-    lv_label_set_text(puzzle_arcade_status_, "移动成功");
+    SetPuzzleFreecellStatus(puzzle_freecell_game_->Won() ? "恭喜通关！" : "移动成功");
     RefreshPuzzleArcadeBoard();
     return true;
 }
 
 bool DesktopUI::MovePuzzleFreecellToCell(uint8_t destination) {
-    if (destination >= 4 || puzzle_freecell_cells_[destination] != 0xff ||
-        puzzle_freecell_selected_column_ < 0) return false;
-    const uint8_t source = static_cast<uint8_t>(puzzle_freecell_selected_column_);
-    const uint8_t index = static_cast<uint8_t>(puzzle_freecell_selected_index_);
-    if (index + 1 != puzzle_freecell_tableau_count_[source]) return false;
-    SavePuzzleFreecellUndo();
-    puzzle_freecell_cells_[destination] = puzzle_freecell_tableau_[source][index];
-    --puzzle_freecell_tableau_count_[source];
-    ++puzzle_freecell_moves_;
-    puzzle_freecell_selected_column_ = -1;
-    lv_label_set_text(puzzle_arcade_status_, "已放入空当");
+    if (!puzzle_freecell_game_) return false;
+    const auto result = puzzle_freecell_game_->MoveToFreeCell(destination);
+    if (result != QdFreecell::MoveResult::OK) {
+        SetPuzzleFreecellMoveError(result);
+        RefreshPuzzleArcadeBoard();
+        return false;
+    }
+    SetPuzzleFreecellStatus("已放入空当");
     RefreshPuzzleArcadeBoard();
     return true;
 }
 
-bool DesktopUI::MovePuzzleFreecellToFoundation() {
-    if (puzzle_freecell_selected_column_ < 0) return false;
-    const uint8_t source = static_cast<uint8_t>(puzzle_freecell_selected_column_);
-    const uint8_t index = static_cast<uint8_t>(puzzle_freecell_selected_index_);
-    if (index + 1 != puzzle_freecell_tableau_count_[source]) return false;
-    const uint8_t card = puzzle_freecell_tableau_[source][index];
-    const uint8_t suit = card / 13;
-    if (card % 13 != puzzle_freecell_foundations_[suit]) return false;
-    SavePuzzleFreecellUndo();
-    ++puzzle_freecell_foundations_[suit];
-    --puzzle_freecell_tableau_count_[source];
-    ++puzzle_freecell_moves_;
-    puzzle_freecell_selected_column_ = -1;
-    lv_label_set_text(puzzle_arcade_status_, "收牌成功");
+bool DesktopUI::MovePuzzleFreecellToFoundation(uint8_t destination) {
+    if (!puzzle_freecell_game_) return false;
+    const auto result = puzzle_freecell_game_->MoveToFoundation(destination);
+    if (result != QdFreecell::MoveResult::OK) {
+        SetPuzzleFreecellMoveError(result);
+        RefreshPuzzleArcadeBoard();
+        return false;
+    }
+    SetPuzzleFreecellStatus(puzzle_freecell_game_->Won() ? "恭喜通关！" : "收牌成功");
     RefreshPuzzleArcadeBoard();
     return true;
+}
+
+int DesktopUI::PuzzleFreecellCardGap(uint8_t column) const {
+    if (!puzzle_freecell_game_) return 20;
+    const int count = puzzle_freecell_game_->TableauCount(column);
+    return count <= 1 ? 20 : std::max(5, std::min(20, 166 / (count - 1)));
 }
 
 bool DesktopUI::MovePuzzle2048(int dx, int dy) {
@@ -10974,24 +11008,84 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
         return true;
     }
     if (puzzle_arcade_view_ == PuzzleArcadeView::FREECELL) {
+        if (!puzzle_freecell_game_) return true;
         if (board_hit(286, 230, 80, 30)) { UndoPuzzleFreecell(); return true; }
         if (board_hit(374, 230, 96, 30)) { ResetPuzzleFreecell(); return true; }
-        if (board_hit(10, 4, 280, 42) && puzzle_freecell_selected_column_ >= 0) {
-            const int slot = (x - 10) / 70;
-            if (slot < 4) MovePuzzleFreecellToCell(slot);
-            else MovePuzzleFreecellToFoundation();
+
+        for (uint8_t slot = 0; slot < QdFreecell::kFreeCells; ++slot) {
+            if (!board_hit(8 + slot * 61, 3, 55, 45)) continue;
+            const bool same = puzzle_freecell_game_->IsSelected(
+                QdFreecell::SourceKind::FREE_CELL, slot);
+            if (same) {
+                puzzle_freecell_game_->ClearSelection();
+                SetPuzzleFreecellStatus("已取消选择");
+            } else if (puzzle_freecell_game_->HasSelection() &&
+                       puzzle_freecell_game_->FreeCellCard(slot) == QdFreecell::kEmptyCard) {
+                MovePuzzleFreecellToCell(slot);
+            } else if (puzzle_freecell_game_->SelectFreeCell(slot)) {
+                SetPuzzleFreecellStatus("已选空当牌，请点目标");
+            }
+            RefreshPuzzleArcadeBoard();
             return true;
         }
-        if (by >= 54 && by < 246) {
-            const int column = std::clamp((static_cast<int>(x) - 8) / 59, 0, 7);
-            const int card_index = std::min<int>(puzzle_freecell_tableau_count_[column] - 1,
-                                                 std::max(0, (by - 54) / 18));
-            if (puzzle_freecell_selected_column_ >= 0) {
+
+        static constexpr uint8_t foundation_order[] = {0, 2, 1, 3};
+        for (uint8_t display = 0; display < QdFreecell::kFoundations; ++display) {
+            if (!board_hit(266 + display * 52, 3, 48, 45)) continue;
+            const uint8_t slot = foundation_order[display];
+            const bool same = puzzle_freecell_game_->IsSelected(
+                QdFreecell::SourceKind::FOUNDATION, slot);
+            if (same) {
+                puzzle_freecell_game_->ClearSelection();
+                SetPuzzleFreecellStatus("已取消选择");
+            } else if (puzzle_freecell_game_->HasSelection()) {
+                MovePuzzleFreecellToFoundation(slot);
+            } else if (puzzle_freecell_game_->SelectFoundation(slot)) {
+                SetPuzzleFreecellStatus("已选收牌区顶牌，可移回牌列");
+            }
+            RefreshPuzzleArcadeBoard();
+            return true;
+        }
+
+        if (by >= 53 && by < 230 && x >= 6 && x < 478) {
+            const uint8_t column = static_cast<uint8_t>(
+                std::clamp((static_cast<int>(x) - 6) / 59, 0, 7));
+            const uint8_t count = puzzle_freecell_game_->TableauCount(column);
+            if (count == 0) {
+                if (puzzle_freecell_game_->HasSelection()) {
+                    MovePuzzleFreecellToColumn(column);
+                }
+                return true;
+            }
+
+            const int gap = PuzzleFreecellCardGap(column);
+            const uint8_t card_index = static_cast<uint8_t>(std::min<int>(
+                count - 1, std::max(0, (by - 55) / gap)));
+            const auto& selected = puzzle_freecell_game_->CurrentSelection();
+            if (selected.kind == QdFreecell::SourceKind::TABLEAU &&
+                selected.slot == column) {
+                if (selected.index == card_index) {
+                    puzzle_freecell_game_->ClearSelection();
+                    SetPuzzleFreecellStatus("已取消选择");
+                } else if (puzzle_freecell_game_->SelectTableau(column, card_index)) {
+                    char message[48];
+                    snprintf(message, sizeof(message), "已选 %u 张牌，请点目标",
+                             puzzle_freecell_game_->SelectedCount());
+                    SetPuzzleFreecellStatus(message);
+                } else {
+                    SetPuzzleFreecellStatus("这里只能选择连续的红黑递减牌组");
+                }
+                RefreshPuzzleArcadeBoard();
+            } else if (puzzle_freecell_game_->HasSelection()) {
                 MovePuzzleFreecellToColumn(column);
-            } else if (puzzle_freecell_tableau_count_[column] && card_index >= 0) {
-                puzzle_freecell_selected_column_ = column;
-                puzzle_freecell_selected_index_ = card_index;
-                lv_label_set_text(puzzle_arcade_status_, "已选牌，点目标列、空当或收牌区");
+            } else if (puzzle_freecell_game_->SelectTableau(column, card_index)) {
+                char message[48];
+                snprintf(message, sizeof(message), "已选 %u 张牌，请点目标",
+                         puzzle_freecell_game_->SelectedCount());
+                SetPuzzleFreecellStatus(message);
+                RefreshPuzzleArcadeBoard();
+            } else {
+                SetPuzzleFreecellStatus("这里只能选择连续的红黑递减牌组");
                 RefreshPuzzleArcadeBoard();
             }
         }
@@ -11054,6 +11148,20 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         }
         lv_area_t a{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
         lv_draw_rect(layer, &d, &a);
+    };
+    auto triangle = [&](int x1, int y1, int x2, int y2, int x3, int y3,
+                        lv_color_t color) {
+        lv_draw_triangle_dsc_t d;
+        lv_draw_triangle_dsc_init(&d);
+        d.bg_color = color;
+        d.bg_opa = LV_OPA_COVER;
+        d.p[0] = {static_cast<lv_value_precise_t>(ox + x1),
+                  static_cast<lv_value_precise_t>(oy + y1)};
+        d.p[1] = {static_cast<lv_value_precise_t>(ox + x2),
+                  static_cast<lv_value_precise_t>(oy + y2)};
+        d.p[2] = {static_cast<lv_value_precise_t>(ox + x3),
+                  static_cast<lv_value_precise_t>(oy + y3)};
+        lv_draw_triangle(layer, &d);
     };
     auto text = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
                     const lv_font_t* font = qd_cn_font_16(),
@@ -11195,37 +11303,153 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
     if (self->puzzle_arcade_view_ == PuzzleArcadeView::FREECELL) {
         auto rank_text = [](uint8_t card, char* output, size_t size) {
             static constexpr const char* ranks[] = {"A","2","3","4","5","6","7","8","9","10","J","Q","K"};
-            snprintf(output, size, "%s", ranks[card % 13]);
+            snprintf(output, size, "%s", ranks[QdFreecell::Game::Rank(card)]);
         };
-        rect(6, 2, 250, 46, lv_color_hex(0xf8f1fb), 14, game_purple, 2, true);
-        rect(264, 2, 210, 46, lv_color_hex(0xfff7e7), 14, game_gold, 2, true);
-        for (int i = 0; i < 4; ++i) {
-            rect(10 + i * 61, 8, 52, 34, self->puzzle_freecell_cells_[i] == 0xff ? lv_color_hex(0xfffbf7) : lv_color_hex(0xf6dce5), 8, game_line, 1);
-            if (self->puzzle_freecell_cells_[i] != 0xff) { char r[4]; rank_text(self->puzzle_freecell_cells_[i], r, sizeof(r)); text(10 + i * 61, 12, 52, 20, r, (self->puzzle_freecell_cells_[i] / 13) % 2 ? game_ink : game_pink, &lv_font_montserrat_16); }
+        if (!self->puzzle_freecell_game_) {
+            rect(20, 40, 440, 150, game_paper, 18, game_pink, 2, true);
+            text(40, 96, 400, 30, "牌局内存不足，请返回后重试", game_ink,
+                 qd_cn_font_16());
+            return;
         }
-        for (int i = 0; i < 4; ++i) {
-            rect(270 + i * 50, 8, 44, 34, lv_color_hex(0xfffbf7), 8, game_gold, 1);
-            char r[4];
-            const uint8_t rank = self->puzzle_freecell_foundations_[i];
-            snprintf(r, sizeof(r), "%s", rank == 0 ? "•" : (rank == 1 ? "A" : "↑"));
-            text(270 + i * 50, 12, 44, 20, r, i % 2 ? game_ink : game_pink, &lv_font_montserrat_16);
-        }
-        for (int col = 0; col < 8; ++col) {
-            const int x = 8 + col * 59;
-            rect(x, 54, 54, 190, lv_color_hex(0xfff8f5), 9, game_line, 1);
-            for (int row = 0; row < self->puzzle_freecell_tableau_count_[col]; ++row) {
-                const uint8_t card = self->puzzle_freecell_tableau_[col][row];
-                const bool selected = col == self->puzzle_freecell_selected_column_ && row >= self->puzzle_freecell_selected_index_;
-                const int y = 56 + row * 21;
-                rect(x + 2, y, 50, 36, selected ? lv_color_hex(0xffe2a6) : game_paper, 6, selected ? game_gold : game_line, selected ? 2 : 1, selected);
+
+        auto card_color = [&](uint8_t card) {
+            return QdFreecell::Game::IsRed(card) ? lv_color_hex(0xc45a72) : lv_color_hex(0x3f4657);
+        };
+        auto draw_suit = [&](int x, int y, int size, uint8_t suit, lv_color_t color) {
+            const int half = size / 2;
+            const int dot = std::max(4, size / 2);
+            switch (suit) {
+                case 0:  // 红桃
+                    rect(x, y + 1, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x + size - dot, y + 1, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    triangle(x, y + dot / 2 + 1, x + size - 1, y + dot / 2 + 1,
+                             x + half, y + size - 1, color);
+                    break;
+                case 1:  // 梅花
+                    rect(x + half - dot / 2, y, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x, y + dot / 2, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x + size - dot, y + dot / 2, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x + half - 1, y + dot, 3, size - dot, color, 1, color, 0);
+                    break;
+                case 2:  // 方块
+                    triangle(x + half, y, x + size - 1, y + half,
+                             x, y + half, color);
+                    triangle(x, y + half, x + size - 1, y + half,
+                             x + half, y + size - 1, color);
+                    break;
+                default:  // 黑桃
+                    triangle(x + half, y, x + size - 1, y + size - dot / 2,
+                             x, y + size - dot / 2, color);
+                    rect(x, y + half, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x + size - dot, y + half, dot, dot, color, LV_RADIUS_CIRCLE, color, 0);
+                    rect(x + half - 1, y + size - dot / 2, 3, dot / 2 + 1,
+                         color, 1, color, 0);
+                    break;
+            }
+        };
+        auto draw_card_header = [&](int x, int y, int width, uint8_t card, bool selected,
+                                    bool full_card) {
+            const lv_color_t outline = selected ? game_gold : lv_color_hex(0xcdbfc1);
+            rect(x, y, width, full_card ? 36 : 24,
+                 selected ? lv_color_hex(0xffedb9) : lv_color_hex(0xfffdf8),
+                 7, outline, selected ? 2 : 1, selected);
+            char rank[4];
+            rank_text(card, rank, sizeof(rank));
+            text(x + 4, y + 2, 25, 19, rank, card_color(card),
+                 &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
+            draw_suit(x + width - 17, y + 5, 12, QdFreecell::Game::Suit(card),
+                      card_color(card));
+            if (full_card) {
+                draw_suit(x + width / 2 - 5, y + 23, 10,
+                          QdFreecell::Game::Suit(card), card_color(card));
+            }
+        };
+
+        rect(4, 1, 250, 49, lv_color_hex(0xf7edf9), 13, game_purple, 2, true);
+        rect(260, 1, 216, 49, lv_color_hex(0xfff4dc), 13, game_gold, 2, true);
+        for (uint8_t i = 0; i < QdFreecell::kFreeCells; ++i) {
+            const uint8_t card = self->puzzle_freecell_game_->FreeCellCard(i);
+            const bool selected = self->puzzle_freecell_game_->IsSelected(
+                QdFreecell::SourceKind::FREE_CELL, i);
+            const int x = 8 + i * 61;
+            rect(x, 4, 55, 43,
+                 selected ? lv_color_hex(0xffedb9) : lv_color_hex(0xfffbf7),
+                 8, selected ? game_gold : game_purple, selected ? 2 : 1, selected);
+            if (card == QdFreecell::kEmptyCard) {
+                char slot[8];
+                snprintf(slot, sizeof(slot), "空%u", i + 1);
+                text(x, 13, 55, 21, slot, game_muted, qd_cn_font_16());
+            } else {
                 char rank[4]; rank_text(card, rank, sizeof(rank));
-                const lv_color_t color = (card / 13) % 2 ? game_ink : game_pink;
-                text(x + 6, y + 3, 18, 18, rank, color, &lv_font_montserrat_16, LV_TEXT_ALIGN_LEFT);
-                text(x + 30, y + 3, 14, 18, (card / 13) == 0 || (card / 13) == 2 ? "♥" : "♣", color, &lv_font_montserrat_14);
+                text(x + 5, 9, 27, 20, rank, card_color(card), &lv_font_montserrat_16,
+                     LV_TEXT_ALIGN_LEFT);
+                draw_suit(x + 35, 11, 13, QdFreecell::Game::Suit(card), card_color(card));
+                draw_suit(x + 23, 29, 10, QdFreecell::Game::Suit(card), card_color(card));
             }
         }
+
+        static constexpr uint8_t foundation_order[] = {0, 2, 1, 3};
+        for (uint8_t display = 0; display < QdFreecell::kFoundations; ++display) {
+            const uint8_t i = foundation_order[display];
+            const uint8_t count = self->puzzle_freecell_game_->FoundationCount(i);
+            const bool selected = self->puzzle_freecell_game_->IsSelected(
+                QdFreecell::SourceKind::FOUNDATION, i);
+            const int x = 266 + display * 52;
+            rect(x, 4, 48, 43,
+                 selected ? lv_color_hex(0xffedb9) : lv_color_hex(0xfffbf7),
+                 8, selected ? game_purple : game_gold, selected ? 2 : 1, selected);
+            if (count == 0) {
+                draw_suit(x + 16, 7, 16, i, i == 0 || i == 2 ? game_pink : game_ink);
+                text(x, 26, 48, 14, "A", game_muted, &lv_font_montserrat_12);
+            } else {
+                const uint8_t card = static_cast<uint8_t>(i * 13 + count - 1);
+                char rank[4]; rank_text(card, rank, sizeof(rank));
+                text(x + 4, 8, 25, 20, rank, card_color(card), &lv_font_montserrat_16,
+                     LV_TEXT_ALIGN_LEFT);
+                draw_suit(x + 30, 10, 12, i, card_color(card));
+                draw_suit(x + 19, 29, 10, i, card_color(card));
+            }
+        }
+
+        rect(4, 52, 472, 179, lv_color_hex(0xddeee5), 12,
+             lv_color_hex(0x9ab9aa), 1, true);
+        for (uint8_t col = 0; col < QdFreecell::kTableauColumns; ++col) {
+            const int x = 6 + col * 59;
+            const uint8_t count = self->puzzle_freecell_game_->TableauCount(col);
+            rect(x, 55, 55, 171, lv_color_hex(0xeaf5ef), 8,
+                 lv_color_hex(0xc4d8ce), 1);
+            if (count == 0) {
+                text(x, 116, 55, 22, "+", lv_color_hex(0x91aa9d),
+                     &lv_font_montserrat_20);
+                continue;
+            }
+            const int gap = self->PuzzleFreecellCardGap(col);
+            for (uint8_t row = 0; row < count; ++row) {
+                const uint8_t card = self->puzzle_freecell_game_->TableauCard(col, row);
+                const bool selected = self->puzzle_freecell_game_->IsSelected(
+                    QdFreecell::SourceKind::TABLEAU, col, row);
+                const bool full_card = row + 1 == count;
+                draw_card_header(x, 55 + row * gap, 55, card, selected, full_card);
+            }
+        }
+
+        rect(4, 232, 472, 32, lv_color_hex(0xfff8f1), 11, game_line, 1, true);
+        char deal[64];
+        snprintf(deal, sizeof(deal), "#%lu  %u步  空%u",
+                 static_cast<unsigned long>(self->puzzle_freecell_game_->DealNumber()),
+                 self->puzzle_freecell_game_->Moves(),
+                 self->puzzle_freecell_game_->EmptyFreeCellCount());
+        text(12, 237, 266, 21, deal, game_muted, qd_cn_font_16(),
+             LV_TEXT_ALIGN_LEFT);
         button(286, 230, 80, 30, "撤销", game_purple);
-        button(374, 230, 96, 30, "重开", game_gold);
+        button(374, 230, 96, 30, "新牌局", game_gold);
+        if (self->puzzle_freecell_game_->Won()) {
+            rect(92, 88, 296, 92, lv_color_hex(0xfff1c9), 18, game_gold, 3, true);
+            text(112, 108, 256, 28, "恭喜完成空当接龙！", game_pink,
+                 qd_cn_font_20());
+            text(112, 142, 256, 20, "可以撤销复盘，或开始新牌局", game_ink,
+                 qd_cn_font_16());
+        }
         return;
     }
     if (self->puzzle_arcade_view_ == PuzzleArcadeView::TILE_2048) {

@@ -10,6 +10,7 @@
 #endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+#include "freecell_game.h"
 #include "puzzle_arcade_service.h"
 #endif
 #include <atomic>
@@ -268,18 +269,7 @@ private:
     uint16_t puzzle_2048_best_tile_ = 0;
     bool puzzle_2048_won_ = false;
     bool puzzle_2048_game_over_ = false;
-    uint8_t puzzle_freecell_tableau_[8][13]{};
-    uint8_t puzzle_freecell_tableau_count_[8]{};
-    uint8_t puzzle_freecell_cells_[4]{};
-    uint8_t puzzle_freecell_foundations_[4]{};
-    int8_t puzzle_freecell_selected_column_ = -1;
-    int8_t puzzle_freecell_selected_index_ = -1;
-    uint16_t puzzle_freecell_moves_ = 0;
-    uint8_t puzzle_freecell_undo_tableau_[8][13]{};
-    uint8_t puzzle_freecell_undo_count_[8]{};
-    uint8_t puzzle_freecell_undo_cells_[4]{};
-    uint8_t puzzle_freecell_undo_foundations_[4]{};
-    bool puzzle_freecell_can_undo_ = false;
+    QdFreecell::Game* puzzle_freecell_game_ = nullptr;
     QdPuzzleArcade::MazeLevel puzzle_maze_{};
     uint16_t puzzle_maze_level_index_ = 0;
     uint16_t puzzle_maze_level_count_ = 0;
@@ -746,11 +736,14 @@ private:
     void SpawnPuzzle2048Tile();
     bool CanMovePuzzle2048() const;
     void ResetPuzzleFreecell();
+    bool EnsurePuzzleFreecellGame();
     bool MovePuzzleFreecellToColumn(uint8_t destination);
     bool MovePuzzleFreecellToCell(uint8_t destination);
-    bool MovePuzzleFreecellToFoundation();
-    void SavePuzzleFreecellUndo();
+    bool MovePuzzleFreecellToFoundation(uint8_t destination);
     void UndoPuzzleFreecell();
+    void SetPuzzleFreecellStatus(const char* message);
+    void SetPuzzleFreecellMoveError(QdFreecell::MoveResult result);
+    int PuzzleFreecellCardGap(uint8_t column) const;
     void LoadPuzzleMaze(int delta);
     void MovePuzzleMaze(int dx, int dy);
     void SetPuzzleMazeSampling(bool active);
