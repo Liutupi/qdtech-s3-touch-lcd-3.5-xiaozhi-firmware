@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "firmware": "v1.8.11",
+  "firmware": "v1.8.14",
   "encoding": "UTF-8",
   "counts": {
     "sudoku": 96,
@@ -9,7 +9,8 @@
     "match3": 60,
     "motion_maze": 48,
     "tile_2048": 1,
-    "freecell": 1
+    "freecell": 1,
+    "lucky_revolver": 1
   },
   "covers": [
     "sudoku.jpg",
@@ -18,9 +19,11 @@
     "match3.jpg",
     "motion_maze.jpg",
     "tile_2048.jpg",
-    "freecell.jpg"
+    "freecell.jpg",
+    "lucky_revolver.jpg"
   ],
   "motion_maze_runtime": "playable",
   "tile_2048_runtime": "playable",
-  "freecell_runtime": "playable"
+  "freecell_runtime": "playable",
+  "lucky_revolver_runtime": "playable"
 }

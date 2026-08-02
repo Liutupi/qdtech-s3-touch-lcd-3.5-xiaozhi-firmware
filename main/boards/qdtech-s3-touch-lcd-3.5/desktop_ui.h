@@ -119,6 +119,9 @@ public:
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
     void SetPuzzleMazeSamplingCallback(std::function<void(bool)> callback);
     void UpdatePuzzleMazeMotion(int16_t accel_y, int16_t accel_z, int64_t sample_ms);
+    void UpdatePuzzleRevolverMotion(int16_t accel_x, int16_t accel_y, int16_t accel_z,
+                                    int16_t gyro_x, int16_t gyro_y, int16_t gyro_z,
+                                    int64_t sample_ms);
 #endif
     void SetSystemBrightness(int value);
     void SetSystemVolume(int value);
@@ -233,10 +236,11 @@ private:
     lv_obj_t* puzzle_arcade_title_ = nullptr;
     lv_obj_t* puzzle_arcade_status_ = nullptr;
     lv_obj_t* puzzle_arcade_board_ = nullptr;
-    lv_obj_t* puzzle_arcade_game_cards_[7]{};
-    lv_obj_t* puzzle_arcade_game_labels_[7]{};
+    lv_obj_t* puzzle_arcade_game_cards_[8]{};
+    lv_obj_t* puzzle_arcade_game_labels_[8]{};
     enum class PuzzleArcadeView : uint8_t {
-        HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE, TILE_2048, FREECELL
+        HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE, TILE_2048, FREECELL,
+        LUCKY_REVOLVER
     };
     PuzzleArcadeView puzzle_arcade_view_ = PuzzleArcadeView::HOME;
     QdPuzzleArcade::Game puzzle_arcade_selected_ = QdPuzzleArcade::Game::SUDOKU;
@@ -283,6 +287,18 @@ private:
     uint8_t puzzle_maze_calibration_samples_ = 0;
     int64_t puzzle_maze_last_move_ms_ = 0;
     bool puzzle_maze_won_ = false;
+    enum class PuzzleRevolverState : uint8_t {
+        SELECT, ARMED, SPINNING, READY, LUCKY, HIT
+    };
+    PuzzleRevolverState puzzle_revolver_state_ = PuzzleRevolverState::SELECT;
+    ShakeDetector puzzle_revolver_detector_{};
+    uint8_t puzzle_revolver_bullets_ = 1;
+    uint8_t puzzle_revolver_bullet_mask_ = 0;
+    uint8_t puzzle_revolver_chamber_ = 0;
+    uint16_t puzzle_revolver_spin_angle_ = 0;
+    uint8_t puzzle_revolver_intensity_ = 0;
+    uint16_t puzzle_revolver_rounds_ = 0;
+    uint16_t puzzle_revolver_lucky_count_ = 0;
     std::function<void(bool)> puzzle_maze_sampling_callback_;
 #endif
     DesktopPage current_page_ = DesktopPage::MAIN;
@@ -746,6 +762,9 @@ private:
     int PuzzleFreecellCardGap(uint8_t column) const;
     void LoadPuzzleMaze(int delta);
     void MovePuzzleMaze(int dx, int dy);
+    void ResetPuzzleRevolver();
+    void ArmPuzzleRevolver();
+    void FirePuzzleRevolver();
     void SetPuzzleMazeSampling(bool active);
     void RefreshPuzzleArcadeBoard();
     static void PuzzleArcadeDrawCb(lv_event_t* event);

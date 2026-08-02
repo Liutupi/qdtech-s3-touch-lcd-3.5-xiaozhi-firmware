@@ -1376,16 +1376,21 @@ private:
     }
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
-    bool PublishPuzzleMazeUpdate(int16_t accel_y, int16_t accel_z, int64_t sample_ms) {
+    bool PublishPuzzleMotionUpdate(int16_t accel_x, int16_t accel_y, int16_t accel_z,
+                                   int16_t gyro_x, int16_t gyro_y, int16_t gyro_z,
+                                   int64_t sample_ms) {
         if (!display_) {
             return false;
         }
-        Application::GetInstance().Schedule([this, accel_y, accel_z, sample_ms]() {
+        Application::GetInstance().Schedule([this, accel_x, accel_y, accel_z,
+                                             gyro_x, gyro_y, gyro_z, sample_ms]() {
             if (!display_) return;
             auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
             if (!lvgl_port_lock(pdMS_TO_TICKS(50))) return;
             if (auto* desktop_ui = qd_display->GetDesktopUI()) {
                 desktop_ui->UpdatePuzzleMazeMotion(accel_y, accel_z, sample_ms);
+                desktop_ui->UpdatePuzzleRevolverMotion(
+                    accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, sample_ms);
             }
             lvgl_port_unlock();
         });
@@ -1433,7 +1438,7 @@ private:
                 if (!maze_sampling_was_active) {
                     maze_sampling_was_active = true;
                     last_maze_ui_update_ms = 0;
-                    ESP_LOGI(TAG, "Puzzle Maze BMI270 sampling enabled interval=%dms",
+                    ESP_LOGI(TAG, "Puzzle motion BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kPuzzleMazeSampleIntervalMs));
                 }
                 const int64_t touch_active_until =
@@ -1455,11 +1460,14 @@ private:
                     continue;
                 }
                 if (loop_ms - last_maze_ui_update_ms >= kPuzzleMazeUiUpdateIntervalMs) {
-                    PublishPuzzleMazeUpdate(y, z, loop_ms);
+                    PublishPuzzleMotionUpdate(x, y, z, gx, gy, gz, loop_ms);
                     last_maze_ui_update_ms = loop_ms;
                 }
                 if (loop_ms - last_maze_sample_log_ms >= 1000) {
-                    ESP_LOGI(TAG, "Puzzle Maze sample y=%d z=%d", y, z);
+                    ESP_LOGI(TAG, "Puzzle motion sample y=%d z=%d gyro=%d",
+                             y, z, std::max({std::abs(static_cast<int>(gx)),
+                                            std::abs(static_cast<int>(gy)),
+                                            std::abs(static_cast<int>(gz))}));
                     last_maze_sample_log_ms = loop_ms;
                 }
                 vTaskDelay(pdMS_TO_TICKS(kPuzzleMazeSampleIntervalMs));
@@ -1467,7 +1475,7 @@ private:
             }
             if (maze_sampling_was_active) {
                 maze_sampling_was_active = false;
-                ESP_LOGI(TAG, "Puzzle Maze BMI270 sampling disabled");
+                ESP_LOGI(TAG, "Puzzle motion BMI270 sampling disabled");
             }
 #endif
             if (shake_sampling_active) {

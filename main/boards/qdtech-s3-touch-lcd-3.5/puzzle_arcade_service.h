@@ -20,6 +20,7 @@ enum class Game : uint8_t {
     MOTION_MAZE,
     TILE_2048,
     FREECELL,
+    LUCKY_REVOLVER,
 };
 
 enum class Status : uint8_t {

@@ -10039,6 +10039,7 @@ const char* PuzzleGameTitle(QdPuzzleArcade::Game game) {
         case QdPuzzleArcade::Game::SOKOBAN: return "萌宠推箱";
         case QdPuzzleArcade::Game::MATCH3: return "甜点消消乐";
         case QdPuzzleArcade::Game::MOTION_MAZE: return "体感迷宫";
+        case QdPuzzleArcade::Game::LUCKY_REVOLVER: return "幸运左轮";
     }
     return "益智游戏馆";
 }
@@ -10085,15 +10086,17 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
     lv_obj_align(puzzle_arcade_cover_status_, LV_ALIGN_BOTTOM_MID, 0, -8);
 
     static constexpr const char* names[] = {
-        "数独花园", "密码侦探", "萌宠推箱", "甜点消消乐", "体感迷宫"
+        "数独花园", "密码侦探", "萌宠推箱", "甜点消消乐",
+        "体感迷宫", "2048", "空当接龙", "幸运左轮"
     };
-    static constexpr const char* icons[] = {"数", "密", "箱", "糖", "迷"};
-    static constexpr const char* tags[] = {"推理", "逻辑", "空间", "消除", "体感"};
+    static constexpr const char* icons[] = {"数", "密", "箱", "糖", "迷", "2K", "K", "运"};
+    static constexpr const char* tags[] = {"推理", "逻辑", "空间", "消除", "体感", "合并", "纸牌", "摇动"};
     static constexpr uint32_t card_colors[] = {
-        0xf7dca8, 0xe7d7f2, 0xd5ead9, 0xf6d7df, 0xd5e8f5
+        0xf7dca8, 0xe7d7f2, 0xd5ead9, 0xf6d7df,
+        0xd5e8f5, 0xf6dfaa, 0xe7d7f2, 0xf3c3cb
     };
-    for (int i = 0; i < 7; ++i) {
-        const lv_color_t color = lv_color_hex(i < 5 ? card_colors[i] : 0xf6dfaa);
+    for (int i = 0; i < 8; ++i) {
+        const lv_color_t color = lv_color_hex(card_colors[i]);
         const int col = i % 2;
         const int row = i / 2;
         lv_obj_t* card = CreatePanel(puzzle_arcade_home_group_, 118, 38,
@@ -10105,16 +10108,16 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
         puzzle_arcade_game_cards_[i] = card;
         lv_obj_t* dot = circle(card, 22, color, LV_OPA_COVER);
         lv_obj_align(dot, LV_ALIGN_LEFT_MID, 10, 0);
-        lv_obj_t* icon = label_en(dot, i < 5 ? icons[i] : (i == 5 ? "2K" : "K"), &style_en);
+        lv_obj_t* icon = label_en(dot, icons[i], &style_en);
         lv_obj_set_style_text_font(icon, qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(icon, lv_color_hex(0x453a48), 0);
         lv_obj_center(icon);
-        lv_obj_t* name = label_en(card, i < 5 ? names[i] : (i == 5 ? "2048" : "空当接龙"), &style_en);
+        lv_obj_t* name = label_en(card, names[i], &style_en);
         lv_obj_set_style_text_font(name, qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(name, lv_color_hex(0x453a48), 0);
         lv_obj_align(name, LV_ALIGN_LEFT_MID, 40, -5);
         puzzle_arcade_game_labels_[i] = name;
-        lv_obj_t* tag = label_en(card, i < 5 ? tags[i] : (i == 5 ? "合并" : "纸牌"), &style_muted);
+        lv_obj_t* tag = label_en(card, tags[i], &style_muted);
         lv_obj_set_style_text_font(tag, qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(tag, lv_color_hex(0x7b6675), 0);
         lv_obj_align(tag, LV_ALIGN_LEFT_MID, 40, 10);
@@ -10220,21 +10223,23 @@ void DesktopUI::ShowPuzzleArcadeHome() {
 void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
     puzzle_arcade_selected_ = game;
     static constexpr uint32_t selected_colors[] = {
-        0xffedca, 0xf3e8fa, 0xe5f3e7, 0xfbe7ec, 0xe5f2fa
+        0xffedca, 0xf3e8fa, 0xe5f3e7, 0xfbe7ec,
+        0xe5f2fa, 0xfff0cb, 0xf3e8fa, 0xffe1e5
     };
     static constexpr uint32_t border_colors[] = {
-        0xd89a55, 0x9a73b4, 0x6f9a7c, 0xc96f8d, 0x6594b3
+        0xd89a55, 0x9a73b4, 0x6f9a7c, 0xc96f8d,
+        0x6594b3, 0xd19645, 0x9a73b4, 0xb85f6c
     };
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 8; ++i) {
         if (!puzzle_arcade_game_cards_[i]) continue;
         const bool selected = i == static_cast<int>(game);
         lv_obj_set_style_bg_color(puzzle_arcade_game_cards_[i],
-                                  lv_color_hex(selected ? (i < 5 ? selected_colors[i] : (i == 5 ? 0xfff0cb : 0xf3e8fa)) : 0xfffcfa), 0);
+                                  lv_color_hex(selected ? selected_colors[i] : 0xfffcfa), 0);
         lv_obj_set_style_border_color(puzzle_arcade_game_cards_[i],
-                                      lv_color_hex(i < 5 ? border_colors[i] : (i == 5 ? 0xd19645 : 0x9a73b4)), 0);
+                                      lv_color_hex(border_colors[i]), 0);
         lv_obj_set_style_border_width(puzzle_arcade_game_cards_[i], selected ? 2 : 1, 0);
         lv_obj_set_style_shadow_color(puzzle_arcade_game_cards_[i],
-                                      lv_color_hex(i < 5 ? border_colors[i] : (i == 5 ? 0xd19645 : 0x9a73b4)), 0);
+                                      lv_color_hex(border_colors[i]), 0);
         lv_obj_set_style_shadow_width(puzzle_arcade_game_cards_[i], selected ? 5 : 0, 0);
         lv_obj_set_style_shadow_opa(puzzle_arcade_game_cards_[i],
                                     selected ? LV_OPA_20 : LV_OPA_TRANSP, 0);
@@ -10244,9 +10249,13 @@ void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
         }
     }
     if (puzzle_arcade_cover_status_) {
-        lv_label_set_text(puzzle_arcade_cover_status_,
-                          game == QdPuzzleArcade::Game::MOTION_MAZE ?
-                              "倾斜设备，带小猫走出迷宫" : PuzzleGameTitle(game));
+        const char* caption = PuzzleGameTitle(game);
+        if (game == QdPuzzleArcade::Game::MOTION_MAZE) {
+            caption = "倾斜设备，带小猫走出迷宫";
+        } else if (game == QdPuzzleArcade::Game::LUCKY_REVOLVER) {
+            caption = "装好玩具弹，摇一摇转轮试试手气";
+        }
+        lv_label_set_text(puzzle_arcade_cover_status_, caption);
         lv_obj_clear_flag(puzzle_arcade_cover_status_, LV_OBJ_FLAG_HIDDEN);
     }
     LoadPuzzleArcadeCover();
@@ -10324,6 +10333,9 @@ void DesktopUI::EnterPuzzleArcadeGame() {
     } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::FREECELL) {
         puzzle_arcade_view_ = PuzzleArcadeView::FREECELL;
         ResetPuzzleFreecell();
+    } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::LUCKY_REVOLVER) {
+        puzzle_arcade_view_ = PuzzleArcadeView::LUCKY_REVOLVER;
+        ResetPuzzleRevolver();
     } else {
         puzzle_arcade_view_ = PuzzleArcadeView::MOTION_MAZE;
         LoadPuzzleMaze(0);
@@ -10632,6 +10644,97 @@ void DesktopUI::UpdatePuzzleMazeMotion(int16_t accel_y, int16_t accel_z,
     RefreshPuzzleArcadeBoard();
 }
 
+void DesktopUI::ResetPuzzleRevolver() {
+    SetPuzzleMazeSampling(false);
+    puzzle_revolver_detector_.Reset();
+    puzzle_revolver_state_ = PuzzleRevolverState::SELECT;
+    puzzle_revolver_bullet_mask_ = 0;
+    puzzle_revolver_chamber_ = 0;
+    puzzle_revolver_spin_angle_ = 0;
+    puzzle_revolver_intensity_ = 0;
+    lv_label_set_text(puzzle_arcade_title_, "幸运左轮");
+    lv_label_set_text(puzzle_arcade_status_, "选择 1-5 颗玩具弹，再点装弹");
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::ArmPuzzleRevolver() {
+    puzzle_revolver_bullet_mask_ = 0;
+    uint8_t loaded = 0;
+    while (loaded < puzzle_revolver_bullets_) {
+        const uint8_t chamber = static_cast<uint8_t>(esp_random() % 6);
+        const uint8_t bit = static_cast<uint8_t>(1u << chamber);
+        if ((puzzle_revolver_bullet_mask_ & bit) == 0) {
+            puzzle_revolver_bullet_mask_ |= bit;
+            ++loaded;
+        }
+    }
+    puzzle_revolver_state_ = PuzzleRevolverState::ARMED;
+    puzzle_revolver_spin_angle_ = 0;
+    puzzle_revolver_intensity_ = 0;
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    puzzle_revolver_detector_.Arm(now_ms);
+    SetPuzzleMazeSampling(true);
+    lv_label_set_text(puzzle_arcade_status_, "装弹完成 · 请摇一摇设备");
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::FirePuzzleRevolver() {
+    if (puzzle_revolver_state_ != PuzzleRevolverState::READY) return;
+    const bool hit = (puzzle_revolver_bullet_mask_ &
+                      static_cast<uint8_t>(1u << puzzle_revolver_chamber_)) != 0;
+    ++puzzle_revolver_rounds_;
+    if (hit) {
+        puzzle_revolver_state_ = PuzzleRevolverState::HIT;
+        lv_label_set_text(puzzle_arcade_status_, "漫画中弹！这局运气差一点");
+    } else {
+        puzzle_revolver_state_ = PuzzleRevolverState::LUCKY;
+        ++puzzle_revolver_lucky_count_;
+        lv_label_set_text(puzzle_arcade_status_, "咔哒！幸运逃过这一发");
+    }
+    if (!Application::GetInstance().IsExternalAudioActive()) {
+        Application::GetInstance().Schedule([hit]() {
+            Application::GetInstance().PlayNotificationSound(
+                hit ? Lang::Sounds::P3_LUCKY_REVOLVER_HIT : Lang::Sounds::P3_SUCCESS);
+        });
+    } else {
+        ESP_LOGI(TAG, "Lucky revolver sound suppressed while external audio is active");
+    }
+    RefreshPuzzleArcadeBoard();
+}
+
+void DesktopUI::UpdatePuzzleRevolverMotion(int16_t accel_x, int16_t accel_y,
+                                           int16_t accel_z, int16_t gyro_x,
+                                           int16_t gyro_y, int16_t gyro_z,
+                                           int64_t sample_ms) {
+    if (current_page_ != DesktopPage::PUZZLE_ARCADE ||
+        puzzle_arcade_view_ != PuzzleArcadeView::LUCKY_REVOLVER ||
+        (puzzle_revolver_state_ != PuzzleRevolverState::ARMED &&
+         puzzle_revolver_state_ != PuzzleRevolverState::SPINNING)) {
+        return;
+    }
+    const ShakeDetector::Result result = puzzle_revolver_detector_.Process({
+        accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, sample_ms});
+    puzzle_revolver_intensity_ = result.intensity;
+    if (result.transition == ShakeDetector::Transition::ARMED_TO_SHAKING) {
+        puzzle_revolver_state_ = PuzzleRevolverState::SPINNING;
+        lv_label_set_text(puzzle_arcade_status_, "转轮正在旋转 · 请慢慢停稳");
+    }
+    if (puzzle_revolver_state_ == PuzzleRevolverState::SPINNING) {
+        const uint16_t step = static_cast<uint16_t>(10 + result.intensity / 3);
+        puzzle_revolver_spin_angle_ = static_cast<uint16_t>(
+            (puzzle_revolver_spin_angle_ + step) % 360);
+    }
+    if (result.transition == ShakeDetector::Transition::SETTLING_TO_REVEAL) {
+        puzzle_revolver_chamber_ = static_cast<uint8_t>(esp_random() % 6);
+        puzzle_revolver_spin_angle_ = static_cast<uint16_t>(
+            (360 - puzzle_revolver_chamber_ * 60) % 360);
+        puzzle_revolver_state_ = PuzzleRevolverState::READY;
+        SetPuzzleMazeSampling(false);
+        lv_label_set_text(puzzle_arcade_status_, "转轮停稳 · 点扳机试试手气");
+    }
+    RefreshPuzzleArcadeBoard();
+}
+
 void DesktopUI::RefreshPuzzleArcadeBoard() {
     if (puzzle_arcade_board_) lv_obj_invalidate(puzzle_arcade_board_);
 }
@@ -10855,7 +10958,7 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
             const int col = (x - 222) / 126;
             const int row = (y - 72) / 44;
             const int item = row * 2 + col;
-            if (col >= 0 && col < 2 && item >= 0 && item < 7) {
+            if (col >= 0 && col < 2 && item >= 0 && item < 8) {
                 SelectPuzzleArcadeGame(static_cast<QdPuzzleArcade::Game>(item));
             }
         } else if (hit(222, 266, 154, 36)) {
@@ -11089,6 +11192,32 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
                 RefreshPuzzleArcadeBoard();
             }
         }
+        return true;
+    }
+    if (puzzle_arcade_view_ == PuzzleArcadeView::LUCKY_REVOLVER) {
+        if (puzzle_revolver_state_ == PuzzleRevolverState::SELECT) {
+            if (board_hit(342, 92, 42, 36) && puzzle_revolver_bullets_ > 1) {
+                --puzzle_revolver_bullets_;
+            } else if (board_hit(420, 92, 42, 36) && puzzle_revolver_bullets_ < 5) {
+                ++puzzle_revolver_bullets_;
+            } else if (board_hit(332, 148, 130, 40)) {
+                ArmPuzzleRevolver();
+                return true;
+            }
+            char status[64];
+            snprintf(status, sizeof(status), "已选择 %u 颗玩具弹", puzzle_revolver_bullets_);
+            lv_label_set_text(puzzle_arcade_status_, status);
+        } else if (puzzle_revolver_state_ == PuzzleRevolverState::READY &&
+                   board_hit(332, 142, 130, 56)) {
+            FirePuzzleRevolver();
+            return true;
+        } else if ((puzzle_revolver_state_ == PuzzleRevolverState::LUCKY ||
+                    puzzle_revolver_state_ == PuzzleRevolverState::HIT) &&
+                   board_hit(168, 198, 144, 40)) {
+            ResetPuzzleRevolver();
+            return true;
+        }
+        RefreshPuzzleArcadeBoard();
         return true;
     }
     if (puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
@@ -11491,6 +11620,110 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         button(322, 150, 152, 32, "重新开始", game_gold);
         if (self->puzzle_2048_game_over_) text(314, 194, 148, 24, "游戏结束", game_pink);
         else if (self->puzzle_2048_won_) text(314, 194, 148, 24, "2048 达成！", game_green);
+        return;
+    }
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::LUCKY_REVOLVER) {
+        const auto state = self->puzzle_revolver_state_;
+        if (state == PuzzleRevolverState::HIT || state == PuzzleRevolverState::LUCKY) {
+            const bool hit = state == PuzzleRevolverState::HIT;
+            const lv_color_t backdrop = hit ? lv_color_hex(0x9f2439) : lv_color_hex(0xdff3e6);
+            const lv_color_t accent = hit ? lv_color_hex(0xffc5b8) : lv_color_hex(0x4f8c68);
+            rect(8, 2, 464, 252, backdrop, 22, accent, 3, true);
+            for (int i = 0; i < 6; ++i) {
+                const int ray_x = 38 + i * 78;
+                triangle(240, 128, ray_x, 8, ray_x + 35, 8,
+                         hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+                triangle(240, 128, ray_x, 248, ray_x + 35, 248,
+                         hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+            }
+            rect(166, 38, 148, 148,
+                 hit ? lv_color_hex(0x7a172b) : lv_color_hex(0xfffbf1),
+                 LV_RADIUS_CIRCLE, accent, 4, true);
+            text(176, 77, 128, 48, hit ? "砰！" : "咔哒！",
+                 hit ? lv_color_hex(0xffe0d5) : game_green, qd_cn_font_20());
+            text(132, 128, 216, 36, hit ? "漫画中弹" : "幸运逃过",
+                 hit ? lv_color_hex(0xffe0d5) : game_ink, qd_cn_font_20());
+            char record[48];
+            snprintf(record, sizeof(record), "幸运 %u / %u 局",
+                     self->puzzle_revolver_lucky_count_, self->puzzle_revolver_rounds_);
+            text(132, 166, 216, 24, record,
+                 hit ? lv_color_hex(0xffddd5) : game_muted);
+            button(168, 198, 144, 40, "再来一局", hit ? lv_color_hex(0xffc5b8) : game_green);
+            return;
+        }
+
+        rect(8, 2, 308, 252, lv_color_hex(0xfff1f3), 20, game_pink, 2, true);
+        rect(326, 2, 146, 224, game_paper, 18, game_gold, 2, true);
+        text(20, 14, 284, 24, "六孔幸运转轮", game_ink, qd_cn_font_20());
+        text(20, 39, 284, 20,
+             state == PuzzleRevolverState::SELECT ? "先选择玩具弹数量" :
+             (state == PuzzleRevolverState::ARMED ? "拿稳设备，用力摇一摇" :
+             (state == PuzzleRevolverState::SPINNING ? "转轮飞快旋转中" : "转轮已经停稳")),
+             game_muted);
+
+        const int cx = 158;
+        const int cy = 142;
+        rect(cx - 86, cy - 86, 172, 172, lv_color_hex(0x76508f),
+             LV_RADIUS_CIRCLE, lv_color_hex(0x4c365b), 4, true);
+        rect(cx - 70, cy - 70, 140, 140, lv_color_hex(0xf3d9ec),
+             LV_RADIUS_CIRCLE, game_gold, 3);
+        constexpr float kPi = 3.14159265358979323846f;
+        for (int i = 0; i < 6; ++i) {
+            const float degrees = static_cast<float>(i * 60 + self->puzzle_revolver_spin_angle_ - 90);
+            const float radians = degrees * kPi / 180.0f;
+            const int chamber_x = cx + static_cast<int>(std::cos(radians) * 50.0f) - 22;
+            const int chamber_y = cy + static_cast<int>(std::sin(radians) * 50.0f) - 22;
+            bool show_round = false;
+            bool selected_chamber = false;
+            if (state == PuzzleRevolverState::SELECT) {
+                show_round = i < self->puzzle_revolver_bullets_;
+            } else if (state == PuzzleRevolverState::READY) {
+                selected_chamber = i == self->puzzle_revolver_chamber_;
+            }
+            rect(chamber_x, chamber_y, 44, 44,
+                 show_round ? lv_color_hex(0xf5c25f) : lv_color_hex(0x35283d),
+                 LV_RADIUS_CIRCLE,
+                 selected_chamber ? game_pink : lv_color_hex(0xd9a84d),
+                 selected_chamber ? 4 : 2, show_round);
+            if (show_round) {
+                rect(chamber_x + 13, chamber_y + 8, 18, 28,
+                     lv_color_hex(0xffdf7e), 9, game_gold, 2);
+            } else {
+                rect(chamber_x + 12, chamber_y + 12, 20, 20,
+                     lv_color_hex(0x4f3b58), LV_RADIUS_CIRCLE,
+                     lv_color_hex(0x4f3b58), 0);
+            }
+        }
+        rect(cx - 15, cy - 15, 30, 30, lv_color_hex(0xf6bd69),
+             LV_RADIUS_CIRCLE, game_gold, 2, true);
+        triangle(cx - 10, 48, cx + 10, 48, cx, 66, game_pink);
+        rect(246, 176, 42, 62, lv_color_hex(0xf4b8c7), 14, game_pink, 2, true);
+        rect(223, 168, 52, 22, lv_color_hex(0xf4b8c7), 11, game_pink, 2);
+
+        text(336, 16, 126, 22, "玩具弹数量", game_ink);
+        char bullet_count[8];
+        snprintf(bullet_count, sizeof(bullet_count), "%u", self->puzzle_revolver_bullets_);
+        text(382, 56, 28, 34, bullet_count, game_pink, &lv_font_montserrat_20);
+        if (state == PuzzleRevolverState::SELECT) {
+            button(342, 92, 42, 36, "-", game_purple, &lv_font_montserrat_20);
+            button(420, 92, 42, 36, "+", game_purple, &lv_font_montserrat_20);
+            button(332, 148, 130, 40, "装弹", game_gold);
+            text(336, 196, 122, 22, "概率完全随机", game_muted);
+        } else if (state == PuzzleRevolverState::READY) {
+            button(332, 142, 130, 56, "扣动扳机", game_pink, qd_cn_font_20());
+            text(336, 204, 122, 20, "祝你好运！", game_muted);
+        } else {
+            const int meter = std::clamp<int>(self->puzzle_revolver_intensity_, 0, 100);
+            rect(342, 104, 110, 16, lv_color_hex(0xeee1e5), 8, game_line, 1);
+            if (meter > 0) {
+                rect(344, 106, meter * 106 / 100, 12,
+                     state == PuzzleRevolverState::SPINNING ? game_pink : game_gold,
+                     6, game_pink, 0);
+            }
+            text(336, 132, 122, 42,
+                 state == PuzzleRevolverState::ARMED ? "摇动设备\n启动转轮" : "正在减速\n请慢慢停稳",
+                 game_muted);
+        }
         return;
     }
     if (self->puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
