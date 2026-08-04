@@ -40,7 +40,13 @@ def main() -> None:
         pcm = source.readframes(source.getnframes())
 
     encoder = opuslib.Encoder(SAMPLE_RATE, 1, opuslib.APPLICATION_AUDIO)
-    encoder.bitrate = args.bitrate
+    try:
+        encoder.bitrate = args.bitrate
+    except opuslib.OpusError as error:
+        # Some macOS opuslib/libopus combinations reject the optional
+        # varargs bitrate control even though frame encoding works normally.
+        # Keep the library default rather than blocking deterministic assets.
+        print(f"warning: bitrate control unavailable ({error}); using libopus default")
     packets: list[bytes] = []
     for offset in range(0, len(pcm), FRAME_BYTES):
         frame = pcm[offset:offset + FRAME_BYTES]

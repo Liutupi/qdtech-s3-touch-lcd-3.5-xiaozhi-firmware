@@ -319,6 +319,28 @@ config QDTECH_EXPERIMENT_PUZZLE_ARCADE
         The option adds no task, does not change touch parsing or BMI270
         sampling, and stays disabled by default until physical verification.
 
+config QDTECH_EXPERIMENT_WOODEN_FISH
+    bool "Enable experimental merit wooden-fish in Shake Lab"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds a lazy-created merit wooden-fish mode to the QDTech Shake Lab.
+        It reuses the existing BMI270 sampling task and LVGL animation timer,
+        keeps the merit counter in RAM, and does not add an I2C visitor, task,
+        NVS record, SD-card dependency, or audio path. Disabled by default
+        until physical impact-detection and display verification is complete.
+
+config QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+    bool "Enable experimental protected wooden-fish sound"
+    depends on QDTECH_EXPERIMENT_WOODEN_FISH
+    default n
+    help
+        Plays a short embedded wooden-fish notification sound for accepted
+        touch and BMI270 merit events. Playback is limited to the idle device
+        state, suppressed while external audio is active, and rate-limited to
+        avoid flooding the shared audio decode queue. Disabled by default
+        until physical speaker and audio-focus verification is complete.
+
 config QDTECH_PROVISIONING_COMPAT
     bool
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

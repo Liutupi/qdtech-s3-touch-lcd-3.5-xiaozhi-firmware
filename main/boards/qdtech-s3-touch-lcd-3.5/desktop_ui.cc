@@ -50,6 +50,14 @@
 
 static constexpr int64_t kMusicLyricHoldMs = 12000;
 static constexpr int64_t kMusicControlDebounceMs = 450;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+static uint16_t s_wooden_fish_canvas_placeholder = 0;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+static constexpr int64_t kWoodenFishSoundRateLimitMs = 200;
+#endif
+#endif
 
 #if defined(CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY) && \
     CONFIG_QDTECH_EXPERIMENT_RADIO_DIRECTORY
@@ -9060,6 +9068,13 @@ void DesktopUI::SetShakeLabSamplingCallback(std::function<void(bool)> callback) 
     shake_lab_sampling_callback_ = std::move(callback);
 }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+void DesktopUI::SetWoodenFishSamplingCallback(std::function<void(bool)> callback) {
+    wooden_fish_sampling_callback_ = std::move(callback);
+}
+#endif
+
 void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     shake_lab_page_ = lv_obj_create(root);
     lv_obj_add_style(shake_lab_page_, &style_screen, 0);
@@ -9160,6 +9175,35 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_t* divination_title = label_en(divination_card, "掌卦", &style_gold);
     lv_obj_set_style_text_font(divination_title, qd_cn_font_20(), 0);
     lv_obj_align(divination_title, LV_ALIGN_TOP_MID, 0, 96);
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    // Preserve all four established cards and add one compact fifth entry in
+    // the otherwise unused footer. This keeps their hitboxes unchanged.
+    lv_obj_t* wooden_fish_card = CreatePanel(shake_lab_home_group_, 196, 42, 142, 266);
+    lv_obj_set_style_bg_color(wooden_fish_card, lv_color_hex(0x3b241b), 0);
+    lv_obj_set_style_border_color(wooden_fish_card, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(wooden_fish_card, 2, 0);
+    lv_obj_t* wooden_fish_icon = lv_obj_create(wooden_fish_card);
+    lv_obj_remove_style_all(wooden_fish_icon);
+    lv_obj_set_size(wooden_fish_icon, 38, 26);
+    lv_obj_set_style_radius(wooden_fish_icon, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(wooden_fish_icon, lv_color_hex(0xc8783c), 0);
+    lv_obj_set_style_bg_opa(wooden_fish_icon, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(wooden_fish_icon, lv_color_hex(0xf2c66d), 0);
+    lv_obj_set_style_border_width(wooden_fish_icon, 2, 0);
+    lv_obj_align(wooden_fish_icon, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_t* wooden_fish_slot = lv_obj_create(wooden_fish_icon);
+    lv_obj_remove_style_all(wooden_fish_slot);
+    lv_obj_set_size(wooden_fish_slot, 22, 4);
+    lv_obj_set_style_radius(wooden_fish_slot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(wooden_fish_slot, lv_color_hex(0x4a241b), 0);
+    lv_obj_set_style_bg_opa(wooden_fish_slot, LV_OPA_COVER, 0);
+    lv_obj_center(wooden_fish_slot);
+    lv_obj_t* wooden_fish_card_title = label_en(wooden_fish_card, "功德木鱼", &style_gold);
+    lv_obj_set_style_text_font(wooden_fish_card_title, qd_cn_font_20(), 0);
+    lv_obj_align(wooden_fish_card_title, LV_ALIGN_LEFT_MID, 62, 0);
+#endif
 
     shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
     lv_obj_remove_style_all(shake_lab_mode_group_);
@@ -9334,6 +9378,107 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(shake_lab_divination_hint_label_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_divination_hint_label_, LV_ALIGN_BOTTOM_RIGHT, -16, -12);
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    wooden_fish_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(wooden_fish_group_);
+    lv_obj_set_size(wooden_fish_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(wooden_fish_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(wooden_fish_group_, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t* wooden_fish_panel = CreatePanel(wooden_fish_group_, 430, 190, 25, 102);
+    lv_obj_set_style_bg_color(wooden_fish_panel, lv_color_hex(0x2d1b18), 0);
+    lv_obj_set_style_border_color(wooden_fish_panel, lv_color_hex(0xe5b85d), 0);
+    lv_obj_set_style_border_width(wooden_fish_panel, 2, 0);
+
+    wooden_fish_image_ = lv_canvas_create(wooden_fish_panel);
+    lv_canvas_set_buffer(wooden_fish_image_, &s_wooden_fish_canvas_placeholder,
+                         1, 1, LV_COLOR_FORMAT_RGB565);
+    lv_obj_set_style_transform_pivot_x(wooden_fish_image_, 120, 0);
+    lv_obj_set_style_transform_pivot_y(wooden_fish_image_, 80, 0);
+    lv_obj_align(wooden_fish_image_, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_add_flag(wooden_fish_image_, LV_OBJ_FLAG_HIDDEN);
+
+    wooden_fish_glow_ = circle(wooden_fish_panel, 158, lv_color_hex(0xd89a42), LV_OPA_20);
+    lv_obj_align(wooden_fish_glow_, LV_ALIGN_LEFT_MID, 42, 2);
+
+    wooden_fish_body_ = lv_obj_create(wooden_fish_panel);
+    lv_obj_remove_style_all(wooden_fish_body_);
+    lv_obj_set_size(wooden_fish_body_, 178, 108);
+    lv_obj_set_style_radius(wooden_fish_body_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(wooden_fish_body_, lv_color_hex(0xb85f32), 0);
+    lv_obj_set_style_bg_opa(wooden_fish_body_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(wooden_fish_body_, lv_color_hex(0xf0bb63), 0);
+    lv_obj_set_style_border_width(wooden_fish_body_, 4, 0);
+    lv_obj_set_style_shadow_color(wooden_fish_body_, lv_color_hex(0xe69245), 0);
+    lv_obj_set_style_shadow_width(wooden_fish_body_, 18, 0);
+    lv_obj_set_style_shadow_opa(wooden_fish_body_, LV_OPA_30, 0);
+    lv_obj_align(wooden_fish_body_, LV_ALIGN_LEFT_MID, 28, 4);
+
+    lv_obj_t* body_highlight = lv_obj_create(wooden_fish_body_);
+    lv_obj_remove_style_all(body_highlight);
+    lv_obj_set_size(body_highlight, 112, 20);
+    lv_obj_set_style_radius(body_highlight, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(body_highlight, lv_color_hex(0xe79555), 0);
+    lv_obj_set_style_bg_opa(body_highlight, LV_OPA_60, 0);
+    lv_obj_align(body_highlight, LV_ALIGN_TOP_LEFT, 24, 15);
+    lv_obj_t* fish_slot = lv_obj_create(wooden_fish_body_);
+    lv_obj_remove_style_all(fish_slot);
+    lv_obj_set_size(fish_slot, 88, 12);
+    lv_obj_set_style_radius(fish_slot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(fish_slot, lv_color_hex(0x4a241b), 0);
+    lv_obj_set_style_bg_opa(fish_slot, LV_OPA_COVER, 0);
+    lv_obj_set_style_transform_rotation(fish_slot, -70, 0);
+    lv_obj_align(fish_slot, LV_ALIGN_BOTTOM_LEFT, 28, -24);
+
+    wooden_fish_mallet_ = lv_obj_create(wooden_fish_panel);
+    lv_obj_remove_style_all(wooden_fish_mallet_);
+    lv_obj_set_size(wooden_fish_mallet_, 18, 112);
+    lv_obj_set_style_radius(wooden_fish_mallet_, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(wooden_fish_mallet_, lv_color_hex(0xe0a55a), 0);
+    lv_obj_set_style_bg_opa(wooden_fish_mallet_, LV_OPA_COVER, 0);
+    lv_obj_set_style_transform_pivot_x(wooden_fish_mallet_, 9, 0);
+    lv_obj_set_style_transform_pivot_y(wooden_fish_mallet_, 102, 0);
+    lv_obj_set_style_transform_rotation(wooden_fish_mallet_, -260, 0);
+    lv_obj_align(wooden_fish_mallet_, LV_ALIGN_LEFT_MID, 192, -18);
+    lv_obj_t* mallet_head = circle(wooden_fish_mallet_, 38, lv_color_hex(0x8f4329), LV_OPA_COVER);
+    lv_obj_set_style_border_color(mallet_head, lv_color_hex(0xf0bb63), 0);
+    lv_obj_set_style_border_width(mallet_head, 3, 0);
+    lv_obj_align(mallet_head, LV_ALIGN_TOP_MID, 0, -11);
+
+    wooden_fish_image_status_ = label_en(
+        wooden_fish_panel, "正在读取 SD 木鱼图片…", &style_muted);
+    lv_obj_set_style_text_font(wooden_fish_image_status_, qd_cn_font_16(), 0);
+    lv_obj_set_width(wooden_fish_image_status_, 232);
+    lv_obj_set_style_text_align(wooden_fish_image_status_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(wooden_fish_image_status_, LV_ALIGN_BOTTOM_LEFT, 8, -4);
+    lv_obj_add_flag(wooden_fish_image_status_, LV_OBJ_FLAG_HIDDEN);
+
+    wooden_fish_merit_label_ = label_en(wooden_fish_panel, "本次功德  0", &style_gold);
+    lv_obj_set_style_text_font(wooden_fish_merit_label_, qd_cn_font_20(), 0);
+    lv_obj_set_width(wooden_fish_merit_label_, 170);
+    lv_obj_set_style_text_align(wooden_fish_merit_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(wooden_fish_merit_label_, LV_ALIGN_TOP_RIGHT, -14, 25);
+    lv_obj_t* wooden_fish_motto = label_en(wooden_fish_panel, "一敲一念 · 心生欢喜", &style_muted);
+    lv_obj_set_style_text_font(wooden_fish_motto, qd_cn_font_16(), 0);
+    lv_obj_align(wooden_fish_motto, LV_ALIGN_TOP_RIGHT, -19, 62);
+    wooden_fish_hint_label_ = label_en(wooden_fish_panel, "轻敲板子，为今日加一点功德", &style_green);
+    lv_obj_set_style_text_font(wooden_fish_hint_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(wooden_fish_hint_label_, 180);
+    lv_obj_set_style_text_align(wooden_fish_hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(wooden_fish_hint_label_, LV_ALIGN_BOTTOM_RIGHT, -10, -28);
+    wooden_fish_float_label_ = label_en(wooden_fish_panel, "功德 +1", &style_gold);
+    lv_obj_set_style_text_font(wooden_fish_float_label_, qd_cn_font_20(), 0);
+    lv_obj_align(wooden_fish_float_label_, LV_ALIGN_TOP_RIGHT, -48, 92);
+    lv_obj_add_flag(wooden_fish_float_label_, LV_OBJ_FLAG_HIDDEN);
+    for (uint8_t i = 0; i < 8; ++i) {
+        wooden_fish_particles_[i] = circle(wooden_fish_panel, i % 2 ? 7 : 5,
+                                            i % 3 ? COLOR_GOLD : lv_color_hex(0xf6df8a),
+                                            LV_OPA_COVER);
+        lv_obj_add_flag(wooden_fish_particles_[i], LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
+
     shake_lab_anim_timer_ = lv_timer_create(ShakeLabAnimCb, 80, this);
     lv_timer_pause(shake_lab_anim_timer_);
     UpdateShakeLabDice();
@@ -9368,12 +9513,29 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
             EnterShakeLabMode(ShakeLabMode::DIVINATION);
             return true;
         }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+        if (hit(142, 262, 196, 50)) {
+            EnterShakeLabMode(ShakeLabMode::WOODEN_FISH);
+            return true;
+        }
+#endif
         return false;
     }
     if (hit(392, 72, 82, 40)) {
         LeaveShakeLabMode();
         return true;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    if (shake_lab_mode_ == ShakeLabMode::WOODEN_FISH &&
+        hit(25, 102, 245, 190)) {
+        // Touch and BMI270 impacts share one merit/animation path.  A zero
+        // impulse is the explicit marker for a screen tap.
+        UpdateWoodenFishTap(0);
+        return true;
+    }
+#endif
     if (shake_lab_mode_ == ShakeLabMode::DICE) {
         if (hit(132, 70, 72, 42)) {
             shake_lab_dice_count_ = std::max<uint8_t>(1, shake_lab_dice_count_ - 1);
@@ -9431,10 +9593,25 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
             lv_obj_add_flag(shake_lab_divination_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    if (wooden_fish_group_) {
+        if (mode == ShakeLabMode::WOODEN_FISH) {
+            lv_obj_clear_flag(wooden_fish_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(wooden_fish_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+#endif
     if (shake_lab_mode_title_) {
-        const char* title = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
-                            (mode == ShakeLabMode::DICE ? "Dice" :
-                            (mode == ShakeLabMode::FORTUNE ? "Fortune Stick" : "掌卦"));
+        const char* title = "掌卦";
+        if (mode == ShakeLabMode::ASK_BALL) title = "Ask Ball";
+        else if (mode == ShakeLabMode::DICE) title = "Dice";
+        else if (mode == ShakeLabMode::FORTUNE) title = "Fortune Stick";
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+        else if (mode == ShakeLabMode::WOODEN_FISH) title = "功德木鱼";
+#endif
         set_localized_label_text(shake_lab_mode_title_, title);
     }
     if (mode == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
@@ -9473,13 +9650,37 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         lv_label_set_text(shake_lab_divination_guidance_label_, "轻摇设备，静待卦象。 ");
         lv_label_set_text(shake_lab_divination_hint_label_, "准备完成 · 摇1-2秒后停稳");
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    if (mode == ShakeLabMode::WOODEN_FISH) {
+        wooden_fish_hit_anim_ = 0;
+        ResetWoodenFishBackground();
+        if (wooden_fish_hint_label_) {
+            lv_label_set_text(wooden_fish_hint_label_, "点击木鱼或轻敲板子 · 功德 +1");
+        }
+        if (wooden_fish_float_label_) {
+            lv_obj_add_flag(wooden_fish_float_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (wooden_fish_sampling_callback_) {
+            wooden_fish_sampling_callback_(true);
+        }
+        LoadWoodenFishBackgroundAsync();
+    } else if (wooden_fish_sampling_callback_) {
+        wooden_fish_sampling_callback_(false);
+    }
+#endif
     shake_lab_sampling_active_ = true;
     if (shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(true);
     }
-    const char* mode_name = mode == ShakeLabMode::ASK_BALL ? "Ask Ball" :
-                            (mode == ShakeLabMode::DICE ? "Dice" :
-                            (mode == ShakeLabMode::FORTUNE ? "Fortune" : "Divination"));
+    const char* mode_name = "Divination";
+    if (mode == ShakeLabMode::ASK_BALL) mode_name = "Ask Ball";
+    else if (mode == ShakeLabMode::DICE) mode_name = "Dice";
+    else if (mode == ShakeLabMode::FORTUNE) mode_name = "Fortune";
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    else if (mode == ShakeLabMode::WOODEN_FISH) mode_name = "Wooden Fish";
+#endif
     ESP_LOGI(TAG, "Shake Lab mode=%s armed", mode_name);
 }
 
@@ -9491,6 +9692,15 @@ void DesktopUI::LeaveShakeLabMode() {
     if (shake_lab_sampling_active_ && shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(false);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    if (wooden_fish_sampling_callback_) {
+        wooden_fish_sampling_callback_(false);
+    }
+    wooden_fish_image_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    ResetWoodenFishBackground();
+    wooden_fish_hit_anim_ = 0;
+#endif
     shake_lab_sampling_active_ = false;
     shake_lab_detector_state_ = ShakeDetector::State::IDLE;
     shake_lab_intensity_ = 0;
@@ -9542,6 +9752,20 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_divination_judgment_label_ = nullptr;
     shake_lab_divination_guidance_label_ = nullptr;
     shake_lab_divination_hint_label_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    wooden_fish_group_ = nullptr;
+    wooden_fish_image_ = nullptr;
+    wooden_fish_image_status_ = nullptr;
+    wooden_fish_glow_ = nullptr;
+    wooden_fish_body_ = nullptr;
+    wooden_fish_mallet_ = nullptr;
+    wooden_fish_merit_label_ = nullptr;
+    wooden_fish_float_label_ = nullptr;
+    wooden_fish_hint_label_ = nullptr;
+    wooden_fish_hit_anim_ = 0;
+    memset(wooden_fish_particles_, 0, sizeof(wooden_fish_particles_));
+#endif
     memset(shake_lab_glow_, 0, sizeof(shake_lab_glow_));
     memset(shake_lab_particles_, 0, sizeof(shake_lab_particles_));
     memset(shake_lab_dice_boxes_, 0, sizeof(shake_lab_dice_boxes_));
@@ -9633,6 +9857,13 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
         return;
     }
     ++self->shake_lab_anim_tick_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    if (self->shake_lab_mode_ == ShakeLabMode::WOODEN_FISH) {
+        self->UpdateWoodenFishVisuals();
+        return;
+    }
+#endif
     if (self->shake_lab_mode_ == ShakeLabMode::DIVINATION) {
         self->UpdateShakeLabDivinationVisuals();
         return;
@@ -9650,6 +9881,253 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
         self->UpdateShakeLabDice();
     }
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+void DesktopUI::UpdateWoodenFishVisuals() {
+    if (!wooden_fish_group_ || wooden_fish_hit_anim_ == 0) {
+        return;
+    }
+    const uint8_t frame = wooden_fish_hit_anim_++;
+    const bool impact = frame <= 2;
+    const bool sd_image_visible = wooden_fish_image_ &&
+        !lv_obj_has_flag(wooden_fish_image_, LV_OBJ_FLAG_HIDDEN);
+    if (sd_image_visible) {
+        lv_obj_set_style_transform_scale_x(wooden_fish_image_, impact ? 264 : 256, 0);
+        lv_obj_set_style_transform_scale_y(wooden_fish_image_, impact ? 244 : 256, 0);
+    } else if (wooden_fish_body_) {
+        lv_obj_set_size(wooden_fish_body_, impact ? 184 : 178, impact ? 100 : 108);
+        lv_obj_align(wooden_fish_body_, LV_ALIGN_LEFT_MID, impact ? 25 : 28,
+                     impact ? 10 : 4);
+        lv_obj_set_style_shadow_width(wooden_fish_body_, impact ? 28 : 18, 0);
+        lv_obj_set_style_shadow_opa(wooden_fish_body_, impact ? LV_OPA_60 : LV_OPA_30, 0);
+    }
+    if (wooden_fish_glow_) {
+        const lv_opa_t glow = frame <= 4 ? static_cast<lv_opa_t>(90 - frame * 10)
+                                          : static_cast<lv_opa_t>(LV_OPA_20);
+        lv_obj_set_style_bg_opa(wooden_fish_glow_, glow, 0);
+    }
+    if (wooden_fish_mallet_) {
+        const int32_t rotation = frame <= 2 ? 160 :
+            (frame <= 5 ? -120 - static_cast<int32_t>(frame - 2) * 45 : -260);
+        lv_obj_set_style_transform_rotation(wooden_fish_mallet_, rotation, 0);
+    }
+    if (wooden_fish_float_label_) {
+        if (frame <= 9) {
+            lv_obj_clear_flag(wooden_fish_float_label_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_align(wooden_fish_float_label_, LV_ALIGN_TOP_RIGHT, -48,
+                         static_cast<int16_t>(92 - frame * 5));
+            lv_obj_set_style_opa(wooden_fish_float_label_,
+                                 static_cast<lv_opa_t>(255 - frame * 22), 0);
+        } else {
+            lv_obj_add_flag(wooden_fish_float_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    static constexpr int16_t kParticleDx[8] = {-54, -34, -10, 18, 45, 58, 22, -28};
+    static constexpr int16_t kParticleDy[8] = {-18, -43, -58, -52, -28, 4, 26, 22};
+    for (uint8_t i = 0; i < 8; ++i) {
+        lv_obj_t* particle = wooden_fish_particles_[i];
+        if (!particle) continue;
+        if (frame <= 7) {
+            lv_obj_set_pos(particle,
+                           static_cast<int16_t>(132 + kParticleDx[i] * frame / 7),
+                           static_cast<int16_t>(94 + kParticleDy[i] * frame / 7));
+            lv_obj_set_style_opa(particle,
+                                 static_cast<lv_opa_t>(255 - frame * 28), 0);
+            lv_obj_clear_flag(particle, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(particle, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (frame >= 11) {
+        wooden_fish_hit_anim_ = 0;
+        if (wooden_fish_image_) {
+            lv_obj_set_style_transform_scale_x(wooden_fish_image_, 256, 0);
+            lv_obj_set_style_transform_scale_y(wooden_fish_image_, 256, 0);
+        }
+        if (wooden_fish_float_label_) {
+            lv_obj_set_style_opa(wooden_fish_float_label_, LV_OPA_COVER, 0);
+            lv_obj_add_flag(wooden_fish_float_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        if (shake_lab_anim_timer_) {
+            lv_timer_pause(shake_lab_anim_timer_);
+        }
+    }
+}
+
+void DesktopUI::ResetWoodenFishBackground() {
+    if (wooden_fish_image_) {
+        lv_canvas_set_buffer(wooden_fish_image_, &s_wooden_fish_canvas_placeholder,
+                             1, 1, LV_COLOR_FORMAT_RGB565);
+        lv_obj_set_size(wooden_fish_image_, 1, 1);
+        lv_obj_set_style_transform_scale_x(wooden_fish_image_, 256, 0);
+        lv_obj_set_style_transform_scale_y(wooden_fish_image_, 256, 0);
+        lv_obj_add_flag(wooden_fish_image_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdWoodenFish::ReleaseImage(&wooden_fish_image_frame_);
+    if (wooden_fish_glow_) lv_obj_clear_flag(wooden_fish_glow_, LV_OBJ_FLAG_HIDDEN);
+    if (wooden_fish_body_) lv_obj_clear_flag(wooden_fish_body_, LV_OBJ_FLAG_HIDDEN);
+    if (wooden_fish_mallet_) lv_obj_clear_flag(wooden_fish_mallet_, LV_OBJ_FLAG_HIDDEN);
+    if (wooden_fish_image_status_) {
+        lv_label_set_text(wooden_fish_image_status_, "正在读取 SD 木鱼图片…");
+        lv_obj_clear_flag(wooden_fish_image_status_, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void DesktopUI::LoadWoodenFishBackgroundAsync() {
+    struct WoodenFishImagePayload {
+        QdWoodenFish::Status status = QdWoodenFish::Status::IMAGE_MISSING;
+        QdWoodenFish::ImageFrame image{};
+    };
+
+    void* storage = heap_caps_malloc(sizeof(WoodenFishImagePayload),
+                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    auto* background = Application::GetInstance().GetBackgroundTask();
+    if (!storage || !background) {
+        if (storage) heap_caps_free(storage);
+        if (wooden_fish_image_status_) {
+            lv_label_set_text(wooden_fish_image_status_, "后台加载不可用 · 已使用内置图");
+        }
+        ESP_LOGW(TAG, "Wooden Fish image worker unavailable");
+        return;
+    }
+
+    auto* payload = new (storage) WoodenFishImagePayload{};
+    const uint32_t request_id =
+        wooden_fish_image_load_request_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+    background->Schedule([this, payload, request_id]() {
+        auto release_payload = [payload]() {
+            QdWoodenFish::ReleaseImage(&payload->image);
+            payload->~WoodenFishImagePayload();
+            heap_caps_free(payload);
+        };
+        payload->status = QdWoodenFish::LoadBackground(&payload->image);
+        if (request_id !=
+            wooden_fish_image_load_request_id_.load(std::memory_order_relaxed)) {
+            release_payload();
+            return;
+        }
+        if (!lvgl_port_lock(500)) {
+            ESP_LOGW(TAG, "Wooden Fish image UI lock timeout");
+            release_payload();
+            return;
+        }
+        const bool current = request_id ==
+                wooden_fish_image_load_request_id_.load(std::memory_order_relaxed) &&
+            current_page_ == DesktopPage::SHAKE_LAB &&
+            shake_lab_mode_ == ShakeLabMode::WOODEN_FISH;
+        if (current) {
+            if (wooden_fish_image_) {
+                lv_canvas_set_buffer(wooden_fish_image_, &s_wooden_fish_canvas_placeholder,
+                                     1, 1, LV_COLOR_FORMAT_RGB565);
+            }
+            QdWoodenFish::ReleaseImage(&wooden_fish_image_frame_);
+            if (payload->status == QdWoodenFish::Status::OK && wooden_fish_image_) {
+                wooden_fish_image_frame_ = payload->image;
+                payload->image = {};
+                lv_canvas_set_buffer(
+                    wooden_fish_image_, wooden_fish_image_frame_.data,
+                    wooden_fish_image_frame_.dsc.header.w,
+                    wooden_fish_image_frame_.dsc.header.h,
+                    LV_COLOR_FORMAT_RGB565);
+                lv_obj_set_size(wooden_fish_image_,
+                                wooden_fish_image_frame_.dsc.header.w,
+                                wooden_fish_image_frame_.dsc.header.h);
+                lv_obj_set_style_transform_pivot_x(
+                    wooden_fish_image_, wooden_fish_image_frame_.dsc.header.w / 2, 0);
+                lv_obj_set_style_transform_pivot_y(
+                    wooden_fish_image_, wooden_fish_image_frame_.dsc.header.h / 2, 0);
+                lv_obj_align(wooden_fish_image_, LV_ALIGN_LEFT_MID, 8, 0);
+                lv_obj_clear_flag(wooden_fish_image_, LV_OBJ_FLAG_HIDDEN);
+                if (wooden_fish_glow_) {
+                    lv_obj_add_flag(wooden_fish_glow_, LV_OBJ_FLAG_HIDDEN);
+                }
+                if (wooden_fish_body_) {
+                    lv_obj_add_flag(wooden_fish_body_, LV_OBJ_FLAG_HIDDEN);
+                }
+                if (wooden_fish_mallet_) {
+                    lv_obj_add_flag(wooden_fish_mallet_, LV_OBJ_FLAG_HIDDEN);
+                }
+                if (wooden_fish_image_status_) {
+                    lv_obj_add_flag(wooden_fish_image_status_, LV_OBJ_FLAG_HIDDEN);
+                }
+            } else if (wooden_fish_image_status_) {
+                char status[72];
+                snprintf(status, sizeof(status), "%s · 已使用内置图",
+                         QdWoodenFish::StatusText(payload->status));
+                lv_label_set_text(wooden_fish_image_status_, status);
+                lv_obj_clear_flag(wooden_fish_image_status_, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        lvgl_port_unlock();
+        ESP_LOGI(TAG, "Wooden Fish SD image status=%s bytes=%lu",
+                 QdWoodenFish::StatusText(payload->status),
+                 static_cast<unsigned long>(wooden_fish_image_frame_.data_size));
+        release_payload();
+    });
+}
+
+void DesktopUI::UpdateWoodenFishTap(uint16_t impulse) {
+    if (!shake_lab_page_ || !shake_lab_sampling_active_ ||
+        shake_lab_mode_ != ShakeLabMode::WOODEN_FISH) {
+        return;
+    }
+    if (wooden_fish_merit_count_ < 999999) {
+        ++wooden_fish_merit_count_;
+    }
+    if (wooden_fish_merit_label_) {
+        char merit[40];
+        snprintf(merit, sizeof(merit), "本次功德  %lu",
+                 static_cast<unsigned long>(wooden_fish_merit_count_));
+        lv_label_set_text(wooden_fish_merit_label_, merit);
+    }
+    if (wooden_fish_hint_label_) {
+        lv_label_set_text(wooden_fish_hint_label_,
+                          impulse == 0 ? "点击成功 · 再敲一下也很好"
+                                       : "已感应 · 再敲一下也很好");
+    }
+    wooden_fish_hit_anim_ = 1;
+    UpdateWoodenFishVisuals();
+    if (shake_lab_anim_timer_) {
+        lv_timer_resume(shake_lab_anim_timer_);
+    }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+    RequestWoodenFishSound();
+#endif
+    ESP_LOGI(TAG, "Wooden Fish merit=%lu source=%s impulse=%u",
+             static_cast<unsigned long>(wooden_fish_merit_count_),
+             impulse == 0 ? "touch" : "bmi270", impulse);
+}
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+void DesktopUI::RequestWoodenFishSound() {
+    auto& app = Application::GetInstance();
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    if (now_ms - wooden_fish_last_sound_ms_ < kWoodenFishSoundRateLimitMs) {
+        return;
+    }
+    if (app.GetDeviceState() != kDeviceStateIdle || app.IsExternalAudioActive()) {
+        ESP_LOGD(TAG, "Wooden Fish sound suppressed state=%d external=%d",
+                 static_cast<int>(app.GetDeviceState()), app.IsExternalAudioActive());
+        return;
+    }
+
+    wooden_fish_last_sound_ms_ = now_ms;
+    app.Schedule([]() {
+        auto& scheduled_app = Application::GetInstance();
+        if (scheduled_app.GetDeviceState() != kDeviceStateIdle ||
+            scheduled_app.IsExternalAudioActive()) {
+            ESP_LOGD(TAG, "Wooden Fish scheduled sound suppressed");
+            return;
+        }
+        scheduled_app.PlayNotificationSound(Lang::Sounds::P3_WOODEN_FISH);
+        ESP_LOGI(TAG, "Wooden Fish sound queued");
+    });
+}
+#endif
+#endif
 
 void DesktopUI::UpdateShakeLabDivinationVisuals() {
     const bool moving = shake_lab_divination_sequence_active_ ||

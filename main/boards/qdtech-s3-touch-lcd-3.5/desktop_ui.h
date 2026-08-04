@@ -4,6 +4,10 @@
 #include "lvgl.h"
 #include "shake_detector.h"
 #include "divination_service.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+#include "wooden_fish_asset.h"
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
 #include "zodiac_service.h"
@@ -115,6 +119,11 @@ public:
     bool IsHourglassPage() const { return current_page_ == DesktopPage::HOURGLASS; }
     void SetShakeLabSamplingCallback(std::function<void(bool)> callback);
     void UpdateShakeLabDetector(const ShakeDetector::Result& result);
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    void SetWoodenFishSamplingCallback(std::function<void(bool)> callback);
+    void UpdateWoodenFishTap(uint16_t impulse);
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
     void SetPuzzleMazeSamplingCallback(std::function<void(bool)> callback);
@@ -550,6 +559,10 @@ private:
         DICE,
         FORTUNE,
         DIVINATION,
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+        WOODEN_FISH,
+#endif
     };
     lv_obj_t* shake_lab_page_ = nullptr;
     lv_obj_t* shake_lab_home_group_ = nullptr;
@@ -558,6 +571,28 @@ private:
     lv_obj_t* shake_lab_dice_group_ = nullptr;
     lv_obj_t* shake_lab_fortune_group_ = nullptr;
     lv_obj_t* shake_lab_divination_group_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    lv_obj_t* wooden_fish_group_ = nullptr;
+    lv_obj_t* wooden_fish_image_ = nullptr;
+    lv_obj_t* wooden_fish_image_status_ = nullptr;
+    lv_obj_t* wooden_fish_glow_ = nullptr;
+    lv_obj_t* wooden_fish_body_ = nullptr;
+    lv_obj_t* wooden_fish_mallet_ = nullptr;
+    lv_obj_t* wooden_fish_merit_label_ = nullptr;
+    lv_obj_t* wooden_fish_float_label_ = nullptr;
+    lv_obj_t* wooden_fish_hint_label_ = nullptr;
+    lv_obj_t* wooden_fish_particles_[8] = {};
+    std::function<void(bool)> wooden_fish_sampling_callback_;
+    QdWoodenFish::ImageFrame wooden_fish_image_frame_{};
+    std::atomic<uint32_t> wooden_fish_image_load_request_id_{0};
+    uint32_t wooden_fish_merit_count_ = 0;
+    uint8_t wooden_fish_hit_anim_ = 0;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+    int64_t wooden_fish_last_sound_ms_ = 0;
+#endif
+#endif
     lv_obj_t* shake_lab_ball_ = nullptr;
     lv_obj_t* shake_lab_glow_[2] = {};
     lv_obj_t* shake_lab_particles_[10] = {};
@@ -810,6 +845,16 @@ private:
     void StartShakeLabDivinationSequence();
     void FinishShakeLabDivinationSequence();
     void RevealShakeLabResult();
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    void UpdateWoodenFishVisuals();
+    void LoadWoodenFishBackgroundAsync();
+    void ResetWoodenFishBackground();
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH_AUDIO
+    void RequestWoodenFishSound();
+#endif
+#endif
     void UpdateFocusUI();
     uint32_t CurrentFocusDateKey() const;
     void ReconcileFocusDate(bool persist);

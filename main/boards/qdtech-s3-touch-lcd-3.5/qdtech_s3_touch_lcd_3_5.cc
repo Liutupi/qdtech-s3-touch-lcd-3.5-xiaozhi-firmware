@@ -15,6 +15,10 @@
 #include "radio_service.h"
 #include "settings.h"
 #include "time_weather_service.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+#include "wooden_fish_tap_detector.h"
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -58,6 +62,7 @@ static constexpr size_t kMusicCommandBodyMax = 4096;
 static constexpr int64_t kHourglassStartupHoldoffMs = 75000;
 static constexpr int64_t kBmi270LowRatePollMs = 250;
 static constexpr int64_t kShakeLabSampleIntervalMs = 30;
+static constexpr int64_t kWoodenFishSampleIntervalMs = 10;
 static constexpr int64_t kShakeLabUiUpdateIntervalMs = 80;
 static constexpr int64_t kPuzzleMazeSampleIntervalMs = 40;
 static constexpr int64_t kPuzzleMazeUiUpdateIntervalMs = 80;
@@ -1294,6 +1299,12 @@ private:
             qd_display->GetDesktopUI()->SetShakeLabSamplingCallback([this](bool active) {
                 shake_lab_sampling_active_.store(active, std::memory_order_relaxed);
             });
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+            qd_display->GetDesktopUI()->SetWoodenFishSamplingCallback([this](bool active) {
+                wooden_fish_sampling_active_.store(active, std::memory_order_relaxed);
+            });
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
             qd_display->GetDesktopUI()->SetPuzzleMazeSamplingCallback([this](bool active) {
@@ -1374,6 +1385,24 @@ private:
         });
         return true;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    bool PublishWoodenFishTap(uint16_t impulse) {
+        if (!display_) {
+            return false;
+        }
+        Application::GetInstance().Schedule([this, impulse]() {
+            if (!display_) return;
+            auto* qd_display = static_cast<QdtechLandscapeDisplay*>(display_);
+            if (!lvgl_port_lock(pdMS_TO_TICKS(100))) return;
+            if (auto* desktop_ui = qd_display->GetDesktopUI()) {
+                desktop_ui->UpdateWoodenFishTap(impulse);
+            }
+            lvgl_port_unlock();
+        });
+        return true;
+    }
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
     bool PublishPuzzleMotionUpdate(int16_t accel_x, int16_t accel_y, int16_t accel_z,
@@ -1425,11 +1454,24 @@ private:
         int64_t last_maze_sample_log_ms = 0;
         bool hourglass_active = false;
         bool shake_sampling_was_active = false;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+        bool wooden_fish_sampling_was_active = false;
+        int64_t wooden_fish_peak_log_ms = 0;
+        uint16_t wooden_fish_peak_impulse = 0;
+        uint16_t wooden_fish_peak_deviation = 0;
+        uint16_t wooden_fish_peak_gyro = 0;
+#endif
         bool maze_sampling_was_active = false;
 
         while (true) {
             const int64_t loop_ms = esp_timer_get_time() / 1000;
             const bool shake_sampling_active = shake_lab_sampling_active_.load(std::memory_order_relaxed);
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+            const bool wooden_fish_sampling_active =
+                wooden_fish_sampling_active_.load(std::memory_order_relaxed);
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
             const bool maze_sampling_active =
@@ -1479,6 +1521,91 @@ private:
             }
 #endif
             if (shake_sampling_active) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+                if (wooden_fish_sampling_active) {
+                    if (!wooden_fish_sampling_was_active) {
+                        wooden_fish_tap_detector_.Arm(loop_ms);
+                        wooden_fish_sampling_was_active = true;
+                        wooden_fish_peak_log_ms = loop_ms;
+                        wooden_fish_peak_impulse = 0;
+                        wooden_fish_peak_deviation = 0;
+                        wooden_fish_peak_gyro = 0;
+                        ESP_LOGI(TAG, "Wooden Fish impact sampling enabled interval=%dms",
+                                 static_cast<int>(kWoodenFishSampleIntervalMs));
+                    }
+                    const int64_t touch_active_until =
+                        touch_active_until_ms_.load(std::memory_order_relaxed);
+                    const bool touch_is_down =
+                        touch_cached_down_.load(std::memory_order_acquire);
+                    const bool touch_recently_released =
+                        touch_active_until > 0 &&
+                        loop_ms < touch_active_until - kTouchActivityHoldMs +
+                                      kShakeLabTouchSettleMs;
+                    if (touch_is_down || touch_recently_released) {
+                        vTaskDelay(pdMS_TO_TICKS(kWoodenFishSampleIntervalMs));
+                        continue;
+                    }
+                    int16_t x = 0, y = 0, z = 0, gx = 0, gy = 0, gz = 0;
+                    esp_err_t sample_error = ESP_OK;
+                    const auto sample_status =
+                        Bmi270ReadSample(x, y, z, gx, gy, gz, pdMS_TO_TICKS(20), &sample_error);
+                    if (sample_status == Bmi270SampleStatus::OK) {
+                        const auto tap = wooden_fish_tap_detector_.Process(
+                            {x, y, z, gx, gy, gz, loop_ms});
+                        wooden_fish_peak_impulse = std::max(
+                            wooden_fish_peak_impulse, tap.impulse);
+                        wooden_fish_peak_deviation = std::max(
+                            wooden_fish_peak_deviation, tap.accel_deviation);
+                        wooden_fish_peak_gyro = std::max(
+                            wooden_fish_peak_gyro, tap.gyro_peak);
+                        if (tap.tapped) {
+                            ESP_LOGI(TAG,
+                                     "Wooden Fish impact accepted impulse=%u/%u deviation=%u/%u gyro=%u/%u",
+                                     tap.impulse, tap.impulse_threshold,
+                                     tap.accel_deviation, tap.deviation_threshold,
+                                     tap.gyro_peak, tap.gyro_limit);
+                            PublishWoodenFishTap(tap.impulse);
+                        }
+                        if (loop_ms - wooden_fish_peak_log_ms >= 500) {
+                            if (wooden_fish_peak_impulse >= 10 ||
+                                wooden_fish_peak_deviation >= 10 ||
+                                wooden_fish_peak_gyro >= 10) {
+                                ESP_LOGI(TAG,
+                                         "Wooden Fish motion peak impulse=%u deviation=%u gyro=%u armed=%d thresholds=%u/%u gyro_limit=%u",
+                                         wooden_fish_peak_impulse,
+                                         wooden_fish_peak_deviation,
+                                         wooden_fish_peak_gyro, tap.armed ? 1 : 0,
+                                         tap.impulse_threshold,
+                                         tap.deviation_threshold,
+                                         tap.gyro_limit);
+                            }
+                            wooden_fish_peak_log_ms = loop_ms;
+                            wooden_fish_peak_impulse = 0;
+                            wooden_fish_peak_deviation = 0;
+                            wooden_fish_peak_gyro = 0;
+                        }
+                    } else if (loop_ms - last_shake_i2c_error_log_ms >=
+                               kShakeLabI2cErrorLogIntervalMs) {
+                        if (sample_status == Bmi270SampleStatus::LOCK_TIMEOUT) {
+                            ESP_LOGW(TAG, "Wooden Fish BMI270 sample lock timeout wait=20ms");
+                        } else if (sample_status == Bmi270SampleStatus::TRANSFER_FAILED) {
+                            ESP_LOGW(TAG, "Wooden Fish BMI270 transfer failed: %s",
+                                     esp_err_to_name(sample_error));
+                        } else {
+                            ESP_LOGW(TAG, "Wooden Fish BMI270 device unavailable");
+                        }
+                        last_shake_i2c_error_log_ms = loop_ms;
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(kWoodenFishSampleIntervalMs));
+                    continue;
+                }
+                if (wooden_fish_sampling_was_active) {
+                    wooden_fish_tap_detector_.Reset();
+                    wooden_fish_sampling_was_active = false;
+                    ESP_LOGI(TAG, "Wooden Fish impact sampling disabled");
+                }
+#endif
                 if (!shake_sampling_was_active) {
                     shake_detector_.Arm(loop_ms);
                     shake_sampling_was_active = true;
@@ -1558,6 +1685,14 @@ private:
                 shake_sampling_was_active = false;
                 ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling disabled; restoring low-rate orientation polling");
             }
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+            if (wooden_fish_sampling_was_active) {
+                wooden_fish_tap_detector_.Reset();
+                wooden_fish_sampling_was_active = false;
+                ESP_LOGI(TAG, "Wooden Fish impact sampling disabled");
+            }
+#endif
             if (loop_ms < touch_active_until_ms_.load(std::memory_order_relaxed)) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 continue;
@@ -2880,11 +3015,19 @@ private:
     int64_t bmi270_baseline_mag_sq_ = 0;
     std::atomic<int64_t> touch_active_until_ms_{0};
     std::atomic<bool> shake_lab_sampling_active_{false};
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    std::atomic<bool> wooden_fish_sampling_active_{false};
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
     std::atomic<bool> puzzle_maze_sampling_active_{false};
 #endif
     ShakeDetector shake_detector_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+    WoodenFishTapDetector wooden_fish_tap_detector_;
+#endif
     QdtechTouch touch_;
     esp_timer_handle_t touch_timer_ = nullptr;
     esp_timer_handle_t boot_power_timer_ = nullptr;

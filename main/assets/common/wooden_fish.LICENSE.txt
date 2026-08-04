@@ -1,0 +1,11 @@
+Wooden Fish notification sound
+
+Source title: Mokugyo drum sounds
+Creator: George Papargyris
+Source: https://freesound.org/people/George_Papargyris/sounds/837177/
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+
+Firmware adaptation: the final isolated strike was trimmed to 180 ms,
+converted to mono 16 kHz PCM, faded from 135 ms, and encoded as an Opus P3
+stream for the QDTech ESP32-S3 firmware.
