@@ -9178,32 +9178,60 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
 
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
-    // Preserve all four established cards and add one compact fifth entry in
-    // the otherwise unused footer. This keeps their hitboxes unchanged.
-    lv_obj_t* wooden_fish_card = CreatePanel(shake_lab_home_group_, 196, 42, 142, 266);
+    // v1.8.16 already uses the footer for Wooden Fish. Keep that feature and
+    // split the row into three compact entries for the two SD recommendations.
+    lv_obj_t* wooden_fish_card = CreatePanel(shake_lab_home_group_, 144, 42, 14, 266);
     lv_obj_set_style_bg_color(wooden_fish_card, lv_color_hex(0x3b241b), 0);
     lv_obj_set_style_border_color(wooden_fish_card, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(wooden_fish_card, 2, 0);
     lv_obj_t* wooden_fish_icon = lv_obj_create(wooden_fish_card);
     lv_obj_remove_style_all(wooden_fish_icon);
-    lv_obj_set_size(wooden_fish_icon, 38, 26);
+    lv_obj_set_size(wooden_fish_icon, 30, 24);
     lv_obj_set_style_radius(wooden_fish_icon, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(wooden_fish_icon, lv_color_hex(0xc8783c), 0);
     lv_obj_set_style_bg_opa(wooden_fish_icon, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(wooden_fish_icon, lv_color_hex(0xf2c66d), 0);
     lv_obj_set_style_border_width(wooden_fish_icon, 2, 0);
-    lv_obj_align(wooden_fish_icon, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_align(wooden_fish_icon, LV_ALIGN_LEFT_MID, 8, 0);
     lv_obj_t* wooden_fish_slot = lv_obj_create(wooden_fish_icon);
     lv_obj_remove_style_all(wooden_fish_slot);
-    lv_obj_set_size(wooden_fish_slot, 22, 4);
+    lv_obj_set_size(wooden_fish_slot, 18, 4);
     lv_obj_set_style_radius(wooden_fish_slot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(wooden_fish_slot, lv_color_hex(0x4a241b), 0);
     lv_obj_set_style_bg_opa(wooden_fish_slot, LV_OPA_COVER, 0);
     lv_obj_center(wooden_fish_slot);
     lv_obj_t* wooden_fish_card_title = label_en(wooden_fish_card, "功德木鱼", &style_gold);
-    lv_obj_set_style_text_font(wooden_fish_card_title, qd_cn_font_20(), 0);
-    lv_obj_align(wooden_fish_card_title, LV_ALIGN_LEFT_MID, 62, 0);
+    lv_obj_set_style_text_font(wooden_fish_card_title, qd_cn_font_16(), 0);
+    lv_obj_align(wooden_fish_card_title, LV_ALIGN_LEFT_MID, 44, 0);
+
+    constexpr int16_t recommendation_card_width = 144;
+    constexpr int16_t movie_card_x = 168;
+    constexpr int16_t book_card_x = 322;
+#else
+    constexpr int16_t recommendation_card_width = 220;
+    constexpr int16_t movie_card_x = 14;
+    constexpr int16_t book_card_x = 246;
 #endif
+
+    lv_obj_t* movie_card = CreatePanel(
+        shake_lab_home_group_, recommendation_card_width, 42, movie_card_x, 266);
+    lv_obj_set_style_bg_color(movie_card, lv_color_hex(0x49335f), 0);
+    lv_obj_set_style_border_color(movie_card, COLOR_PURPLE, 0);
+    lv_obj_set_style_border_width(movie_card, 2, 0);
+    lv_obj_t* movie_title = label_en(movie_card, "摇摇电影", &style_en);
+    lv_obj_set_style_text_font(movie_title, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(movie_title, COLOR_CREAM, 0);
+    lv_obj_center(movie_title);
+
+    lv_obj_t* book_card = CreatePanel(
+        shake_lab_home_group_, recommendation_card_width, 42, book_card_x, 266);
+    lv_obj_set_style_bg_color(book_card, lv_color_hex(0x285247), 0);
+    lv_obj_set_style_border_color(book_card, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(book_card, 2, 0);
+    lv_obj_t* book_title = label_en(book_card, "摇摇书籍", &style_en);
+    lv_obj_set_style_text_font(book_title, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(book_title, COLOR_CREAM, 0);
+    lv_obj_center(book_title);
 
     shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
     lv_obj_remove_style_all(shake_lab_mode_group_);
@@ -9378,6 +9406,103 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(shake_lab_divination_hint_label_, qd_cn_font_16(), 0);
     lv_obj_align(shake_lab_divination_hint_label_, LV_ALIGN_BOTTOM_RIGHT, -16, -12);
 
+    // Movie and book modes deliberately share one result tree. Only the
+    // selected record and one scaled cover are ever resident in PSRAM.
+    shake_lab_recommendation_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_recommendation_group_);
+    lv_obj_set_size(shake_lab_recommendation_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_recommendation_group_, LV_OBJ_FLAG_SCROLLABLE);
+    // Recommendation results get the complete 480x320 canvas.  An opaque
+    // background hides the generic Shake Lab heading and its introductory
+    // copy, leaving room for a large cover and a proper reading column.
+    lv_obj_set_style_bg_color(shake_lab_recommendation_group_, COLOR_BG, 0);
+    lv_obj_set_style_bg_opa(shake_lab_recommendation_group_, LV_OPA_COVER, 0);
+    lv_obj_add_flag(shake_lab_recommendation_group_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t* recommendation_image_panel = lv_obj_create(shake_lab_recommendation_group_);
+    lv_obj_remove_style_all(recommendation_image_panel);
+    lv_obj_set_size(recommendation_image_panel, 210, 312);
+    lv_obj_set_style_radius(recommendation_image_panel, 12, 0);
+    lv_obj_set_style_bg_color(recommendation_image_panel, lv_color_hex(0x2a2430), 0);
+    lv_obj_set_style_bg_opa(recommendation_image_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(recommendation_image_panel, COLOR_GOLD, 0);
+    lv_obj_set_style_border_width(recommendation_image_panel, 2, 0);
+    lv_obj_set_style_clip_corner(recommendation_image_panel, true, 0);
+    lv_obj_set_pos(recommendation_image_panel, 4, 4);
+    shake_lab_recommendation_image_ = lv_canvas_create(recommendation_image_panel);
+    lv_obj_center(shake_lab_recommendation_image_);
+    lv_obj_add_flag(shake_lab_recommendation_image_, LV_OBJ_FLAG_HIDDEN);
+    shake_lab_recommendation_image_status_ = label_en(
+        recommendation_image_panel, "摇一摇\n抽取推荐", &style_en);
+    lv_obj_set_style_text_font(shake_lab_recommendation_image_status_, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(shake_lab_recommendation_image_status_, COLOR_CREAM, 0);
+    lv_obj_set_width(shake_lab_recommendation_image_status_, 184);
+    lv_obj_set_style_text_align(shake_lab_recommendation_image_status_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(shake_lab_recommendation_image_status_);
+
+    shake_lab_recommendation_text_panel_ = lv_obj_create(shake_lab_recommendation_group_);
+    lv_obj_remove_style_all(shake_lab_recommendation_text_panel_);
+    lv_obj_set_size(shake_lab_recommendation_text_panel_, 256, 312);
+    lv_obj_set_pos(shake_lab_recommendation_text_panel_, 220, 4);
+    lv_obj_set_scroll_dir(shake_lab_recommendation_text_panel_, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(shake_lab_recommendation_text_panel_, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_style_pad_top(shake_lab_recommendation_text_panel_, 4, 0);
+    lv_obj_set_style_pad_right(shake_lab_recommendation_text_panel_, 5, 0);
+    lv_obj_set_style_pad_bottom(shake_lab_recommendation_text_panel_, 8, 0);
+    lv_obj_set_style_pad_row(shake_lab_recommendation_text_panel_, 5, 0);
+    lv_obj_set_flex_flow(shake_lab_recommendation_text_panel_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(shake_lab_recommendation_text_panel_, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    shake_lab_recommendation_title_ = label_en(
+        shake_lab_recommendation_text_panel_, "今晚看什么？", &style_gold);
+    lv_obj_set_style_text_font(shake_lab_recommendation_title_, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(shake_lab_recommendation_title_, COLOR_CREAM, 0);
+    lv_obj_set_width(shake_lab_recommendation_title_, 198);
+    lv_label_set_long_mode(shake_lab_recommendation_title_, LV_LABEL_LONG_WRAP);
+
+    shake_lab_recommendation_rating_ = label_en(
+        shake_lab_recommendation_text_panel_, "评分 --", &style_gold);
+    lv_obj_set_style_text_font(shake_lab_recommendation_rating_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_recommendation_rating_, 244);
+
+    shake_lab_recommendation_primary_ = label_en(
+        shake_lab_recommendation_text_panel_, "平稳摇动后揭晓", &style_en);
+    lv_obj_set_style_text_font(shake_lab_recommendation_primary_, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(shake_lab_recommendation_primary_, COLOR_CREAM, 0);
+    lv_obj_set_width(shake_lab_recommendation_primary_, 244);
+    lv_label_set_long_mode(shake_lab_recommendation_primary_, LV_LABEL_LONG_WRAP);
+
+    shake_lab_recommendation_secondary_ = label_en(
+        shake_lab_recommendation_text_panel_, "豆瓣精选 250", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_recommendation_secondary_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_recommendation_secondary_, 244);
+    lv_label_set_long_mode(shake_lab_recommendation_secondary_, LV_LABEL_LONG_WRAP);
+
+    shake_lab_recommendation_meta_ = label_en(
+        shake_lab_recommendation_text_panel_, "", &style_green);
+    lv_obj_set_style_text_font(shake_lab_recommendation_meta_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_recommendation_meta_, 244);
+    lv_label_set_long_mode(shake_lab_recommendation_meta_, LV_LABEL_LONG_WRAP);
+
+    shake_lab_recommendation_summary_ = label_en(
+        shake_lab_recommendation_text_panel_, "把选择交给一点点运气。", &style_muted);
+    lv_obj_set_style_text_font(shake_lab_recommendation_summary_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_recommendation_summary_, 244);
+    lv_label_set_long_mode(shake_lab_recommendation_summary_, LV_LABEL_LONG_WRAP);
+
+    shake_lab_recommendation_hint_ = label_en(
+        shake_lab_recommendation_text_panel_, "摇 1-2 秒后停稳", &style_green);
+    lv_obj_set_style_text_font(shake_lab_recommendation_hint_, qd_cn_font_16(), 0);
+    lv_obj_set_width(shake_lab_recommendation_hint_, 244);
+
+    lv_obj_t* recommendation_back = CreateButton(
+        shake_lab_recommendation_group_, "返回", nullptr);
+    lv_obj_set_size(recommendation_back, 48, 28);
+    lv_obj_align(recommendation_back, LV_ALIGN_TOP_RIGHT, -5, 5);
+    if (lv_obj_t* text = lv_obj_get_child(recommendation_back, 0)) {
+        lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
+    }
+
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     wooden_fish_group_ = lv_obj_create(shake_lab_mode_group_);
@@ -9515,12 +9640,35 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         }
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
-        if (hit(142, 262, 196, 50)) {
+        if (hit(14, 262, 144, 50)) {
             EnterShakeLabMode(ShakeLabMode::WOODEN_FISH);
+            return true;
+        }
+        if (hit(168, 262, 144, 50)) {
+            EnterShakeLabMode(ShakeLabMode::MOVIE);
+            return true;
+        }
+        if (hit(322, 262, 144, 50)) {
+            EnterShakeLabMode(ShakeLabMode::BOOK);
+            return true;
+        }
+#else
+        if (hit(14, 262, 220, 50)) {
+            EnterShakeLabMode(ShakeLabMode::MOVIE);
+            return true;
+        }
+        if (hit(246, 262, 220, 50)) {
+            EnterShakeLabMode(ShakeLabMode::BOOK);
             return true;
         }
 #endif
         return false;
+    }
+    if ((shake_lab_mode_ == ShakeLabMode::MOVIE ||
+         shake_lab_mode_ == ShakeLabMode::BOOK) &&
+        hit(424, 0, 56, 40)) {
+        LeaveShakeLabMode();
+        return true;
     }
     if (hit(392, 72, 82, 40)) {
         LeaveShakeLabMode();
@@ -9593,6 +9741,13 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
             lv_obj_add_flag(shake_lab_divination_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (shake_lab_recommendation_group_) {
+        if (mode == ShakeLabMode::MOVIE || mode == ShakeLabMode::BOOK) {
+            lv_obj_clear_flag(shake_lab_recommendation_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_recommendation_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     if (wooden_fish_group_) {
@@ -9608,6 +9763,8 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         if (mode == ShakeLabMode::ASK_BALL) title = "Ask Ball";
         else if (mode == ShakeLabMode::DICE) title = "Dice";
         else if (mode == ShakeLabMode::FORTUNE) title = "Fortune Stick";
+        else if (mode == ShakeLabMode::MOVIE) title = "摇摇电影";
+        else if (mode == ShakeLabMode::BOOK) title = "摇摇书籍";
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
         else if (mode == ShakeLabMode::WOODEN_FISH) title = "功德木鱼";
@@ -9650,6 +9807,9 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         lv_label_set_text(shake_lab_divination_guidance_label_, "轻摇设备，静待卦象。 ");
         lv_label_set_text(shake_lab_divination_hint_label_, "准备完成 · 摇1-2秒后停稳");
     }
+    if (mode == ShakeLabMode::MOVIE || mode == ShakeLabMode::BOOK) {
+        ResetShakeLabRecommendationView();
+    }
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     if (mode == ShakeLabMode::WOODEN_FISH) {
@@ -9677,6 +9837,8 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     if (mode == ShakeLabMode::ASK_BALL) mode_name = "Ask Ball";
     else if (mode == ShakeLabMode::DICE) mode_name = "Dice";
     else if (mode == ShakeLabMode::FORTUNE) mode_name = "Fortune";
+    else if (mode == ShakeLabMode::MOVIE) mode_name = "Movie";
+    else if (mode == ShakeLabMode::BOOK) mode_name = "Book";
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     else if (mode == ShakeLabMode::WOODEN_FISH) mode_name = "Wooden Fish";
@@ -9686,6 +9848,7 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
 
 void DesktopUI::LeaveShakeLabMode() {
     shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    shake_lab_recommendation_load_request_id_.fetch_add(1, std::memory_order_relaxed);
     if (shake_lab_anim_timer_) {
         lv_timer_pause(shake_lab_anim_timer_);
     }
@@ -9709,6 +9872,10 @@ void DesktopUI::LeaveShakeLabMode() {
         lv_image_set_src(shake_lab_divination_image_, nullptr);
     }
     QdDivination::ReleaseImage(&shake_lab_divination_image_frame_);
+    if (shake_lab_recommendation_image_) {
+        lv_obj_add_flag(shake_lab_recommendation_image_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdShakeRecommendation::ReleaseImage(&shake_lab_recommendation_image_frame_);
     if (shake_lab_mode_group_) {
         lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -9735,6 +9902,7 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_dice_group_ = nullptr;
     shake_lab_fortune_group_ = nullptr;
     shake_lab_divination_group_ = nullptr;
+    shake_lab_recommendation_group_ = nullptr;
     shake_lab_ball_ = nullptr;
     shake_lab_answer_label_ = nullptr;
     shake_lab_hint_label_ = nullptr;
@@ -9752,6 +9920,16 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_divination_judgment_label_ = nullptr;
     shake_lab_divination_guidance_label_ = nullptr;
     shake_lab_divination_hint_label_ = nullptr;
+    shake_lab_recommendation_image_ = nullptr;
+    shake_lab_recommendation_image_status_ = nullptr;
+    shake_lab_recommendation_text_panel_ = nullptr;
+    shake_lab_recommendation_title_ = nullptr;
+    shake_lab_recommendation_primary_ = nullptr;
+    shake_lab_recommendation_secondary_ = nullptr;
+    shake_lab_recommendation_meta_ = nullptr;
+    shake_lab_recommendation_summary_ = nullptr;
+    shake_lab_recommendation_rating_ = nullptr;
+    shake_lab_recommendation_hint_ = nullptr;
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     wooden_fish_group_ = nullptr;
@@ -10217,6 +10395,201 @@ void DesktopUI::FinishShakeLabDivinationSequence() {
     RevealShakeLabResult();
 }
 
+void DesktopUI::ResetShakeLabRecommendationView() {
+    shake_lab_recommendation_load_request_id_.fetch_add(1, std::memory_order_relaxed);
+    if (shake_lab_recommendation_image_) {
+        lv_obj_add_flag(shake_lab_recommendation_image_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdShakeRecommendation::ReleaseImage(&shake_lab_recommendation_image_frame_);
+    memset(&shake_lab_recommendation_record_, 0, sizeof(shake_lab_recommendation_record_));
+    if (shake_lab_recommendation_text_panel_) {
+        lv_obj_scroll_to_y(shake_lab_recommendation_text_panel_, 0, LV_ANIM_OFF);
+    }
+    const bool movie = shake_lab_mode_ == ShakeLabMode::MOVIE;
+    if (shake_lab_recommendation_image_status_) {
+        lv_label_set_text(shake_lab_recommendation_image_status_,
+                          movie ? "摇一摇\n抽取电影" : "摇一摇\n抽取好书");
+        lv_obj_clear_flag(shake_lab_recommendation_image_status_, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_recommendation_title_) {
+        lv_label_set_text(shake_lab_recommendation_title_,
+                          movie ? "今晚看什么？" : "下一本读什么？");
+    }
+    if (shake_lab_recommendation_primary_) {
+        lv_label_set_text(shake_lab_recommendation_primary_, "平稳摇动后揭晓");
+    }
+    if (shake_lab_recommendation_secondary_) {
+        lv_label_set_text(shake_lab_recommendation_secondary_, "豆瓣精选 250");
+    }
+    if (shake_lab_recommendation_meta_) lv_label_set_text(shake_lab_recommendation_meta_, "");
+    if (shake_lab_recommendation_summary_) {
+        lv_label_set_text(shake_lab_recommendation_summary_, "把选择交给一点点运气。");
+    }
+    if (shake_lab_recommendation_rating_) {
+        lv_label_set_text(shake_lab_recommendation_rating_, "评分 --");
+    }
+    if (shake_lab_recommendation_hint_) {
+        lv_label_set_text(shake_lab_recommendation_hint_, "摇 1-2 秒后停稳");
+    }
+}
+
+void DesktopUI::StartShakeLabRecommendationLoad() {
+    if (shake_lab_mode_ != ShakeLabMode::MOVIE && shake_lab_mode_ != ShakeLabMode::BOOK) return;
+    const QdShakeRecommendation::Kind kind = shake_lab_mode_ == ShakeLabMode::MOVIE
+        ? QdShakeRecommendation::Kind::MOVIE
+        : QdShakeRecommendation::Kind::BOOK;
+    if (shake_lab_recommendation_hint_) {
+        lv_label_set_text(shake_lab_recommendation_hint_, "正在翻找推荐…");
+    }
+    if (shake_lab_recommendation_image_status_) {
+        lv_label_set_text(shake_lab_recommendation_image_status_, "加载中…");
+        lv_obj_clear_flag(shake_lab_recommendation_image_status_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    struct RecommendationPayload {
+        QdShakeRecommendation::Status record_status = QdShakeRecommendation::Status::INDEX_INVALID;
+        QdShakeRecommendation::Status image_status = QdShakeRecommendation::Status::IMAGE_MISSING;
+        QdShakeRecommendation::Record record{};
+        QdShakeRecommendation::ImageFrame image{};
+    };
+    void* storage = heap_caps_malloc(sizeof(RecommendationPayload),
+                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    auto* background = Application::GetInstance().GetBackgroundTask();
+    if (!storage || !background) {
+        if (storage) heap_caps_free(storage);
+        if (shake_lab_recommendation_hint_) {
+            lv_label_set_text(shake_lab_recommendation_hint_, "后台加载暂不可用");
+        }
+        return;
+    }
+    auto* payload = new (storage) RecommendationPayload{};
+    const uint32_t request_id =
+        shake_lab_recommendation_load_request_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+    background->Schedule([this, payload, request_id, kind]() {
+        auto release_payload = [payload]() {
+            QdShakeRecommendation::ReleaseImage(&payload->image);
+            payload->~RecommendationPayload();
+            heap_caps_free(payload);
+        };
+        payload->record_status = QdShakeRecommendation::Draw(kind, &payload->record);
+        if (payload->record_status == QdShakeRecommendation::Status::OK) {
+            payload->image_status =
+                QdShakeRecommendation::LoadImage(kind, payload->record, &payload->image);
+        }
+        if (request_id !=
+            shake_lab_recommendation_load_request_id_.load(std::memory_order_relaxed)) {
+            release_payload();
+            return;
+        }
+        if (!lvgl_port_lock(500)) {
+            ESP_LOGW(TAG, "Shake recommendation UI lock timeout");
+            release_payload();
+            return;
+        }
+        const ShakeLabMode expected_mode = kind == QdShakeRecommendation::Kind::MOVIE
+            ? ShakeLabMode::MOVIE : ShakeLabMode::BOOK;
+        const bool current = request_id ==
+                shake_lab_recommendation_load_request_id_.load(std::memory_order_relaxed) &&
+            current_page_ == DesktopPage::SHAKE_LAB && shake_lab_mode_ == expected_mode;
+        if (current) {
+            if (payload->record_status != QdShakeRecommendation::Status::OK) {
+                const char* status = QdShakeRecommendation::StatusText(payload->record_status);
+                if (shake_lab_recommendation_image_status_) {
+                    lv_label_set_text(shake_lab_recommendation_image_status_, status);
+                }
+                if (shake_lab_recommendation_title_) {
+                    lv_label_set_text(shake_lab_recommendation_title_, "推荐资料未就绪");
+                }
+                if (shake_lab_recommendation_primary_) {
+                    lv_label_set_text(shake_lab_recommendation_primary_, status);
+                }
+                if (shake_lab_recommendation_summary_) {
+                    lv_label_set_text(shake_lab_recommendation_summary_,
+                                      kind == QdShakeRecommendation::Kind::MOVIE
+                                          ? "请把 movies 文件夹复制到 SD 卡根目录。"
+                                          : "请把 books 文件夹复制到 SD 卡根目录。");
+                }
+                if (shake_lab_recommendation_hint_) {
+                    lv_label_set_text(shake_lab_recommendation_hint_, "请检查 SD 卡资源");
+                }
+            } else {
+                shake_lab_recommendation_record_ = payload->record;
+                if (shake_lab_recommendation_title_) {
+                    lv_label_set_text(shake_lab_recommendation_title_, payload->record.title);
+                }
+                if (shake_lab_recommendation_primary_) {
+                    lv_label_set_text(shake_lab_recommendation_primary_, payload->record.primary);
+                }
+                if (shake_lab_recommendation_secondary_) {
+                    lv_label_set_text(shake_lab_recommendation_secondary_, payload->record.secondary);
+                }
+                if (shake_lab_recommendation_meta_) {
+                    lv_label_set_text(shake_lab_recommendation_meta_, payload->record.meta);
+                }
+                if (shake_lab_recommendation_summary_) {
+                    lv_label_set_text(shake_lab_recommendation_summary_, payload->record.summary);
+                }
+                if (shake_lab_recommendation_rating_) {
+                    char rating[32];
+                    snprintf(rating, sizeof(rating), "评分 %s", payload->record.rating);
+                    lv_label_set_text(shake_lab_recommendation_rating_, rating);
+                }
+                if (shake_lab_recommendation_hint_) {
+                    lv_label_set_text(shake_lab_recommendation_hint_, "可以再次摇一摇");
+                }
+                if (shake_lab_recommendation_text_panel_) {
+                    lv_obj_update_layout(shake_lab_recommendation_text_panel_);
+                    lv_obj_scroll_to_y(shake_lab_recommendation_text_panel_, 0, LV_ANIM_OFF);
+                }
+
+                if (shake_lab_recommendation_image_) {
+                    lv_obj_add_flag(shake_lab_recommendation_image_, LV_OBJ_FLAG_HIDDEN);
+                }
+                QdShakeRecommendation::ReleaseImage(&shake_lab_recommendation_image_frame_);
+                if (payload->image_status == QdShakeRecommendation::Status::OK &&
+                    shake_lab_recommendation_image_) {
+                    shake_lab_recommendation_image_frame_ = payload->image;
+                    payload->image = {};
+                    lv_canvas_set_buffer(
+                        shake_lab_recommendation_image_,
+                        shake_lab_recommendation_image_frame_.data,
+                        shake_lab_recommendation_image_frame_.dsc.header.w,
+                        shake_lab_recommendation_image_frame_.dsc.header.h,
+                        LV_COLOR_FORMAT_RGB565);
+                    lv_obj_set_size(shake_lab_recommendation_image_,
+                                    shake_lab_recommendation_image_frame_.dsc.header.w,
+                                    shake_lab_recommendation_image_frame_.dsc.header.h);
+                    const uint32_t image_w =
+                        shake_lab_recommendation_image_frame_.dsc.header.w;
+                    const uint32_t image_h =
+                        shake_lab_recommendation_image_frame_.dsc.header.h;
+                    const uint32_t width_scale = image_w ? (202u * 256u) / image_w : 256u;
+                    const uint32_t height_scale = image_h ? (302u * 256u) / image_h : 256u;
+                    const uint16_t cover_scale = static_cast<uint16_t>(
+                        std::min<uint32_t>(384u, std::min(width_scale, height_scale)));
+                    lv_image_set_scale(shake_lab_recommendation_image_, cover_scale);
+                    lv_obj_center(shake_lab_recommendation_image_);
+                    lv_obj_clear_flag(shake_lab_recommendation_image_, LV_OBJ_FLAG_HIDDEN);
+                    if (shake_lab_recommendation_image_status_) {
+                        lv_obj_add_flag(shake_lab_recommendation_image_status_, LV_OBJ_FLAG_HIDDEN);
+                    }
+                } else if (shake_lab_recommendation_image_status_) {
+                    lv_label_set_text(shake_lab_recommendation_image_status_,
+                                      QdShakeRecommendation::StatusText(payload->image_status));
+                    lv_obj_clear_flag(shake_lab_recommendation_image_status_, LV_OBJ_FLAG_HIDDEN);
+                }
+            }
+        }
+        lvgl_port_unlock();
+        ESP_LOGI(TAG, "Shake recommendation kind=%s id=%s record=%s image=%s",
+                 kind == QdShakeRecommendation::Kind::MOVIE ? "movie" : "book",
+                 payload->record.id,
+                 QdShakeRecommendation::StatusText(payload->record_status),
+                 QdShakeRecommendation::StatusText(payload->image_status));
+        release_payload();
+    });
+}
+
 void DesktopUI::RevealShakeLabResult() {
     if (shake_lab_mode_ == ShakeLabMode::ASK_BALL) {
         static constexpr const char* kAnswers[] = {
@@ -10430,6 +10803,9 @@ void DesktopUI::RevealShakeLabResult() {
             }
             ESP_LOGI(TAG, "Shake Lab divination reveal id=%s", reading.id);
         }
+    } else if (shake_lab_mode_ == ShakeLabMode::MOVIE ||
+               shake_lab_mode_ == ShakeLabMode::BOOK) {
+        StartShakeLabRecommendationLoad();
     }
     if (!Application::GetInstance().IsExternalAudioActive()) {
         Application::GetInstance().Schedule([]() {
@@ -10461,6 +10837,10 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 shake_lab_divination_revealed_lines_ = 0;
                 shake_lab_divination_sequence_active_ = false;
                 lv_label_set_text(shake_lab_divination_hint_label_, "已感应 · 请停稳出卦");
+            } else if ((shake_lab_mode_ == ShakeLabMode::MOVIE ||
+                        shake_lab_mode_ == ShakeLabMode::BOOK) &&
+                       shake_lab_recommendation_hint_) {
+                lv_label_set_text(shake_lab_recommendation_hint_, "摇动已感应 · 请继续");
             }
             if (shake_lab_anim_timer_) {
                 lv_timer_resume(shake_lab_anim_timer_);
@@ -10475,6 +10855,10 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "一枝签正在落下……");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
                 lv_label_set_text(shake_lab_divination_hint_label_, "卦象显现中 · 请保持静止");
+            } else if ((shake_lab_mode_ == ShakeLabMode::MOVIE ||
+                        shake_lab_mode_ == ShakeLabMode::BOOK) &&
+                       shake_lab_recommendation_hint_) {
+                lv_label_set_text(shake_lab_recommendation_hint_, "正在挑选 · 请保持静止");
             }
             break;
         case ShakeDetector::Transition::SETTLING_TO_REVEAL:
@@ -10489,6 +10873,11 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
                 lv_label_set_text(shake_lab_fortune_hint_label_, "可再次摇签");
             } else if (shake_lab_mode_ == ShakeLabMode::DIVINATION && shake_lab_divination_hint_label_) {
                 lv_label_set_text(shake_lab_divination_hint_label_, "可再次摇卦 · 静心再问");
+            } else if ((shake_lab_mode_ == ShakeLabMode::MOVIE ||
+                        shake_lab_mode_ == ShakeLabMode::BOOK) &&
+                       shake_lab_recommendation_hint_ &&
+                       shake_lab_recommendation_record_.id[0] != '\0') {
+                lv_label_set_text(shake_lab_recommendation_hint_, "可以再次摇一摇");
             }
             ESP_LOGI(TAG, "Shake Lab cooldown complete");
             break;

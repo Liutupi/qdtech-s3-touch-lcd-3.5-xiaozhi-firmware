@@ -3,6 +3,7 @@
 #include "sdkconfig.h"
 #include "lvgl.h"
 #include "shake_detector.h"
+#include "shake_recommendation_service.h"
 #include "divination_service.h"
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
@@ -559,6 +560,8 @@ private:
         DICE,
         FORTUNE,
         DIVINATION,
+        MOVIE,
+        BOOK,
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
         WOODEN_FISH,
@@ -571,6 +574,7 @@ private:
     lv_obj_t* shake_lab_dice_group_ = nullptr;
     lv_obj_t* shake_lab_fortune_group_ = nullptr;
     lv_obj_t* shake_lab_divination_group_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_group_ = nullptr;
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     lv_obj_t* wooden_fish_group_ = nullptr;
@@ -617,9 +621,22 @@ private:
     lv_obj_t* shake_lab_divination_hint_label_ = nullptr;
     lv_obj_t* shake_lab_divination_coins_[3] = {};
     lv_obj_t* shake_lab_divination_lines_[6][2] = {};
+    lv_obj_t* shake_lab_recommendation_image_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_image_status_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_text_panel_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_title_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_primary_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_secondary_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_meta_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_summary_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_rating_ = nullptr;
+    lv_obj_t* shake_lab_recommendation_hint_ = nullptr;
     QdDivination::ImageFrame shake_lab_divination_image_frame_{};
     QdDivination::Reading shake_lab_divination_reading_{};
     std::atomic<uint32_t> shake_lab_divination_load_request_id_{0};
+    QdShakeRecommendation::Record shake_lab_recommendation_record_{};
+    QdShakeRecommendation::ImageFrame shake_lab_recommendation_image_frame_{};
+    std::atomic<uint32_t> shake_lab_recommendation_load_request_id_{0};
     lv_timer_t* shake_lab_anim_timer_ = nullptr;
     std::function<void(bool)> shake_lab_sampling_callback_;
     ShakeLabMode shake_lab_mode_ = ShakeLabMode::HOME;
@@ -844,6 +861,8 @@ private:
     void UpdateShakeLabDivinationVisuals();
     void StartShakeLabDivinationSequence();
     void FinishShakeLabDivinationSequence();
+    void ResetShakeLabRecommendationView();
+    void StartShakeLabRecommendationLoad();
     void RevealShakeLabResult();
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
