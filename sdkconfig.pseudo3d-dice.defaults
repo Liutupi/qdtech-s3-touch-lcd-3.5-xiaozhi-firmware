@@ -1,0 +1,4 @@
+# Explicit opt-in profile for the QDTech pseudo-3D Shake Lab dice renderer.
+# The Kconfig default remains off until physical display verification passes.
+CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE=y
+CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN=y

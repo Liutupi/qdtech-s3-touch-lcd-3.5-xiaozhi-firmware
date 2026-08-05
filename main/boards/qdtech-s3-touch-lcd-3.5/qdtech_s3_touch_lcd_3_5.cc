@@ -1299,6 +1299,12 @@ private:
             qd_display->GetDesktopUI()->SetShakeLabSamplingCallback([this](bool active) {
                 shake_lab_sampling_active_.store(active, std::memory_order_relaxed);
             });
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+            qd_display->GetDesktopUI()->SetShakeLabDiceAutoRevealCallback([this](bool enabled) {
+                shake_lab_dice_auto_reveal_.store(enabled, std::memory_order_relaxed);
+            });
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
             qd_display->GetDesktopUI()->SetWoodenFishSamplingCallback([this](bool active) {
@@ -1606,11 +1612,26 @@ private:
                     ESP_LOGI(TAG, "Wooden Fish impact sampling disabled");
                 }
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+                const bool dice_auto_reveal =
+                    shake_lab_dice_auto_reveal_.load(std::memory_order_relaxed);
+                // Refresh this lightweight policy every sample so a very fast
+                // leave/re-enter sequence cannot leak Dice timing into another
+                // Shake Lab mode even if the sensor task misses the inactive gap.
+                shake_detector_.SetDiceAutoReveal(dice_auto_reveal);
+#endif
                 if (!shake_sampling_was_active) {
                     shake_detector_.Arm(loop_ms);
                     shake_sampling_was_active = true;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+                    ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms dice_auto_reveal=%d",
+                             static_cast<int>(kShakeLabSampleIntervalMs), dice_auto_reveal ? 1 : 0);
+#else
                     ESP_LOGI(TAG, "Shake Lab high-rate BMI270 sampling enabled interval=%dms",
                              static_cast<int>(kShakeLabSampleIntervalMs));
+#endif
                 }
                 const int64_t touch_active_until = touch_active_until_ms_.load(std::memory_order_relaxed);
                 const bool touch_is_down = touch_cached_down_.load(std::memory_order_acquire);
@@ -3015,6 +3036,10 @@ private:
     int64_t bmi270_baseline_mag_sq_ = 0;
     std::atomic<int64_t> touch_active_until_ms_{0};
     std::atomic<bool> shake_lab_sampling_active_{false};
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    std::atomic<bool> shake_lab_dice_auto_reveal_{false};
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     std::atomic<bool> wooden_fish_sampling_active_{false};

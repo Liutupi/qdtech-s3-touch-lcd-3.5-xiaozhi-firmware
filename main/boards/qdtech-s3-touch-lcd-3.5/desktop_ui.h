@@ -5,6 +5,10 @@
 #include "shake_detector.h"
 #include "shake_recommendation_service.h"
 #include "divination_service.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+#include "dice_theme_asset.h"
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
 #include "wooden_fish_asset.h"
@@ -119,6 +123,10 @@ public:
     void ExitHourglassMode();
     bool IsHourglassPage() const { return current_page_ == DesktopPage::HOURGLASS; }
     void SetShakeLabSamplingCallback(std::function<void(bool)> callback);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    void SetShakeLabDiceAutoRevealCallback(std::function<void(bool)> callback);
+#endif
     void UpdateShakeLabDetector(const ShakeDetector::Result& result);
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
@@ -603,6 +611,21 @@ private:
     lv_obj_t* shake_lab_answer_label_ = nullptr;
     lv_obj_t* shake_lab_hint_label_ = nullptr;
     lv_obj_t* shake_lab_mode_title_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    lv_obj_t* shake_lab_mode_back_button_ = nullptr;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_t* shake_lab_dice_stage_background_ = nullptr;
+    lv_obj_t* shake_lab_dice_images_[6] = {};
+    QdDiceTheme::ImageFrame shake_lab_dice_stage_frame_{};
+    QdDiceTheme::RollAtlas shake_lab_dice_roll_atlas_{};
+    QdDiceTheme::LandingAtlas shake_lab_dice_landing_atlas_{};
+    bool shake_lab_dice_sprites_ready_ = false;
+    bool shake_lab_dice_result_revealed_ = false;
+    uint8_t shake_lab_dice_motion_seed_[6] = {17, 53, 91, 127, 169, 211};
+#endif
     lv_obj_t* shake_lab_dice_boxes_[6] = {};
     lv_obj_t* shake_lab_dice_values_[6] = {};
     lv_obj_t* shake_lab_dice_dots_[6][7] = {};
@@ -639,6 +662,10 @@ private:
     std::atomic<uint32_t> shake_lab_recommendation_load_request_id_{0};
     lv_timer_t* shake_lab_anim_timer_ = nullptr;
     std::function<void(bool)> shake_lab_sampling_callback_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    std::function<void(bool)> shake_lab_dice_auto_reveal_callback_;
+#endif
     ShakeLabMode shake_lab_mode_ = ShakeLabMode::HOME;
     ShakeDetector::State shake_lab_detector_state_ = ShakeDetector::State::IDLE;
     uint8_t shake_lab_intensity_ = 0;
@@ -858,6 +885,11 @@ private:
     void ReleaseShakeLabPage();
     void UpdateShakeLabVisuals();
     void UpdateShakeLabDice();
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    void LoadShakeLabDiceAssets();
+    void ResetShakeLabDiceAssets();
+#endif
     void UpdateShakeLabDivinationVisuals();
     void StartShakeLabDivinationSequence();
     void FinishShakeLabDivinationSequence();

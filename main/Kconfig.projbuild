@@ -319,6 +319,29 @@ config QDTECH_EXPERIMENT_PUZZLE_ARCADE
         The option adds no task, does not change touch parsing or BMI270
         sampling, and stays disabled by default until physical verification.
 
+config QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    bool "Enable experimental pre-rendered 3D dice sprites"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Replaces only the Shake Lab dice visuals with pre-rendered 96x96
+        ARGB8888 roll and landing sprites plus an optional 480x320 RGB565
+        stage loaded from /sdcard/shake_lab/dice into PSRAM. It reuses the
+        existing BMI270 detector, LVGL timer and 1-6 result logic. Missing SD
+        sprite assets fall back to the existing flat dice. Disabled by default
+        so the stable path remains an immediate rollback.
+
+config QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    bool "Enable experimental full-screen Shake Lab modes"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Gives the Shake Lab mode container an opaque 480x320 background and
+        compact mode navigation so the generic lab heading cannot bleed into
+        Ask Ball, Dice, Fortune, Divination or Wooden Fish. Movie and Book keep
+        their existing full-screen result layout. Disabled by default until
+        all mode layouts and touch hit regions are physically verified.
+
 config QDTECH_EXPERIMENT_WOODEN_FISH
     bool "Enable experimental merit wooden-fish in Shake Lab"
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

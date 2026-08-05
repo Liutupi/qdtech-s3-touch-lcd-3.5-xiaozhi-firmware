@@ -1,5 +1,7 @@
 #pragma once
 
+#include "sdkconfig.h"
+
 #include <cstdint>
 
 class ShakeDetector {
@@ -50,6 +52,10 @@ public:
     void Reset();
     Result Process(const Sample& sample);
     State state() const { return state_; }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    void SetDiceAutoReveal(bool enabled) { dice_auto_reveal_ = enabled; }
+#endif
 
 private:
     static constexpr uint8_t kPeakHistorySize = 10;
@@ -74,4 +80,8 @@ private:
     int64_t peak_times_[kPeakHistorySize] = {};
     uint8_t peak_write_index_ = 0;
     Stats stats_ = {};
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    bool dice_auto_reveal_ = false;
+#endif
 };

@@ -9068,6 +9068,13 @@ void DesktopUI::SetShakeLabSamplingCallback(std::function<void(bool)> callback) 
     shake_lab_sampling_callback_ = std::move(callback);
 }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+void DesktopUI::SetShakeLabDiceAutoRevealCallback(std::function<void(bool)> callback) {
+    shake_lab_dice_auto_reveal_callback_ = std::move(callback);
+}
+#endif
+
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
 void DesktopUI::SetWoodenFishSamplingCallback(std::function<void(bool)> callback) {
@@ -9237,13 +9244,32 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_remove_style_all(shake_lab_mode_group_);
     lv_obj_set_size(shake_lab_mode_group_, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(shake_lab_mode_group_, LV_OBJ_FLAG_SCROLLABLE);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    // An opaque mode canvas prevents the generic Shake Lab heading and
+    // introductory copy from bleeding through every tool page.
+    lv_obj_set_style_bg_color(shake_lab_mode_group_, COLOR_BG, 0);
+    lv_obj_set_style_bg_opa(shake_lab_mode_group_, LV_OPA_COVER, 0);
+#endif
     lv_obj_add_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
     shake_lab_mode_title_ = label_en(shake_lab_mode_group_, "Ask Ball", &style_en);
     lv_obj_set_style_text_font(shake_lab_mode_title_, qd_cn_font_16(), 0);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    lv_obj_align(shake_lab_mode_title_, LV_ALIGN_TOP_LEFT, 16, 14);
+#else
     lv_obj_align(shake_lab_mode_title_, LV_ALIGN_TOP_LEFT, 190, 42);
+#endif
     lv_obj_t* home = CreateButton(shake_lab_mode_group_, "Home", nullptr);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    shake_lab_mode_back_button_ = home;
+    lv_obj_set_size(home, 70, 28);
+    lv_obj_align(home, LV_ALIGN_TOP_RIGHT, -8, 8);
+#else
     lv_obj_set_size(home, 70, 24);
     lv_obj_align(home, LV_ALIGN_TOP_RIGHT, -18, 74);
+#endif
 
     shake_lab_ask_group_ = lv_obj_create(shake_lab_mode_group_);
     lv_obj_remove_style_all(shake_lab_ask_group_);
@@ -9275,16 +9301,50 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_size(shake_lab_dice_group_, LV_PCT(100), LV_PCT(100));
     lv_obj_clear_flag(shake_lab_dice_group_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(shake_lab_dice_group_, LV_OBJ_FLAG_HIDDEN);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_style_bg_color(shake_lab_dice_group_, lv_color_hex(0x0d5b57), 0);
+    lv_obj_set_style_bg_opa(shake_lab_dice_group_, LV_OPA_COVER, 0);
+    shake_lab_dice_stage_background_ = lv_image_create(shake_lab_dice_group_);
+    lv_obj_set_size(shake_lab_dice_stage_background_, 480, 320);
+    lv_obj_align(shake_lab_dice_stage_background_, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_add_flag(shake_lab_dice_stage_background_, LV_OBJ_FLAG_HIDDEN);
+    for (uint8_t die = 0; die < 6; ++die) {
+        shake_lab_dice_images_[die] = lv_image_create(shake_lab_dice_group_);
+        lv_obj_set_size(shake_lab_dice_images_[die], 96, 96);
+        lv_image_set_pivot(shake_lab_dice_images_[die], 48, 48);
+        lv_obj_add_flag(shake_lab_dice_images_[die], LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
     lv_obj_t* dice_minus = CreateButton(shake_lab_dice_group_, "-", nullptr);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_size(dice_minus, 46, 28);
+    lv_obj_align(dice_minus, LV_ALIGN_TOP_LEFT, 146, 8);
+#else
     lv_obj_set_size(dice_minus, 52, 28);
     lv_obj_align(dice_minus, LV_ALIGN_TOP_LEFT, 142, 76);
+#endif
     shake_lab_dice_count_label_ = label_en(shake_lab_dice_group_, "1 Die", &style_green);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_width(shake_lab_dice_count_label_, 76);
+    lv_obj_set_style_text_align(shake_lab_dice_count_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(shake_lab_dice_count_label_, LV_ALIGN_TOP_MID, 0, 14);
+#else
     lv_obj_set_width(shake_lab_dice_count_label_, 90);
     lv_obj_set_style_text_align(shake_lab_dice_count_label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(shake_lab_dice_count_label_, LV_ALIGN_TOP_MID, 0, 82);
+#endif
     lv_obj_t* dice_plus = CreateButton(shake_lab_dice_group_, "+", nullptr);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_size(dice_plus, 46, 28);
+    lv_obj_align(dice_plus, LV_ALIGN_TOP_LEFT, 288, 8);
+#else
     lv_obj_set_size(dice_plus, 52, 28);
     lv_obj_align(dice_plus, LV_ALIGN_TOP_LEFT, 286, 76);
+#endif
     for (int die = 0; die < 6; ++die) {
         shake_lab_dice_boxes_[die] = lv_obj_create(shake_lab_dice_group_);
         lv_obj_remove_style_all(shake_lab_dice_boxes_[die]);
@@ -9302,13 +9362,30 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
         for (int pip = 0; pip < 7; ++pip) {
             shake_lab_dice_dots_[die][pip] = circle(shake_lab_dice_boxes_[die], 7, COLOR_GREEN, LV_OPA_COVER);
         }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        lv_obj_add_flag(shake_lab_dice_boxes_[die], LV_OBJ_FLAG_HIDDEN);
+#endif
     }
     shake_lab_dice_total_label_ = label_en(shake_lab_dice_group_, "Choose 1-6 dice, then shake", &style_muted);
     lv_obj_set_style_text_font(shake_lab_dice_total_label_, qd_cn_font_16(), 0);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_style_text_color(shake_lab_dice_total_label_, lv_color_hex(0xfff4cf), 0);
+    lv_obj_set_style_text_opa(shake_lab_dice_total_label_, LV_OPA_COVER, 0);
+    lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -8);
+#else
     lv_obj_align(shake_lab_dice_total_label_, LV_ALIGN_BOTTOM_MID, 0, -25);
+#endif
     shake_lab_dice_lucky_label_ = label_en(shake_lab_dice_group_, "LUCKY", &style_gold);
     lv_obj_set_style_text_font(shake_lab_dice_lucky_label_, qd_cn_font_16(), 0);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    lv_obj_set_style_text_color(shake_lab_dice_lucky_label_, lv_color_hex(0xffc85a), 0);
+    lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_RIGHT, -18, -29);
+#else
     lv_obj_align(shake_lab_dice_lucky_label_, LV_ALIGN_BOTTOM_RIGHT, -18, -8);
+#endif
     lv_obj_add_flag(shake_lab_dice_lucky_label_, LV_OBJ_FLAG_HIDDEN);
 
     shake_lab_fortune_group_ = lv_obj_create(shake_lab_mode_group_);
@@ -9613,6 +9690,13 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
     auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
         return x >= left && x < left + width && y >= top && y < top + height;
     };
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    if (shake_lab_mode_ != ShakeLabMode::HOME && hit(388, 0, 92, 56)) {
+        LeaveShakeLabMode();
+        return true;
+    }
+#endif
     if (hit(388, 30, 84, 42)) {
         if (shake_lab_mode_ == ShakeLabMode::HOME) {
             NavigateBack();
@@ -9685,6 +9769,19 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
     }
 #endif
     if (shake_lab_mode_ == ShakeLabMode::DICE) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        if (hit(136, 0, 66, 48)) {
+            shake_lab_dice_count_ = std::max<uint8_t>(1, shake_lab_dice_count_ - 1);
+            UpdateShakeLabDice();
+            return true;
+        }
+        if (hit(278, 0, 66, 48)) {
+            shake_lab_dice_count_ = std::min<uint8_t>(6, shake_lab_dice_count_ + 1);
+            UpdateShakeLabDice();
+            return true;
+        }
+#else
         if (hit(132, 70, 72, 42)) {
             shake_lab_dice_count_ = std::max<uint8_t>(1, shake_lab_dice_count_ - 1);
             UpdateShakeLabDice();
@@ -9695,6 +9792,7 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
             UpdateShakeLabDice();
             return true;
         }
+#endif
     }
     return false;
 }
@@ -9713,6 +9811,27 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     if (shake_lab_mode_group_) {
         lv_obj_clear_flag(shake_lab_mode_group_, LV_OBJ_FLAG_HIDDEN);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    const bool recommendation_mode =
+        mode == ShakeLabMode::MOVIE || mode == ShakeLabMode::BOOK;
+    if (shake_lab_mode_title_) {
+        if (recommendation_mode) {
+            lv_obj_add_flag(shake_lab_mode_title_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(shake_lab_mode_title_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(shake_lab_mode_title_);
+        }
+    }
+    if (shake_lab_mode_back_button_) {
+        if (recommendation_mode) {
+            lv_obj_add_flag(shake_lab_mode_back_button_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(shake_lab_mode_back_button_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(shake_lab_mode_back_button_);
+        }
+    }
+#endif
     if (shake_lab_ask_group_) {
         if (mode == ShakeLabMode::ASK_BALL) {
             lv_obj_clear_flag(shake_lab_ask_group_, LV_OBJ_FLAG_HIDDEN);
@@ -9777,6 +9896,12 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         UpdateShakeLabVisuals();
     }
     if (mode == ShakeLabMode::DICE) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        shake_lab_dice_result_revealed_ = false;
+        LoadShakeLabDiceAssets();
+        if (shake_lab_anim_timer_) lv_timer_set_period(shake_lab_anim_timer_, 60);
+#endif
         if (shake_lab_dice_total_label_) {
             set_localized_label_text(shake_lab_dice_total_label_, "Choose 1-6 dice, then shake");
         }
@@ -9830,6 +9955,12 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     }
 #endif
     shake_lab_sampling_active_ = true;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    if (shake_lab_dice_auto_reveal_callback_) {
+        shake_lab_dice_auto_reveal_callback_(mode == ShakeLabMode::DICE);
+    }
+#endif
     if (shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(true);
     }
@@ -9851,10 +9982,20 @@ void DesktopUI::LeaveShakeLabMode() {
     shake_lab_recommendation_load_request_id_.fetch_add(1, std::memory_order_relaxed);
     if (shake_lab_anim_timer_) {
         lv_timer_pause(shake_lab_anim_timer_);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        lv_timer_set_period(shake_lab_anim_timer_, 80);
+#endif
     }
     if (shake_lab_sampling_active_ && shake_lab_sampling_callback_) {
         shake_lab_sampling_callback_(false);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    if (shake_lab_dice_auto_reveal_callback_) {
+        shake_lab_dice_auto_reveal_callback_(false);
+    }
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     if (wooden_fish_sampling_callback_) {
@@ -9868,6 +10009,11 @@ void DesktopUI::LeaveShakeLabMode() {
     shake_lab_detector_state_ = ShakeDetector::State::IDLE;
     shake_lab_intensity_ = 0;
     shake_lab_mode_ = ShakeLabMode::HOME;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    shake_lab_dice_result_revealed_ = false;
+    ResetShakeLabDiceAssets();
+#endif
     if (shake_lab_divination_image_) {
         lv_image_set_src(shake_lab_divination_image_, nullptr);
     }
@@ -9907,6 +10053,16 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_answer_label_ = nullptr;
     shake_lab_hint_label_ = nullptr;
     shake_lab_mode_title_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_LAB_FULLSCREEN
+    shake_lab_mode_back_button_ = nullptr;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    shake_lab_dice_stage_background_ = nullptr;
+    memset(shake_lab_dice_images_, 0, sizeof(shake_lab_dice_images_));
+    shake_lab_dice_sprites_ready_ = false;
+#endif
     shake_lab_dice_count_label_ = nullptr;
     shake_lab_dice_total_label_ = nullptr;
     shake_lab_dice_lucky_label_ = nullptr;
@@ -9951,7 +10107,384 @@ void DesktopUI::ReleaseShakeLabPage() {
     memset(shake_lab_dice_dots_, 0, sizeof(shake_lab_dice_dots_));
 }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+void DesktopUI::LoadShakeLabDiceAssets() {
+    if (!shake_lab_dice_stage_background_ || shake_lab_dice_sprites_ready_ ||
+        shake_lab_dice_stage_frame_.data || shake_lab_dice_roll_atlas_.data ||
+        shake_lab_dice_landing_atlas_.data) {
+        return;
+    }
+    const QdDiceTheme::Status stage_status =
+        QdDiceTheme::LoadStage(&shake_lab_dice_stage_frame_);
+    if (stage_status == QdDiceTheme::Status::OK) {
+        lv_image_set_src(shake_lab_dice_stage_background_,
+                         &shake_lab_dice_stage_frame_.dsc);
+        lv_obj_clear_flag(shake_lab_dice_stage_background_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_image_set_src(shake_lab_dice_stage_background_, nullptr);
+        lv_obj_add_flag(shake_lab_dice_stage_background_, LV_OBJ_FLAG_HIDDEN);
+    }
+    const QdDiceTheme::Status roll_status =
+        QdDiceTheme::LoadRollAtlas(&shake_lab_dice_roll_atlas_);
+    const QdDiceTheme::Status landing_status =
+        QdDiceTheme::LoadLandingAtlas(&shake_lab_dice_landing_atlas_);
+    shake_lab_dice_sprites_ready_ =
+        roll_status == QdDiceTheme::Status::OK &&
+        landing_status == QdDiceTheme::Status::OK;
+    if (!shake_lab_dice_sprites_ready_) {
+        QdDiceTheme::ReleaseAtlas(&shake_lab_dice_roll_atlas_);
+        QdDiceTheme::ReleaseAtlas(&shake_lab_dice_landing_atlas_);
+    }
+    ESP_LOGI(TAG,
+             "3D dice assets stage=%s roll=%s landing=%s psram=%u ready=%d",
+             QdDiceTheme::StatusText(stage_status),
+             QdDiceTheme::StatusText(roll_status),
+             QdDiceTheme::StatusText(landing_status),
+             static_cast<unsigned>(shake_lab_dice_stage_frame_.data_size +
+                 shake_lab_dice_roll_atlas_.data_size +
+                 shake_lab_dice_landing_atlas_.data_size),
+             shake_lab_dice_sprites_ready_ ? 1 : 0);
+}
+
+void DesktopUI::ResetShakeLabDiceAssets() {
+    for (auto* image : shake_lab_dice_images_) {
+        if (!image) continue;
+        lv_image_set_src(image, nullptr);
+        lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (shake_lab_dice_stage_background_) {
+        lv_image_set_src(shake_lab_dice_stage_background_, nullptr);
+        lv_obj_add_flag(shake_lab_dice_stage_background_, LV_OBJ_FLAG_HIDDEN);
+    }
+    QdDiceTheme::ReleaseImage(&shake_lab_dice_stage_frame_);
+    QdDiceTheme::ReleaseAtlas(&shake_lab_dice_roll_atlas_);
+    QdDiceTheme::ReleaseAtlas(&shake_lab_dice_landing_atlas_);
+    shake_lab_dice_sprites_ready_ = false;
+}
+
+#if 0  // Retained only as source-level rollback reference; sprites replace it.
+void DesktopUI::ShakeLabDiceDrawCb(lv_event_t* event) {
+    auto* self = static_cast<DesktopUI*>(lv_event_get_user_data(event));
+    auto* object = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_layer_t* layer = lv_event_get_layer(event);
+    if (!self || !object || !layer || self->shake_lab_mode_ != ShakeLabMode::DICE) {
+        return;
+    }
+
+    lv_area_t object_area;
+    lv_obj_get_coords(object, &object_area);
+    const int ox = object_area.x1;
+    const int oy = object_area.y1;
+    struct Point {
+        int x;
+        int y;
+    };
+    struct Quad {
+        Point p[4];
+    };
+    struct Layout {
+        int x;
+        int y;
+        int size;
+    };
+
+    auto rect = [&](int x, int y, int w, int h, lv_color_t color,
+                    lv_opa_t opa, int radius) {
+        lv_draw_rect_dsc_t dsc;
+        lv_draw_rect_dsc_init(&dsc);
+        dsc.bg_color = color;
+        dsc.bg_opa = opa;
+        dsc.radius = radius;
+        lv_area_t area{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_rect(layer, &dsc, &area);
+    };
+    auto triangle = [&](Point a, Point b, Point c, lv_color_t color,
+                        lv_opa_t opa = LV_OPA_COVER) {
+        lv_draw_triangle_dsc_t dsc;
+        lv_draw_triangle_dsc_init(&dsc);
+        dsc.bg_color = color;
+        dsc.bg_opa = opa;
+        dsc.p[0] = {static_cast<lv_value_precise_t>(ox + a.x),
+                    static_cast<lv_value_precise_t>(oy + a.y)};
+        dsc.p[1] = {static_cast<lv_value_precise_t>(ox + b.x),
+                    static_cast<lv_value_precise_t>(oy + b.y)};
+        dsc.p[2] = {static_cast<lv_value_precise_t>(ox + c.x),
+                    static_cast<lv_value_precise_t>(oy + c.y)};
+        lv_draw_triangle(layer, &dsc);
+    };
+    auto quad = [&](const Quad& face, lv_color_t color) {
+        triangle(face.p[0], face.p[1], face.p[2], color);
+        triangle(face.p[0], face.p[2], face.p[3], color);
+    };
+    auto line = [&](Point a, Point b, lv_color_t color, int width,
+                    lv_opa_t opa = LV_OPA_COVER) {
+        lv_draw_line_dsc_t dsc;
+        lv_draw_line_dsc_init(&dsc);
+        dsc.p1 = {static_cast<lv_value_precise_t>(ox + a.x),
+                  static_cast<lv_value_precise_t>(oy + a.y)};
+        dsc.p2 = {static_cast<lv_value_precise_t>(ox + b.x),
+                  static_cast<lv_value_precise_t>(oy + b.y)};
+        dsc.color = color;
+        dsc.width = width;
+        dsc.opa = opa;
+        dsc.round_start = 1;
+        dsc.round_end = 1;
+        lv_draw_line(layer, &dsc);
+    };
+    auto face_outline = [&](const Quad& face, lv_color_t color, int width) {
+        for (int edge = 0; edge < 4; ++edge) {
+            line(face.p[edge], face.p[(edge + 1) & 3], color, width);
+        }
+    };
+    auto point_on_face = [](const Quad& face, int u, int v) {
+        // u/v are quarter-face coordinates in [1, 3]. Bilinear projection
+        // keeps pip rows aligned on all three skewed faces.
+        const int iu = 4 - u;
+        const int iv = 4 - v;
+        Point point{};
+        point.x = (face.p[0].x * iu * iv + face.p[1].x * u * iv +
+                   face.p[2].x * u * v + face.p[3].x * iu * v + 8) / 16;
+        point.y = (face.p[0].y * iu * iv + face.p[1].y * u * iv +
+                   face.p[2].y * u * v + face.p[3].y * iu * v + 8) / 16;
+        return point;
+    };
+
+    if (!self->shake_lab_dice_stage_frame_.data) {
+        rect(0, 0, 480, 220, lv_color_hex(0x0d5b57), LV_OPA_COVER, 0);
+        rect(8, 8, 464, 204, lv_color_hex(0x16786d), LV_OPA_40, 22);
+        rect(44, 20, 392, 174, lv_color_hex(0x36a083), LV_OPA_20, 30);
+        rect(86, 30, 308, 136, lv_color_hex(0xf2c76e), LV_OPA_10, 40);
+    }
+
+    static constexpr bool kPipMap[6][7] = {
+        {false, false, true, false, false, false, false},
+        {true, false, false, false, true, false, false},
+        {true, false, true, false, true, false, false},
+        {true, true, false, true, true, false, false},
+        {true, true, true, true, true, false, false},
+        {true, true, false, true, true, true, true},
+    };
+    static constexpr uint8_t kPipPosition[7][2] = {
+        {1, 1}, {3, 1}, {2, 2}, {1, 3}, {3, 3}, {1, 2}, {3, 2},
+    };
+    static constexpr uint8_t kAdjacent[6][4] = {
+        {2, 3, 5, 4}, {1, 3, 6, 4}, {1, 5, 6, 2},
+        {1, 2, 6, 5}, {1, 3, 6, 4}, {2, 3, 5, 4},
+    };
+    auto pips = [&](const Quad& face, uint8_t value, int radius,
+                    lv_color_t color, bool highlight) {
+        value = std::max<uint8_t>(1, std::min<uint8_t>(6, value));
+        for (int index = 0; index < 7; ++index) {
+            if (!kPipMap[value - 1][index]) continue;
+            const Point point = point_on_face(
+                face, kPipPosition[index][0], kPipPosition[index][1]);
+            rect(point.x - radius, point.y - radius + 1, radius * 2 + 1,
+                 radius * 2 + 1, lv_color_hex(0x173f3b), LV_OPA_30,
+                 LV_RADIUS_CIRCLE);
+            rect(point.x - radius, point.y - radius, radius * 2,
+                 radius * 2, color, LV_OPA_COVER, LV_RADIUS_CIRCLE);
+            if (highlight && radius >= 4) {
+                rect(point.x - radius + 1, point.y - radius + 1, 2, 2,
+                     lv_color_hex(0xffffff), LV_OPA_70, LV_RADIUS_CIRCLE);
+            }
+        }
+    };
+
+    Layout layout[6]{};
+    const uint8_t count = std::max<uint8_t>(1, std::min<uint8_t>(6,
+        self->shake_lab_dice_count_));
+    switch (count) {
+        case 1: layout[0] = {240, 38, 104}; break;
+        case 2:
+            layout[0] = {178, 49, 82}; layout[1] = {302, 49, 82}; break;
+        case 3:
+            layout[0] = {126, 55, 68}; layout[1] = {240, 48, 72};
+            layout[2] = {354, 55, 68}; break;
+        case 4:
+            layout[0] = {177, 24, 62}; layout[1] = {303, 24, 62};
+            layout[2] = {177, 105, 62}; layout[3] = {303, 105, 62}; break;
+        case 5:
+            layout[0] = {126, 23, 56}; layout[1] = {240, 18, 60};
+            layout[2] = {354, 23, 56}; layout[3] = {184, 106, 58};
+            layout[4] = {296, 106, 58}; break;
+        default:
+            layout[0] = {122, 23, 54}; layout[1] = {240, 18, 58};
+            layout[2] = {358, 23, 54}; layout[3] = {122, 106, 54};
+            layout[4] = {240, 101, 58}; layout[5] = {358, 106, 54}; break;
+    }
+
+    const bool shaking =
+        self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING;
+    const bool settling =
+        self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING;
+    const float amplitude = shaking ? 1.0f : (settling ? 0.42f : 0.0f);
+    const lv_color_t outline = lv_color_hex(0x4a4945);
+    const lv_color_t pip_color = lv_color_hex(0x27685f);
+    const lv_color_t lucky_pip = lv_color_hex(0xcf5f67);
+
+    for (uint8_t die = 0; die < count; ++die) {
+        const int size = layout[die].size;
+        const float phase = self->shake_lab_anim_tick_ * 0.47f +
+            self->shake_lab_dice_motion_seed_[die] * 0.071f;
+        const int bounce = static_cast<int>(
+            std::fabs(std::sin(phase)) * amplitude *
+            (9.0f + self->shake_lab_intensity_ * 0.11f));
+        const int tilt = static_cast<int>(
+            std::sin(phase * 1.37f) * amplitude * size * 0.12f);
+        const int depth = std::max(10, static_cast<int>(size * 0.23f +
+            std::cos(phase * 0.91f) * amplitude * size * 0.045f));
+        const int height = std::max(28, static_cast<int>(size * 0.50f +
+            std::sin(phase * 1.11f) * amplitude * size * 0.06f));
+        const int cx = layout[die].x;
+        const int top_y = layout[die].y - bounce;
+
+        Point apex{cx + tilt, top_y};
+        Point right{cx + size / 2, top_y + depth};
+        Point front{cx - tilt / 3, top_y + depth * 2};
+        Point left{cx - size / 2, top_y + depth};
+        Point right_down{right.x + tilt / 4, right.y + height};
+        Point front_down{front.x + tilt / 5, front.y + height};
+        Point left_down{left.x + tilt / 4, left.y + height};
+
+        const int shadow_y = front_down.y + 8;
+        const int shadow_w = static_cast<int>(size * (0.92f - amplitude * 0.08f));
+        rect(cx - shadow_w / 2, shadow_y - 4, shadow_w, 12,
+             lv_color_hex(0x082f2e), LV_OPA_20, LV_RADIUS_CIRCLE);
+        rect(cx - shadow_w * 2 / 5, shadow_y - 2, shadow_w * 4 / 5, 8,
+             lv_color_hex(0x082422), LV_OPA_30, LV_RADIUS_CIRCLE);
+        rect(cx - shadow_w / 3, shadow_y, shadow_w * 2 / 3, 5,
+             lv_color_hex(0x051b1b), LV_OPA_30, LV_RADIUS_CIRCLE);
+
+        Quad top{{left, apex, right, front}};
+        Quad left_face{{left, front, front_down, left_down}};
+        Quad right_face{{front, right, right_down, front_down}};
+        quad(left_face, lv_color_hex(0xead9ba));
+        quad(right_face, lv_color_hex(0xd2c1ab));
+        quad(top, lv_color_hex(0xfff9e9));
+
+        const int outline_width = size >= 70 ? 2 : 1;
+        face_outline(left_face, outline, outline_width);
+        face_outline(right_face, outline, outline_width);
+        face_outline(top, outline, outline_width);
+        line({left.x + 2, left.y + 1}, {apex.x, apex.y + 2},
+             lv_color_hex(0xffffff), outline_width, LV_OPA_60);
+        line({apex.x, apex.y + 2}, {right.x - 2, right.y + 1},
+             lv_color_hex(0xffffff), outline_width, LV_OPA_50);
+
+        const uint8_t top_value = std::max<uint8_t>(1, std::min<uint8_t>(6,
+            self->shake_lab_dice_values_state_[die]));
+        const uint8_t orientation = static_cast<uint8_t>(
+            (self->shake_lab_anim_tick_ / 2 + die) & 3);
+        const uint8_t left_value = kAdjacent[top_value - 1][orientation];
+        const uint8_t right_value = kAdjacent[top_value - 1][(orientation + 1) & 3];
+        const int top_radius = size >= 80 ? 5 : (size >= 60 ? 4 : 3);
+        const int side_radius = size >= 74 ? 4 : 3;
+        pips(left_face, left_value, side_radius, lv_color_hex(0x4b716a), false);
+        pips(right_face, right_value, side_radius, lv_color_hex(0x566b68), false);
+        pips(top, top_value, top_radius,
+             (!shaking && !settling && top_value == 6) ? lucky_pip : pip_color,
+             true);
+
+        if (!shaking && !settling && top_value == 6) {
+            const Point sparkle{right.x + 8, apex.y - 2};
+            line({sparkle.x - 5, sparkle.y}, {sparkle.x + 5, sparkle.y},
+                 lv_color_hex(0xffcf62), 2);
+            line({sparkle.x, sparkle.y - 5}, {sparkle.x, sparkle.y + 5},
+                 lv_color_hex(0xffcf62), 2);
+        }
+    }
+}
+#endif
+#endif
+
 void DesktopUI::UpdateShakeLabDice() {
+    if (shake_lab_dice_count_label_) {
+        char count_text[16];
+        snprintf(count_text, sizeof(count_text), "%u 枚", shake_lab_dice_count_);
+        lv_label_set_text(shake_lab_dice_count_label_, count_text);
+    }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    if (shake_lab_dice_sprites_ready_) {
+        struct DiceLayout {
+            int16_t center_x;
+            int16_t center_y;
+            uint16_t scale;
+        } layout[6]{};
+        const uint8_t count = std::max<uint8_t>(1, std::min<uint8_t>(6,
+            shake_lab_dice_count_));
+        switch (count) {
+            case 1:
+                layout[0] = {240, 166, 352};
+                break;
+            case 2:
+                layout[0] = {164, 166, 294};
+                layout[1] = {316, 166, 294};
+                break;
+            case 3:
+                layout[0] = {100, 166, 240};
+                layout[1] = {240, 166, 240};
+                layout[2] = {380, 166, 240};
+                break;
+            case 4:
+                layout[0] = {155, 110, 210};
+                layout[1] = {325, 110, 210};
+                layout[2] = {155, 222, 210};
+                layout[3] = {325, 222, 210};
+                break;
+            case 5:
+                layout[0] = {96, 116, 196};
+                layout[1] = {240, 106, 196};
+                layout[2] = {384, 116, 196};
+                layout[3] = {170, 224, 196};
+                layout[4] = {310, 224, 196};
+                break;
+            default:
+                layout[0] = {105, 112, 180};
+                layout[1] = {240, 102, 180};
+                layout[2] = {375, 112, 180};
+                layout[3] = {105, 222, 180};
+                layout[4] = {240, 212, 180};
+                layout[5] = {375, 222, 180};
+                break;
+        }
+
+        const bool moving =
+            shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+            shake_lab_detector_state_ == ShakeDetector::State::SETTLING;
+        for (uint8_t die = 0; die < 6; ++die) {
+            lv_obj_t* image = shake_lab_dice_images_[die];
+            if (!image) continue;
+            if (die >= count) {
+                lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+                continue;
+            }
+            const uint8_t value = std::max<uint8_t>(1, std::min<uint8_t>(6,
+                shake_lab_dice_values_state_[die]));
+            if (moving) {
+                const uint8_t frame = static_cast<uint8_t>(
+                    (shake_lab_anim_tick_ + shake_lab_dice_motion_seed_[die]) %
+                    QdDiceTheme::kRollFrameCount);
+                lv_image_set_src(image, &shake_lab_dice_roll_atlas_.frames[frame]);
+            } else {
+                lv_image_set_src(image,
+                    &shake_lab_dice_landing_atlas_.frames[value - 1]);
+            }
+            lv_image_set_scale(image, layout[die].scale);
+            lv_obj_set_pos(image, layout[die].center_x - 48,
+                           layout[die].center_y - 48);
+            lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
+        }
+        for (auto* box : shake_lab_dice_boxes_) {
+            if (box) lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN);
+        }
+        return;
+    }
+    for (auto* image : shake_lab_dice_images_) {
+        if (image) lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
     if (!shake_lab_dice_boxes_[0]) {
         return;
     }
@@ -9967,11 +10500,6 @@ void DesktopUI::UpdateShakeLabDice() {
         {true, true, false, true, true, true, true},
         {false, false, false, false, false, false, false},
     };
-    if (shake_lab_dice_count_label_) {
-        char count_text[16];
-        snprintf(count_text, sizeof(count_text), "%u 枚", shake_lab_dice_count_);
-        lv_label_set_text(shake_lab_dice_count_label_, count_text);
-    }
     for (int die = 0; die < 6; ++die) {
         const bool visible = die < shake_lab_dice_count_;
         if (visible) {
@@ -10050,14 +10578,46 @@ void DesktopUI::ShakeLabAnimCb(lv_timer_t* timer) {
         self->UpdateShakeLabVisuals();
         return;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+    constexpr uint16_t kDiceUiAutoRevealTicks = 7;
     if (self->shake_lab_mode_ == ShakeLabMode::DICE &&
         (self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
-         (self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING && self->shake_lab_anim_tick_ % 3 == 0))) {
-        for (uint8_t die = 0; die < self->shake_lab_dice_count_; ++die) {
-            self->shake_lab_dice_values_state_[die] = static_cast<uint8_t>(esp_random() % 6 + 1);
+         self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING)) {
+        // The sensor transition is delivered through MainEventLoop and can be
+        // dropped if LVGL is busy flushing a frame.  This timer already owns
+        // the LVGL context, so it is the authoritative landing fail-safe.
+        if (!self->shake_lab_dice_result_revealed_ &&
+            self->shake_lab_anim_tick_ >= kDiceUiAutoRevealTicks) {
+            self->shake_lab_detector_state_ = ShakeDetector::State::REVEAL;
+            ESP_LOGI(TAG, "Shake Lab Dice UI auto reveal tick=%u",
+                     static_cast<unsigned>(self->shake_lab_anim_tick_));
+            self->RevealShakeLabResult();
+            return;
+        }
+        const bool update_values =
+            self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+            self->shake_lab_anim_tick_ % 3 == 0;
+        if (update_values) {
+            for (uint8_t die = 0; die < self->shake_lab_dice_count_; ++die) {
+                self->shake_lab_dice_values_state_[die] =
+                    static_cast<uint8_t>(esp_random() % 6 + 1);
+            }
         }
         self->UpdateShakeLabDice();
     }
+#else
+    if (self->shake_lab_mode_ == ShakeLabMode::DICE &&
+        (self->shake_lab_detector_state_ == ShakeDetector::State::SHAKING ||
+         (self->shake_lab_detector_state_ == ShakeDetector::State::SETTLING &&
+          self->shake_lab_anim_tick_ % 3 == 0))) {
+        for (uint8_t die = 0; die < self->shake_lab_dice_count_; ++die) {
+            self->shake_lab_dice_values_state_[die] =
+                static_cast<uint8_t>(esp_random() % 6 + 1);
+        }
+        self->UpdateShakeLabDice();
+    }
+#endif
 }
 
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
@@ -10612,6 +11172,14 @@ void DesktopUI::RevealShakeLabResult() {
         }
         ESP_LOGI(TAG, "Shake Lab Ask Ball reveal index=%u", static_cast<unsigned>(index));
     } else if (shake_lab_mode_ == ShakeLabMode::DICE) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        if (shake_lab_dice_result_revealed_) {
+            ESP_LOGI(TAG, "Shake Lab Dice duplicate reveal ignored");
+            return;
+        }
+        shake_lab_dice_result_revealed_ = true;
+#endif
         uint16_t sum = 0;
         bool lucky = false;
         for (uint8_t die = 0; die < shake_lab_dice_count_; ++die) {
@@ -10827,6 +11395,17 @@ void DesktopUI::UpdateShakeLabDetector(const ShakeDetector::Result& result) {
     shake_lab_detector_state_ = result.state;
     switch (result.transition) {
         case ShakeDetector::Transition::ARMED_TO_SHAKING:
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+            if (shake_lab_mode_ == ShakeLabMode::DICE) {
+                shake_lab_anim_tick_ = 0;
+                shake_lab_dice_result_revealed_ = false;
+                for (uint8_t die = 0; die < 6; ++die) {
+                    shake_lab_dice_motion_seed_[die] =
+                        static_cast<uint8_t>(esp_random() & 0xff);
+                }
+            }
+#endif
             if (shake_lab_mode_ == ShakeLabMode::ASK_BALL && shake_lab_answer_label_) {
                 lv_label_set_text(shake_lab_answer_label_, "摇晃已感应");
             } else if (shake_lab_mode_ == ShakeLabMode::DICE && shake_lab_dice_total_label_) {

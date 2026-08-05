@@ -17,6 +17,17 @@ constexpr int64_t kStillToSettlingMs = 700;
 constexpr int64_t kSettlingStableMs = 650;
 constexpr int64_t kRevealHoldMs = 120;
 constexpr int64_t kCooldownMs = 1400;
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+// Dice should feel immediate: once a valid shake has already been recognized,
+// finish the visual roll on a fixed beat instead of requiring the user to keep
+// shaking and then wait for the generic stillness window.  Other Shake Lab
+// modes retain the proven settling state machine below.
+constexpr int64_t kDiceAutoRevealMs = 420;
+constexpr int64_t kDiceMinimumShakeDurationMs = 90;
+constexpr uint8_t kDiceMinimumPeakCount = 2;
+constexpr uint8_t kDiceMinimumDirectionReversals = 1;
+#endif
 constexpr uint8_t kMinimumPeakCount = 4;
 constexpr uint8_t kMinimumDirectionReversals = 2;
 constexpr uint16_t kIntensityAccelCeiling = 9000;
@@ -158,14 +169,34 @@ ShakeDetector::Result ShakeDetector::Process(const Sample& sample) {
                 earliest_peak_ms = std::min(earliest_peak_ms, peak_time);
             }
         }
-        if (peaks >= kMinimumPeakCount && stats_.direction_reversals >= kMinimumDirectionReversals &&
-            sample.time_ms - earliest_peak_ms >= kMinimumShakeDurationMs) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        const uint8_t required_peaks = dice_auto_reveal_ ? kDiceMinimumPeakCount : kMinimumPeakCount;
+        const uint8_t required_reversals =
+            dice_auto_reveal_ ? kDiceMinimumDirectionReversals : kMinimumDirectionReversals;
+        const int64_t required_duration_ms =
+            dice_auto_reveal_ ? kDiceMinimumShakeDurationMs : kMinimumShakeDurationMs;
+#else
+        constexpr uint8_t required_peaks = kMinimumPeakCount;
+        constexpr uint8_t required_reversals = kMinimumDirectionReversals;
+        constexpr int64_t required_duration_ms = kMinimumShakeDurationMs;
+#endif
+        if (peaks >= required_peaks && stats_.direction_reversals >= required_reversals &&
+            sample.time_ms - earliest_peak_ms >= required_duration_ms) {
             state_ = State::SHAKING;
             shaking_started_ms_ = sample.time_ms;
             result.transition = Transition::ARMED_TO_SHAKING;
         }
     } else if (state_ == State::SHAKING) {
         stats_.shaking_duration_ms = static_cast<uint32_t>(sample.time_ms - shaking_started_ms_);
+#if defined(CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE) && \
+    CONFIG_QDTECH_EXPERIMENT_PSEUDO3D_DICE
+        if (dice_auto_reveal_ && sample.time_ms - shaking_started_ms_ >= kDiceAutoRevealMs) {
+            state_ = State::REVEAL;
+            reveal_started_ms_ = sample.time_ms;
+            result.transition = Transition::SETTLING_TO_REVEAL;
+        } else
+#endif
         if (sample.time_ms - last_motion_ms_ >= kStillToSettlingMs) {
             state_ = State::SETTLING;
             settling_started_ms_ = sample.time_ms;
