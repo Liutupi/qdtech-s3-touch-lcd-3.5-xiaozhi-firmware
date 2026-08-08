@@ -319,6 +319,18 @@ config QDTECH_EXPERIMENT_PUZZLE_ARCADE
         The option adds no task, does not change touch parsing or BMI270
         sampling, and stays disabled by default until physical verification.
 
+config QDTECH_EXPERIMENT_MD_DUAL_MODE
+    bool "Enable experimental Mega Drive dual-mode boot service"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Adds only the board-local handoff and validated boot-selection service
+        for a separate Mega Drive emulator image in the mdemu ota_2
+        partition. The service creates no task, timer, queue, or UI entry and
+        remains disabled by default. Select the matching experimental 16 MB
+        partition table through sdkconfig.md-dual-mode.defaults when enabling
+        this option.
+
 config QDTECH_EXPERIMENT_PSEUDO3D_DICE
     bool "Enable experimental pre-rendered 3D dice sprites"
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

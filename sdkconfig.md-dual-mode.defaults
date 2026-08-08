@@ -1,0 +1,6 @@
+# Opt-in QDTech Mega Drive dual-mode experiment.
+# Append this file after the normal board defaults in SDKCONFIG_DEFAULTS.
+CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions/v1/16m_qdtech_7m_ota_md.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions/v1/16m_qdtech_7m_ota_md.csv"

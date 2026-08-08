@@ -8,6 +8,10 @@
 #include "desktop_ui.h"
 #include "fc_emulator_service.h"
 #include "firmware_update_service.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+#include "md_boot_service.h"
+#endif
 #include "photo_service.h"
 #include "podcast_service.h"
 #include "qd_esp_mqtt.h"
@@ -22,10 +26,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <string>
 #include <vector>
 
@@ -34,6 +41,7 @@
 #include <esp_adc/adc_cali_scheme.h>
 #include <esp_adc/adc_oneshot.h>
 #include <esp_sleep.h>
+#include <esp_system.h>
 #include <driver/rtc_io.h>
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
@@ -704,6 +712,10 @@ public:
         InitializePodcast();
         InitializePhotos();
         InitializeFcEmulator();
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        InitializeMdDualMode();
+#endif
         InitializeFirmwareUpdate();
         InitializeBattery();
         GetBacklight()->RestoreBrightness();
@@ -734,12 +746,36 @@ public:
     }
 
     int GetStartupWifiConnectTimeoutMs() const override {
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        // Routers can retain the emulator's previous association briefly after
+        // the fast cross-partition reboot.  Only an authenticated MD return
+        // gets this one-shot grace period; ordinary startup keeps the existing
+        // fast provisioning behavior.
+        if (md_return_grace_active_) {
+            return 25 * 1000;
+        }
+#endif
 #if defined(CONFIG_QDTECH_PROVISIONING_COMPAT) || \
     defined(CONFIG_QDTECH_EXPERIMENT_FAST_PROVISIONING_FALLBACK)
         return 8 * 1000;
 #else
         return WifiBoard::GetStartupWifiConnectTimeoutMs();
 #endif
+    }
+
+    bool ShouldEnterProvisioningOnStartupTimeout() const override {
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        // A validated return from the isolated emulator is not a request to
+        // erase or replace WiFi settings. If association succeeds but DHCP is
+        // slow, keep Station alive so it can finish naturally instead of
+        // tearing it down to start an unwanted Xiaozhi provisioning AP.
+        if (md_return_grace_active_) {
+            return false;
+        }
+#endif
+        return WifiBoard::ShouldEnterProvisioningOnStartupTimeout();
     }
 
     void StartNetwork() override {
@@ -2832,6 +2868,130 @@ private:
         });
     }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    void InitializeMdDualMode() {
+        constexpr char kMdReturnMarker[] =
+            "/sdcard/retro-go/config/md_return.pending";
+        struct stat marker_info = {};
+        if (stat(kMdReturnMarker, &marker_info) == 0 &&
+            S_ISREG(marker_info.st_mode)) {
+            if (unlink(kMdReturnMarker) == 0) {
+                md_return_grace_active_ = true;
+                ESP_LOGI(TAG,
+                         "MD return detected; WiFi startup grace extended to %d ms",
+                         GetStartupWifiConnectTimeoutMs());
+            } else {
+                ESP_LOGW(TAG, "MD return marker cleanup failed errno=%d", errno);
+            }
+        }
+        if (!display_) {
+            return;
+        }
+        auto* desktop_ui = static_cast<QdtechLandscapeDisplay*>(display_)->GetDesktopUI();
+        desktop_ui->SetMdLaunchCallback(
+            [this](const std::string& rom_path, bool resume, uint8_t save_slot) {
+                struct MdLaunchTaskContext {
+                    QdtechS3TouchLcd35Board* board;
+                    char rom_path[256];
+                    bool resume;
+                    uint8_t save_slot;
+                };
+
+                if (rom_path.empty() || rom_path.size() >= 256) {
+                    ESP_LOGE(TAG, "MD launch path is invalid or too long");
+                    if (display_) {
+                        display_->ShowNotification("MD 启动失败: 游戏路径无效", 8000);
+                    }
+                    return;
+                }
+
+                bool expected = false;
+                if (!md_launch_in_progress_.compare_exchange_strong(expected, true)) {
+                    ESP_LOGW(TAG, "MD launch ignored because a switch is already pending");
+                    return;
+                }
+
+                auto* context = static_cast<MdLaunchTaskContext*>(heap_caps_calloc(
+                    1, sizeof(MdLaunchTaskContext), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+                if (!context) {
+                    md_launch_in_progress_.store(false);
+                    ESP_LOGE(TAG, "MD launch task context allocation failed");
+                    if (display_) {
+                        display_->ShowNotification("MD 启动失败: 内存不足", 8000);
+                    }
+                    return;
+                }
+                context->board = this;
+                memcpy(context->rom_path, rom_path.c_str(), rom_path.size() + 1);
+                context->resume = resume;
+                context->save_slot = save_slot;
+
+                // Provisioning runs before Xiaozhi enters MainEventLoop(), so
+                // Application::Schedule() can remain queued forever on a new
+                // or unconfigured board. Use a short-lived dedicated task so
+                // MD launch is reliable both online and during provisioning.
+                // Its stack must be internal: validating/selecting an OTA
+                // partition disables the flash cache, when PSRAM stacks are
+                // explicitly unsafe on ESP32-S3.
+                const BaseType_t task_result = xTaskCreateWithCaps(
+                    [](void* arg) {
+                        auto* context = static_cast<MdLaunchTaskContext*>(arg);
+                        auto* board = context->board;
+                        const MdLaunchRequest request = {
+                            .rom_path = context->rom_path,
+                            .mode = context->resume ? MdLaunchMode::Resume
+                                                    : MdLaunchMode::Fresh,
+                            .save_slot = context->save_slot,
+                        };
+                        heap_caps_free(context);
+
+                        ESP_LOGI(TAG, "MD launch worker started rom=%s mode=%s slot=%u",
+                                 request.rom_path.c_str(),
+                                 request.mode == MdLaunchMode::Resume ? "resume" : "fresh",
+                                 static_cast<unsigned>(request.save_slot));
+                        const esp_err_t result =
+                            MdBootService::GetInstance().PrepareAndSelect(request);
+                        if (result != ESP_OK) {
+                            board->md_launch_in_progress_.store(false);
+                            ESP_LOGE(TAG, "MD launch preparation failed err=%s",
+                                     esp_err_to_name(result));
+                            if (board->display_) {
+                                board->display_->ShowNotification(
+                                    std::string("MD 启动失败: ") + esp_err_to_name(result),
+                                    8000);
+                            }
+                            vTaskDeleteWithCaps(nullptr);
+                            return;
+                        }
+
+                        // Partition selection and the fsync'd handoff have
+                        // succeeded. Stop board-owned media before restarting,
+                        // but do not enter PrepareForFirmwareUpgrade(): that
+                        // path drains every background network job and can wait
+                        // indefinitely during provisioning/weather retries. It
+                        // can also race a connecting MQTT client. esp_restart()
+                        // is the intended boundary here; Wi-Fi NVS is untouched.
+                        board->radio_service_.Stop();
+                        board->podcast_service_.Stop();
+                        board->fc_emulator_service_.Stop();
+                        vTaskDelay(pdMS_TO_TICKS(180));
+                        esp_restart();
+                    },
+                    "md_launch", 6144, context, 3, nullptr,
+                    MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                if (task_result != pdPASS) {
+                    heap_caps_free(context);
+                    md_launch_in_progress_.store(false);
+                    ESP_LOGE(TAG, "MD launch task creation failed");
+                    if (display_) {
+                        display_->ShowNotification("MD 启动失败: 切换任务无法启动", 8000);
+                    }
+                }
+            });
+    }
+#endif
+
     void InitializeBattery() {
         if (!display_) {
             return;
@@ -3076,6 +3236,11 @@ private:
     PodcastService podcast_service_;
     PhotoService photo_service_;
     FcEmulatorService fc_emulator_service_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    std::atomic<bool> md_launch_in_progress_{false};
+    bool md_return_grace_active_ = false;
+#endif
     QdWifiConfigServer wifi_config_server_;
     httpd_handle_t music_command_server_ = nullptr;
     uint16_t* fc_scaled_frame_ = nullptr;

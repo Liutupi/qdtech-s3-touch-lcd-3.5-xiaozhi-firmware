@@ -22,6 +22,10 @@
 #include "freecell_game.h"
 #include "puzzle_arcade_service.h"
 #endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+#include "md_catalog_service.h"
+#endif
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -33,6 +37,10 @@ enum class DesktopPage {
     APPS,
     PHOTO,
     FC,
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    MD_LIBRARY,
+#endif
     CALENDAR,
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT
@@ -167,6 +175,17 @@ public:
     void SetFcFrame(const lv_img_dsc_t* image);
     void SetFcControllerCallback(std::function<void(uint8_t)> callback);
     bool IsFcPlayingView() const { return fc_playing_view_; }
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    void SetMdLaunchCallback(
+        std::function<void(const std::string&, bool, uint8_t)> callback);
+    void OpenMdLibrary();
+    void ChangeMdCatalogPage(int delta);
+    void SelectMdCatalogRow(size_t row);
+    void ToggleMdLaunchMode();
+    void CycleMdSaveSlot();
+    void RequestMdLaunch();
+#endif
     bool IsPhotoPage() const { return current_page_ == DesktopPage::PHOTO; }
     void SetMusicReplayCallback(std::function<void(const std::string& title,
                                                    const std::string& artist,
@@ -256,6 +275,7 @@ private:
     lv_obj_t* puzzle_arcade_board_ = nullptr;
     lv_obj_t* puzzle_arcade_game_cards_[8]{};
     lv_obj_t* puzzle_arcade_game_labels_[8]{};
+    lv_obj_t* puzzle_arcade_game_tags_[8]{};
     enum class PuzzleArcadeView : uint8_t {
         HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE, TILE_2048, FREECELL,
         LUCKY_REVOLVER
@@ -399,6 +419,26 @@ private:
     lv_color_t fc_app_color_ = {};
     std::function<void(bool)> fc_active_callback_;
     std::function<void()> fc_exit_callback_;
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    static constexpr size_t kMdRowsPerPage = 5;
+    lv_obj_t* md_library_page_ = nullptr;
+    lv_obj_t* md_count_label_ = nullptr;
+    lv_obj_t* md_status_label_ = nullptr;
+    lv_obj_t* md_page_label_ = nullptr;
+    lv_obj_t* md_mode_label_ = nullptr;
+    lv_obj_t* md_slot_label_ = nullptr;
+    lv_obj_t* md_row_panels_[kMdRowsPerPage]{};
+    lv_obj_t* md_row_title_labels_[kMdRowsPerPage]{};
+    lv_obj_t* md_row_category_labels_[kMdRowsPerPage]{};
+    MdCatalogService md_catalog_{};
+    size_t md_catalog_page_ = 0;
+    size_t md_selected_index_ = 0;
+    bool md_resume_mode_ = false;
+    uint8_t md_save_slot_ = 0;
+    bool md_emulator_available_ = false;
+    std::function<void(const std::string&, bool, uint8_t)> md_launch_callback_;
+#endif
 
     // Calendar page elements
     lv_obj_t* calendar_title_label_ = nullptr;
@@ -767,6 +807,13 @@ private:
     void CreateAppsPage(lv_obj_t* root);
     void CreatePhotoPage(lv_obj_t* root);
     void CreateFcPage(lv_obj_t* root);
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    void CreateMdLibraryPage(lv_obj_t* root);
+    void ReleaseMdLibraryPage();
+    void LoadMdCatalog();
+    void RefreshMdCatalog();
+#endif
     void CreateCalendarPage(lv_obj_t* root);
 #if defined(CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT) && \
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_BONE_WEIGHT

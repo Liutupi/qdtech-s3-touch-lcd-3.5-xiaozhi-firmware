@@ -14,6 +14,10 @@
 #include "boards/common/board.h"
 #include "boards/common/wifi_board.h"
 #include "firmware_update_service.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+#include "ota.h"
+#endif
 #include "qd_user_config.h"
 #include "settings.h"
 
@@ -47,6 +51,20 @@
 #include <libs/qrcode/lv_qrcode.h>
 
 #define TAG "DesktopUI"
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+static bool HasInstalledMdEmulator() {
+    const esp_partition_t* partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_2, "mdemu");
+    if (!partition || partition->address != 0xF00000 ||
+        partition->size != 0x100000 || strcmp(partition->label, "mdemu") != 0) {
+        return false;
+    }
+    esp_app_desc_t description = {};
+    return esp_ota_get_partition_description(partition, &description) == ESP_OK;
+}
+#endif
 
 static constexpr int64_t kMusicLyricHoldMs = 12000;
 static constexpr int64_t kMusicControlDebounceMs = 450;
@@ -1527,6 +1545,19 @@ static void fc_gesture_cb(lv_event_t* event) {
     }
 }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+static void md_library_gesture_cb(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_GESTURE) {
+        return;
+    }
+    lv_indev_t* indev = lv_indev_get_act();
+    if (indev && lv_indev_get_gesture_dir(indev) == LV_DIR_RIGHT && g_desktop_ui) {
+        g_desktop_ui->NavigateBack();
+    }
+}
+#endif
+
 static uint8_t fc_controller_from_page_point(int16_t x, int16_t y) {
     if (y < 240) {
         return 0;
@@ -1889,6 +1920,10 @@ void DesktopUI::ShowPage(DesktopPage page) {
     const bool was_main = current_page_ == DesktopPage::MAIN;
     const bool was_photo = current_page_ == DesktopPage::PHOTO;
     const bool was_fc = current_page_ == DesktopPage::FC;
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    const bool was_md_library = current_page_ == DesktopPage::MD_LIBRARY;
+#endif
     const bool was_xiaozhi = current_page_ == DesktopPage::XIAOZHI;
     const bool was_shake_lab = current_page_ == DesktopPage::SHAKE_LAB;
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
@@ -1915,6 +1950,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     if (fc_page_) {
         lv_obj_add_flag(fc_page_, LV_OBJ_FLAG_HIDDEN);
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    if (md_library_page_) {
+        lv_obj_add_flag(md_library_page_, LV_OBJ_FLAG_HIDDEN);
+    }
+#endif
     if (calendar_page_) {
         lv_obj_add_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -1988,6 +2029,19 @@ void DesktopUI::ShowPage(DesktopPage page) {
             }
             ESP_LOGI(TAG, "Show FC page");
             break;
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        case DesktopPage::MD_LIBRARY:
+            if (!md_library_page_) {
+                CreateMdLibraryPage(lv_scr_act());
+            }
+            if (md_library_page_) {
+                lv_obj_clear_flag(md_library_page_, LV_OBJ_FLAG_HIDDEN);
+                LoadMdCatalog();
+            }
+            ESP_LOGI(TAG, "Show MD library page");
+            break;
+#endif
         case DesktopPage::CALENDAR:
             if (calendar_page_) {
                 lv_obj_clear_flag(calendar_page_, LV_OBJ_FLAG_HIDDEN);
@@ -2120,6 +2174,12 @@ void DesktopUI::ShowPage(DesktopPage page) {
     CONFIG_QDTECH_EXPERIMENT_CALENDAR_ZODIAC
     if (was_zodiac && page != DesktopPage::ZODIAC) {
         ReleaseZodiacPage();
+    }
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    if (was_md_library && page != DesktopPage::MD_LIBRARY) {
+        ReleaseMdLibraryPage();
     }
 #endif
 
@@ -2665,6 +2725,34 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         return;
     }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    if (current_page_ == DesktopPage::MD_LIBRARY) {
+        if (hit(390, 10, 72, 34)) {
+            NavigateBack();
+            return;
+        }
+        for (size_t row = 0; row < kMdRowsPerPage; ++row) {
+            if (hit(24, static_cast<uint16_t>(58 + row * 37), 432, 34)) {
+                SelectMdCatalogRow(row);
+                return;
+            }
+        }
+        if (hit(18, 266, 70, 36)) {
+            ChangeMdCatalogPage(-1);
+        } else if (hit(166, 266, 70, 36)) {
+            ChangeMdCatalogPage(1);
+        } else if (hit(244, 266, 82, 36)) {
+            ToggleMdLaunchMode();
+        } else if (hit(334, 266, 58, 36)) {
+            CycleMdSaveSlot();
+        } else if (hit(400, 266, 64, 36)) {
+            RequestMdLaunch();
+        }
+        return;
+    }
+#endif
+
     if (current_page_ != DesktopPage::APPS) {
         return;
     }
@@ -2683,8 +2771,21 @@ void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
         }
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        else if (hit(24, 240, md_emulator_available_ ? 210 : 432, 48)) {
+            ShowPage(DesktopPage::PUZZLE_ARCADE);
+        }
+#else
         else if (hit(24, 240, 432, 48)) {
             ShowPage(DesktopPage::PUZZLE_ARCADE);
+        }
+#endif
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+        else if (md_emulator_available_ && hit(246, 240, 210, 48)) {
+            OpenMdLibrary();
         }
 #endif
         return;
@@ -3102,6 +3203,14 @@ void DesktopUI::CreateQuotePanel(lv_obj_t* parent) {
 
 // ===== Apps page =====
 void DesktopUI::CreateAppsPage(lv_obj_t* root) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    // App-only OTA from v1.8.18 keeps the legacy partition table. Hide the MD
+    // entry on those boards until the one-time full dual-mode image has added
+    // and populated the isolated mdemu partition.
+    md_emulator_available_ = HasInstalledMdEmulator();
+    ESP_LOGI(TAG, "MD emulator installed=%d", md_emulator_available_);
+#endif
     apps_page_ = lv_obj_create(root);
     lv_obj_add_style(apps_page_, &style_screen, 0);
     lv_obj_set_size(apps_page_, LV_PCT(100), LV_PCT(100));
@@ -3210,9 +3319,22 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
 
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    lv_obj_t* puzzle_card = CreatePanel(
+        apps_more_group_, md_emulator_available_ ? 210 : 432, 48, 24, 240);
+#else
     lv_obj_t* puzzle_card = CreatePanel(apps_more_group_, 432, 48, 24, 240);
-    lv_obj_set_style_bg_color(puzzle_card, COLOR_CREAM, 0);
-    lv_obj_set_style_border_color(puzzle_card, COLOR_GOLD, 0);
+#endif
+    const lv_color_t puzzle_entry_bg = lv_color_hex(0x55364f);
+    lv_obj_set_style_bg_color(puzzle_card, puzzle_entry_bg, 0);
+    // Keep the entry readable while the touch pointer leaves the panel in a
+    // pressed/focused state. Theme state styles must not turn it white again.
+    lv_obj_set_style_bg_color(puzzle_card, puzzle_entry_bg, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(puzzle_card, puzzle_entry_bg, LV_STATE_FOCUSED);
+    lv_obj_set_style_bg_color(puzzle_card, puzzle_entry_bg, LV_STATE_CHECKED);
+    lv_obj_set_style_bg_opa(puzzle_card, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(puzzle_card, lv_color_hex(0xffd98a), 0);
     lv_obj_set_style_border_width(puzzle_card, 2, 0);
     lv_obj_t* puzzle_icon = circle(puzzle_card, 30, COLOR_PURPLE, LV_OPA_70);
     lv_obj_align(puzzle_icon, LV_ALIGN_LEFT_MID, 12, 0);
@@ -3222,12 +3344,44 @@ void DesktopUI::CreateAppsPage(lv_obj_t* root) {
     lv_obj_center(puzzle_star);
     lv_obj_t* puzzle_title = label_en(puzzle_card, "益智游戏馆", &style_en);
     lv_obj_set_style_text_font(puzzle_title, qd_cn_font_16(), 0);
-    lv_obj_set_style_text_color(puzzle_title, COLOR_TEXT, 0);
+    lv_obj_set_style_text_color(puzzle_title, lv_color_hex(0xfffbf4), 0);
     lv_obj_align(puzzle_title, LV_ALIGN_LEFT_MID, 54, -9);
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    if (!md_emulator_available_) {
+#endif
     lv_obj_t* puzzle_detail = label_en(
         puzzle_card, "数独 · 密码锁 · 推箱子", &style_muted);
     lv_obj_set_style_text_font(puzzle_detail, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(puzzle_detail, lv_color_hex(0xffd98a), 0);
     lv_obj_align(puzzle_detail, LV_ALIGN_LEFT_MID, 178, 8);
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    }
+#endif
+#endif
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    if (md_emulator_available_) {
+    lv_obj_t* md_card = CreatePanel(apps_more_group_, 210, 48, 246, 240);
+    lv_obj_set_style_bg_color(md_card, COLOR_SURFACE, 0);
+    lv_obj_set_style_border_color(md_card, COLOR_GREEN, 0);
+    lv_obj_set_style_border_width(md_card, 2, 0);
+    lv_obj_t* md_icon = circle(md_card, 30, COLOR_GREEN, LV_OPA_70);
+    lv_obj_align(md_icon, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_t* md_mark = label_en(md_icon, "M", &style_en);
+    lv_obj_set_style_text_font(md_mark, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(md_mark, COLOR_CREAM, 0);
+    lv_obj_center(md_mark);
+    lv_obj_t* md_title = label_en(md_card, "MD 游戏", &style_en);
+    lv_obj_set_style_text_font(md_title, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(md_title, COLOR_TEXT, 0);
+    lv_obj_align(md_title, LV_ALIGN_LEFT_MID, 54, -9);
+    lv_obj_t* md_detail = label_en(md_card, "SD 目录", &style_muted);
+    lv_obj_set_style_text_font(md_detail, qd_cn_font_16(), 0);
+    lv_obj_align(md_detail, LV_ALIGN_LEFT_MID, 54, 10);
+    }
 #endif
 
     lv_obj_t* hint = label_en(apps_page_, "右滑返回主页", &style_muted);
@@ -3624,6 +3778,291 @@ void DesktopUI::CreateFcPage(lv_obj_t* root) {
 
     SetFcMode(false);
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+void DesktopUI::OpenMdLibrary() {
+    ShowPage(DesktopPage::MD_LIBRARY);
+}
+
+void DesktopUI::CreateMdLibraryPage(lv_obj_t* root) {
+    md_library_page_ = lv_obj_create(root);
+    lv_obj_add_style(md_library_page_, &style_screen, 0);
+    lv_obj_set_size(md_library_page_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(md_library_page_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(md_library_page_, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_event_cb(md_library_page_, md_library_gesture_cb,
+                        LV_EVENT_GESTURE, nullptr);
+    lv_obj_set_style_bg_color(md_library_page_, COLOR_BG, 0);
+
+    lv_obj_t* title = label_en(md_library_page_, "MD 游戏目录", &style_en);
+    lv_obj_set_style_text_font(title, qd_cn_font_20(), 0);
+    lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 18, 14);
+
+    md_count_label_ = label_en(md_library_page_, "正在读取 SD 卡", &style_muted);
+    lv_obj_set_style_text_font(md_count_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(md_count_label_, 210);
+    lv_label_set_long_mode(md_count_label_, LV_LABEL_LONG_DOT);
+    lv_obj_align(md_count_label_, LV_ALIGN_TOP_LEFT, 150, 19);
+
+    lv_obj_t* back = CreateButton(md_library_page_, "返回", nullptr);
+    lv_obj_set_size(back, 72, 34);
+    lv_obj_set_style_text_font(lv_obj_get_child(back, 0), qd_cn_font_16(), 0);
+    lv_obj_align(back, LV_ALIGN_TOP_LEFT, 390, 10);
+
+    lv_obj_t* list_panel = CreatePanel(md_library_page_, 448, 198, 16, 50);
+    lv_obj_set_style_bg_color(list_panel, COLOR_SURFACE, 0);
+    lv_obj_set_style_border_color(list_panel, COLOR_LINE, 0);
+    lv_obj_set_style_border_width(list_panel, 1, 0);
+    lv_obj_set_style_radius(list_panel, 10, 0);
+
+    md_status_label_ = label_en(list_panel, "请将游戏放入 /roms/md", &style_muted);
+    lv_obj_set_style_text_font(md_status_label_, qd_cn_font_16(), 0);
+    lv_obj_set_width(md_status_label_, 400);
+    lv_obj_set_style_text_align(md_status_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_center(md_status_label_);
+
+    for (size_t row = 0; row < kMdRowsPerPage; ++row) {
+        lv_obj_t* panel = lv_obj_create(md_library_page_);
+        lv_obj_add_style(panel, &style_panel, 0);
+        lv_obj_set_size(panel, 432, 34);
+        lv_obj_align(panel, LV_ALIGN_TOP_LEFT, 24,
+                     static_cast<int32_t>(58 + row * 37));
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(panel, 8, 0);
+        lv_obj_set_style_pad_all(panel, 0, 0);
+        add_gesture_bubble(panel);
+        md_row_panels_[row] = panel;
+
+        lv_obj_t* number = label_en(panel, "01", &style_gold);
+        lv_obj_set_style_text_font(number, &lv_font_montserrat_14, 0);
+        lv_obj_set_width(number, 28);
+        lv_obj_align(number, LV_ALIGN_LEFT_MID, 10, 0);
+
+        md_row_title_labels_[row] = label_en(panel, "MD Game", &style_en);
+        lv_obj_set_style_text_font(md_row_title_labels_[row], qd_cn_font_16(), 0);
+        lv_obj_set_width(md_row_title_labels_[row], 270);
+        lv_label_set_long_mode(md_row_title_labels_[row], LV_LABEL_LONG_DOT);
+        lv_obj_align(md_row_title_labels_[row], LV_ALIGN_LEFT_MID, 44, 0);
+
+        md_row_category_labels_[row] = label_en(panel, "MD", &style_muted);
+        lv_obj_set_style_text_font(md_row_category_labels_[row], qd_cn_font_16(), 0);
+        lv_obj_set_width(md_row_category_labels_[row], 92);
+        lv_obj_set_style_text_align(md_row_category_labels_[row], LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_align(md_row_category_labels_[row], LV_ALIGN_RIGHT_MID, -12, 0);
+    }
+
+    lv_obj_t* previous = CreateButton(md_library_page_, "上一页", nullptr);
+    lv_obj_set_size(previous, 70, 36);
+    lv_obj_set_style_text_font(lv_obj_get_child(previous, 0), qd_cn_font_16(), 0);
+    lv_obj_align(previous, LV_ALIGN_TOP_LEFT, 18, 266);
+
+    md_page_label_ = label_en(md_library_page_, "1 / 1", &style_muted);
+    lv_obj_set_style_text_font(md_page_label_, &lv_font_montserrat_14, 0);
+    lv_obj_set_width(md_page_label_, 70);
+    lv_obj_set_style_text_align(md_page_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(md_page_label_, LV_ALIGN_TOP_LEFT, 92, 276);
+
+    lv_obj_t* next = CreateButton(md_library_page_, "下一页", nullptr);
+    lv_obj_set_size(next, 70, 36);
+    lv_obj_set_style_text_font(lv_obj_get_child(next, 0), qd_cn_font_16(), 0);
+    lv_obj_align(next, LV_ALIGN_TOP_LEFT, 166, 266);
+
+    lv_obj_t* mode = CreateButton(md_library_page_, "新游戏", nullptr);
+    lv_obj_set_size(mode, 82, 36);
+    md_mode_label_ = lv_obj_get_child(mode, 0);
+    lv_obj_set_style_text_font(md_mode_label_, qd_cn_font_16(), 0);
+    lv_obj_align(mode, LV_ALIGN_TOP_LEFT, 244, 266);
+
+    lv_obj_t* slot = CreateButton(md_library_page_, "槽 1", nullptr);
+    lv_obj_set_size(slot, 58, 36);
+    md_slot_label_ = lv_obj_get_child(slot, 0);
+    lv_obj_set_style_text_font(md_slot_label_, qd_cn_font_16(), 0);
+    lv_obj_align(slot, LV_ALIGN_TOP_LEFT, 334, 266);
+
+    lv_obj_t* launch = CreateButton(md_library_page_, "开始", nullptr);
+    lv_obj_set_size(launch, 64, 36);
+    lv_obj_set_style_bg_color(launch, COLOR_GREEN, 0);
+    lv_obj_set_style_text_font(lv_obj_get_child(launch, 0), qd_cn_font_16(), 0);
+    lv_obj_align(launch, LV_ALIGN_TOP_LEFT, 400, 266);
+}
+
+void DesktopUI::ReleaseMdLibraryPage() {
+    md_catalog_.Clear();
+    if (md_library_page_) {
+        lv_obj_delete(md_library_page_);
+    }
+    md_library_page_ = nullptr;
+    md_count_label_ = nullptr;
+    md_status_label_ = nullptr;
+    md_page_label_ = nullptr;
+    md_mode_label_ = nullptr;
+    md_slot_label_ = nullptr;
+    memset(md_row_panels_, 0, sizeof(md_row_panels_));
+    memset(md_row_title_labels_, 0, sizeof(md_row_title_labels_));
+    memset(md_row_category_labels_, 0, sizeof(md_row_category_labels_));
+    md_catalog_page_ = 0;
+    md_selected_index_ = 0;
+}
+
+void DesktopUI::LoadMdCatalog() {
+    if (md_count_label_) {
+        lv_label_set_text(md_count_label_, "正在读取 SD 卡");
+    }
+    const esp_err_t result = md_catalog_.Load();
+    md_catalog_page_ = 0;
+    md_selected_index_ = 0;
+    if (result != ESP_OK) {
+        ESP_LOGW(TAG, "MD catalog load failed err=%s", esp_err_to_name(result));
+    }
+    RefreshMdCatalog();
+}
+
+void DesktopUI::RefreshMdCatalog() {
+    const size_t count = md_catalog_.Count();
+    const size_t page_count = std::max<size_t>(1, (count + kMdRowsPerPage - 1) /
+                                                    kMdRowsPerPage);
+    md_catalog_page_ = std::min(md_catalog_page_, page_count - 1);
+    if (count > 0) {
+        md_selected_index_ = std::min(md_selected_index_, count - 1);
+    }
+
+    if (md_count_label_) {
+        char text[64];
+        snprintf(text, sizeof(text), md_catalog_.Truncated() ? "已读取 %u 个（最多 128）"
+                                                             : "已读取 %u 个游戏",
+                 static_cast<unsigned>(count));
+        lv_label_set_text(md_count_label_, text);
+    }
+    if (md_page_label_) {
+        char text[24];
+        snprintf(text, sizeof(text), "%u / %u",
+                 static_cast<unsigned>(md_catalog_page_ + 1),
+                 static_cast<unsigned>(page_count));
+        lv_label_set_text(md_page_label_, text);
+    }
+    if (md_mode_label_) {
+        lv_label_set_text(md_mode_label_, md_resume_mode_ ? "继续游戏" : "新游戏");
+    }
+    if (md_slot_label_) {
+        char text[16];
+        snprintf(text, sizeof(text), "槽 %u",
+                 static_cast<unsigned>(md_save_slot_ + 1));
+        lv_label_set_text(md_slot_label_, text);
+    }
+    if (md_status_label_) {
+        if (count == 0) {
+            lv_label_set_text(md_status_label_, "未找到游戏\n请放入 /sdcard/roms/md");
+            lv_obj_clear_flag(md_status_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(md_status_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    for (size_t row = 0; row < kMdRowsPerPage; ++row) {
+        lv_obj_t* panel = md_row_panels_[row];
+        const size_t index = md_catalog_page_ * kMdRowsPerPage + row;
+        const MdCatalogEntry* entry = md_catalog_.Entry(index);
+        if (!panel) {
+            continue;
+        }
+        if (!entry) {
+            lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        lv_obj_clear_flag(panel, LV_OBJ_FLAG_HIDDEN);
+        const bool selected = index == md_selected_index_;
+        // Keep the selected row readable in every theme. COLOR_CREAM is close
+        // to white in the warm theme, so pairing it with COLOR_TEXT can make
+        // the title disappear. A dark plum/brown card also fits the existing
+        // cute comic palette without changing any global theme colors.
+        const lv_color_t selected_bg =
+            is_tupi_warm_theme() ? lv_color_hex(0x553a2d)
+                                 : themed_color(lv_color_hex(0x2f2844),
+                                                lv_color_hex(0x653558));
+        lv_obj_set_style_bg_color(panel, selected ? selected_bg : COLOR_SURFACE, 0);
+        lv_obj_set_style_border_color(panel, selected ? COLOR_GOLD : COLOR_LINE, 0);
+        lv_obj_set_style_border_width(panel, selected ? 2 : 1, 0);
+
+        lv_obj_t* number = lv_obj_get_child(panel, 0);
+        if (number) {
+            char text[8];
+            snprintf(text, sizeof(text), "%02u", static_cast<unsigned>(index + 1));
+            lv_label_set_text(number, text);
+        }
+        if (md_row_title_labels_[row]) {
+            lv_label_set_text(md_row_title_labels_[row], entry->title);
+            lv_obj_set_style_text_color(md_row_title_labels_[row],
+                                        selected ? lv_color_hex(0xfffbf4)
+                                                 : COLOR_TEXT,
+                                        0);
+        }
+        if (md_row_category_labels_[row]) {
+            lv_label_set_text(md_row_category_labels_[row], entry->category);
+            lv_obj_set_style_text_color(md_row_category_labels_[row],
+                                        selected ? COLOR_GOLD : COLOR_MUTED, 0);
+        }
+    }
+}
+
+void DesktopUI::ChangeMdCatalogPage(int delta) {
+    const size_t count = md_catalog_.Count();
+    const size_t page_count = std::max<size_t>(1, (count + kMdRowsPerPage - 1) /
+                                                    kMdRowsPerPage);
+    const int next = std::clamp(static_cast<int>(md_catalog_page_) + delta, 0,
+                                static_cast<int>(page_count - 1));
+    md_catalog_page_ = static_cast<size_t>(next);
+    if (count > 0) {
+        md_selected_index_ = std::min(md_catalog_page_ * kMdRowsPerPage, count - 1);
+    }
+    RefreshMdCatalog();
+}
+
+void DesktopUI::SelectMdCatalogRow(size_t row) {
+    const size_t index = md_catalog_page_ * kMdRowsPerPage + row;
+    if (md_catalog_.Entry(index)) {
+        md_selected_index_ = index;
+        RefreshMdCatalog();
+    }
+}
+
+void DesktopUI::ToggleMdLaunchMode() {
+    md_resume_mode_ = !md_resume_mode_;
+    RefreshMdCatalog();
+}
+
+void DesktopUI::CycleMdSaveSlot() {
+    md_save_slot_ = static_cast<uint8_t>((md_save_slot_ + 1) % 4);
+    RefreshMdCatalog();
+}
+
+void DesktopUI::RequestMdLaunch() {
+    const MdCatalogEntry* entry = md_catalog_.Entry(md_selected_index_);
+    if (!entry) {
+        if (md_count_label_) {
+            lv_label_set_text(md_count_label_, "请先选择游戏");
+        }
+        return;
+    }
+    if (!md_launch_callback_) {
+        if (md_count_label_) {
+            lv_label_set_text(md_count_label_, "启动服务尚未就绪");
+        }
+        ESP_LOGW(TAG, "MD launch requested before handoff callback is connected");
+        return;
+    }
+    md_launch_callback_(entry->relative_path, md_resume_mode_, md_save_slot_);
+    if (md_count_label_) {
+        lv_label_set_text(md_count_label_, "启动请求已提交");
+    }
+}
+
+void DesktopUI::SetMdLaunchCallback(
+    std::function<void(const std::string&, bool, uint8_t)> callback) {
+    md_launch_callback_ = std::move(callback);
+}
+#endif
 
 // ===== Calendar page =====
 void DesktopUI::CreateCalendarPage(lv_obj_t* root) {
@@ -5904,7 +6343,12 @@ void DesktopUI::RefreshDiagnostics() {
 
     const esp_app_desc_t* app_desc = esp_app_get_description();
     const esp_partition_t* running = esp_ota_get_running_partition();
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    const esp_partition_t* next = GetNextMainOtaPartition();
+#else
     const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+#endif
     auto& wifi = WifiStation::GetInstance();
     auto ssid_list = SsidManager::GetInstance().GetSsidList();
 
@@ -11567,6 +12011,7 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
         lv_obj_set_style_text_font(tag, qd_cn_font_16(), 0);
         lv_obj_set_style_text_color(tag, lv_color_hex(0x7b6675), 0);
         lv_obj_align(tag, LV_ALIGN_LEFT_MID, 40, 10);
+        puzzle_arcade_game_tags_[i] = tag;
     }
     lv_obj_t* open = CreateButton(puzzle_arcade_home_group_, "开始游戏", nullptr);
     lv_obj_set_size(open, 154, 36);
@@ -11654,6 +12099,7 @@ void DesktopUI::ReleasePuzzleArcadePage() {
     puzzle_arcade_board_ = nullptr;
     memset(puzzle_arcade_game_cards_, 0, sizeof(puzzle_arcade_game_cards_));
     memset(puzzle_arcade_game_labels_, 0, sizeof(puzzle_arcade_game_labels_));
+    memset(puzzle_arcade_game_tags_, 0, sizeof(puzzle_arcade_game_tags_));
     QdPuzzleArcade::ReleaseImage(&puzzle_arcade_cover_frame_);
     puzzle_arcade_view_ = PuzzleArcadeView::HOME;
 }
@@ -11668,10 +12114,6 @@ void DesktopUI::ShowPuzzleArcadeHome() {
 
 void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
     puzzle_arcade_selected_ = game;
-    static constexpr uint32_t selected_colors[] = {
-        0xffedca, 0xf3e8fa, 0xe5f3e7, 0xfbe7ec,
-        0xe5f2fa, 0xfff0cb, 0xf3e8fa, 0xffe1e5
-    };
     static constexpr uint32_t border_colors[] = {
         0xd89a55, 0x9a73b4, 0x6f9a7c, 0xc96f8d,
         0x6594b3, 0xd19645, 0x9a73b4, 0xb85f6c
@@ -11680,7 +12122,7 @@ void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
         if (!puzzle_arcade_game_cards_[i]) continue;
         const bool selected = i == static_cast<int>(game);
         lv_obj_set_style_bg_color(puzzle_arcade_game_cards_[i],
-                                  lv_color_hex(selected ? selected_colors[i] : 0xfffcfa), 0);
+                                  lv_color_hex(selected ? 0x55364f : 0xfffcfa), 0);
         lv_obj_set_style_border_color(puzzle_arcade_game_cards_[i],
                                       lv_color_hex(border_colors[i]), 0);
         lv_obj_set_style_border_width(puzzle_arcade_game_cards_[i], selected ? 2 : 1, 0);
@@ -11691,7 +12133,11 @@ void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
                                     selected ? LV_OPA_20 : LV_OPA_TRANSP, 0);
         if (puzzle_arcade_game_labels_[i]) {
             lv_obj_set_style_text_color(puzzle_arcade_game_labels_[i],
-                                        lv_color_hex(0x453a48), 0);
+                                        lv_color_hex(selected ? 0xfffbf4 : 0x453a48), 0);
+        }
+        if (puzzle_arcade_game_tags_[i]) {
+            lv_obj_set_style_text_color(puzzle_arcade_game_tags_[i],
+                                        lv_color_hex(selected ? 0xffd98a : 0x7b6675), 0);
         }
     }
     if (puzzle_arcade_cover_status_) {

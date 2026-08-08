@@ -143,7 +143,12 @@ static bool FetchHttpText(const char* url, size_t max_bytes, std::string* output
 }
 
 static size_t NextOtaPartitionSize() {
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    const esp_partition_t* partition = GetNextMainOtaPartition();
+#else
     const esp_partition_t* partition = esp_ota_get_next_update_partition(nullptr);
+#endif
     return partition ? partition->size : 0;
 }
 

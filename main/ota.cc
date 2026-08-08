@@ -37,6 +37,37 @@ static constexpr const char* kFirmwareDownloadProxyPrefixes[] = {
     "https://gh-proxy.com/",
 };
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+const esp_partition_t* GetNextMainOtaPartition() {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    esp_partition_subtype_t target_subtype;
+    const char* target_label = nullptr;
+    uint32_t expected_address = 0;
+    if (running && strcmp(running->label, "ota_0") == 0) {
+        target_subtype = ESP_PARTITION_SUBTYPE_APP_OTA_1;
+        target_label = "ota_1";
+        expected_address = 0x800000;
+    } else if (running && strcmp(running->label, "ota_1") == 0) {
+        target_subtype = ESP_PARTITION_SUBTYPE_APP_OTA_0;
+        target_label = "ota_0";
+        expected_address = 0x100000;
+    } else {
+        ESP_LOGE(TAG, "Main OTA refused from partition %s",
+                 running ? running->label : "(none)");
+        return nullptr;
+    }
+
+    const esp_partition_t* target = esp_partition_find_first(
+        ESP_PARTITION_TYPE_APP, target_subtype, target_label);
+    if (!target || target->address != expected_address || target->size != 0x700000) {
+        ESP_LOGE(TAG, "Main OTA layout mismatch target=%s", target_label);
+        return nullptr;
+    }
+    return target;
+}
+#endif
+
 struct FirmwareHttpHeaders {
     std::string location;
 };
@@ -526,7 +557,12 @@ void Ota::MarkCurrentVersionValid() {
 
 void Ota::Upgrade(const std::string& firmware_url, const std::string& expected_sha256, size_t expected_size) {
     ESP_LOGI(TAG, "Upgrading firmware from %s", firmware_url.c_str());
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+    auto update_partition = GetNextMainOtaPartition();
+#else
     auto update_partition = esp_ota_get_next_update_partition(NULL);
+#endif
     if (update_partition == NULL) {
         ESP_LOGE(TAG, "Failed to get update partition");
         return;

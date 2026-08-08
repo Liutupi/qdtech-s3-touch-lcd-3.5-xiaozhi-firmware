@@ -54,6 +54,10 @@ int WifiBoard::GetStartupWifiConnectTimeoutMs() const {
     return kStartupWifiConnectTimeoutMs;
 }
 
+bool WifiBoard::ShouldEnterProvisioningOnStartupTimeout() const {
+    return true;
+}
+
 void WifiBoard::EnterWifiConfigMode(bool station_already_started) {
     auto& application = Application::GetInstance();
     application.SetDeviceState(kDeviceStateWifiConfiguring);
@@ -143,6 +147,17 @@ void WifiBoard::StartNetwork() {
     // Try to connect to WiFi, if failed, launch the WiFi configuration AP
     const int startup_timeout_ms = GetStartupWifiConnectTimeoutMs();
     if (!wifi_station.WaitForConnected(startup_timeout_ms)) {
+        if (!ShouldEnterProvisioningOnStartupTimeout()) {
+            ESP_LOGW(TAG,
+                     "No saved WiFi connected within %d ms; waiting with Station active without provisioning",
+                     startup_timeout_ms);
+            while (!wifi_station.WaitForConnected(30 * 1000)) {
+                ESP_LOGW(TAG,
+                         "Still waiting for saved WiFi; Station remains active and provisioning stays disabled");
+            }
+            ESP_LOGI(TAG, "Saved WiFi connected during extended Station wait");
+            return;
+        }
         ESP_LOGW(TAG, "No saved WiFi connected within %d ms, entering provisioning mode",
                  startup_timeout_ms);
 #ifdef QDTECH_PROVISIONING_APSTA

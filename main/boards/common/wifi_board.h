@@ -10,6 +10,7 @@ protected:
     bool wifi_config_mode_ = false;
     void EnterWifiConfigMode(bool station_already_started = false);
     virtual int GetStartupWifiConnectTimeoutMs() const;
+    virtual bool ShouldEnterProvisioningOnStartupTimeout() const;
     virtual std::string GetBoardJson() override;
 
 public:

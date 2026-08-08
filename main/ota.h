@@ -7,6 +7,14 @@
 #include <esp_err.h>
 #include "board.h"
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
+    CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE
+#include <esp_partition.h>
+// Returns the other main-firmware OTA slot. Under the QDTech MD dual-mode
+// experiment this deliberately excludes the dedicated ota_2 emulator slot.
+const esp_partition_t* GetNextMainOtaPartition();
+#endif
+
 class Ota {
 public:
     Ota();
