@@ -12872,16 +12872,16 @@ bool DesktopUI::MovePuzzle2048(int dx, int dy) {
     if (puzzle_2048_game_over_ || (dx == 0 && dy == 0)) return false;
     bool changed = false;
     for (int line = 0; line < 4; ++line) {
-        uint16_t values[4]{};
+        uint32_t values[4]{};
         for (int step = 0; step < 4; ++step) {
             const int x = dx ? (dx > 0 ? 3 - step : step) : line;
             const int y = dy ? (dy > 0 ? 3 - step : step) : line;
             values[step] = puzzle_2048_cells_[y * 4 + x];
         }
-        uint16_t compact[4]{};
+        uint32_t compact[4]{};
         int count = 0;
-        for (uint16_t value : values) if (value) compact[count++] = value;
-        uint16_t merged[4]{};
+        for (uint32_t value : values) if (value) compact[count++] = value;
+        uint32_t merged[4]{};
         int out = 0;
         for (int i = 0; i < count; ++i) {
             if (i + 1 < count && compact[i] == compact[i + 1]) {
@@ -12904,12 +12904,18 @@ bool DesktopUI::MovePuzzle2048(int dx, int dy) {
             puzzle_2048_cells_[index] = merged[step];
         }
     }
-    if (changed) SpawnPuzzle2048Tile();
+    // A blocked direction used to rebuild the complete custom-drawn board as
+    // well.  On a memory-tight device that needlessly creates dozens of LVGL
+    // draw tasks for every tap.  Only redraw when the board really changed.
+    if (!changed) return false;
+    SpawnPuzzle2048Tile();
     puzzle_2048_game_over_ = !CanMovePuzzle2048();
     char status[80];
     if (puzzle_2048_game_over_) snprintf(status, sizeof(status), "没有可合并的方块了，点重新开始");
     else if (puzzle_2048_won_) snprintf(status, sizeof(status), "2048 达成！继续挑战更高分");
-    else snprintf(status, sizeof(status), "得分 %lu · 最大 %u", static_cast<unsigned long>(puzzle_2048_score_), puzzle_2048_best_tile_);
+    else snprintf(status, sizeof(status), "得分 %lu · 最大 %lu",
+                  static_cast<unsigned long>(puzzle_2048_score_),
+                  static_cast<unsigned long>(puzzle_2048_best_tile_));
     lv_label_set_text(puzzle_arcade_status_, status);
     RefreshPuzzleArcadeBoard();
     return changed;
@@ -13556,17 +13562,18 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         rect(304, 2, 168, 224, game_paper, 18, game_gold, 2, true);
         for (int row = 0; row < 4; ++row) {
             for (int col = 0; col < 4; ++col) {
-                const uint16_t value = self->puzzle_2048_cells_[row * 4 + col];
+                const uint32_t value = self->puzzle_2048_cells_[row * 4 + col];
                 int shade = 0;
-                for (uint16_t n = value; n > 2 && shade < 10; n >>= 1) ++shade;
+                for (uint32_t n = value; n > 2 && shade < 10; n >>= 1) ++shade;
                 const lv_color_t color = lv_color_hex(tile_colors[std::min(shade, 10)]);
                 const int x = 18 + col * 66, y = 12 + row * 58;
-                rect(x, y, 58, 50, color, 13, game_paper, 2, true);
+                // Per-tile shadows create an extra heap-backed LVGL draw task
+                // for all 16 cells on every move.  A clean border keeps the
+                // raised-card look while making long sessions much lighter.
+                rect(x, y, 58, 50, color, 13, game_paper, 2, false);
                 if (value) {
-                    rect(x + 8, y + 7, 18, 5, lv_color_mix(game_paper, color, 180), 3,
-                         color, 0);
-                    char label[8];
-                    snprintf(label, sizeof(label), "%u", value);
+                    char label[12];
+                    snprintf(label, sizeof(label), "%lu", static_cast<unsigned long>(value));
                     text(x, y + 12, 58, 32, label,
                          value >= 16 ? game_paper : game_ink,
                          value >= 1024 ? &lv_font_montserrat_16 : &lv_font_montserrat_20);
@@ -13576,7 +13583,8 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         char score[48];
         snprintf(score, sizeof(score), "得分 %lu", static_cast<unsigned long>(self->puzzle_2048_score_));
         text(314, 16, 148, 22, score, game_ink);
-        snprintf(score, sizeof(score), "最大 %u", self->puzzle_2048_best_tile_);
+        snprintf(score, sizeof(score), "最大 %lu",
+                 static_cast<unsigned long>(self->puzzle_2048_best_tile_));
         text(314, 42, 148, 20, score, game_muted);
         text(314, 70, 148, 18, "轻点方向合并", game_muted);
         button(374, 42, 48, 36, "上", game_purple);

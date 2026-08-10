@@ -306,9 +306,9 @@ private:
     int8_t puzzle_match3_selected_ = -1;
     uint16_t puzzle_match3_score_ = 0;
     uint8_t puzzle_match3_moves_left_ = 0;
-    uint16_t puzzle_2048_cells_[16]{};
+    uint32_t puzzle_2048_cells_[16]{};
     uint32_t puzzle_2048_score_ = 0;
-    uint16_t puzzle_2048_best_tile_ = 0;
+    uint32_t puzzle_2048_best_tile_ = 0;
     bool puzzle_2048_won_ = false;
     bool puzzle_2048_game_over_ = false;
     QdFreecell::Game* puzzle_freecell_game_ = nullptr;
