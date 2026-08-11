@@ -20,6 +20,14 @@
 #endif
 #include "qd_user_config.h"
 #include "settings.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
+    CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
+#include "puzzle_2048_logic.h"
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+#include "puzzle_2048_canvas_renderer.h"
+#endif
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -1566,6 +1574,159 @@ static void md_library_gesture_cb(lv_event_t* event) {
         g_desktop_ui->NavigateBack();
     }
 }
+
+#if 0  // superseded; the active board-local callback is beside PuzzleArcadeDrawCb
+void DesktopUI::ShakeLabRevolverDrawCb(lv_event_t* event) {
+    auto* self = static_cast<DesktopUI*>(lv_event_get_user_data(event));
+    auto* object = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_layer_t* layer = lv_event_get_layer(event);
+    if (!self || !object || !layer ||
+        self->shake_lab_mode_ != ShakeLabMode::LUCKY_REVOLVER) return;
+    lv_area_t area;
+    lv_obj_get_coords(object, &area);
+    const int ox = area.x1, oy = area.y1;
+    const lv_color_t ink = lv_color_hex(0x403744);
+    const lv_color_t muted = lv_color_hex(0x715f70);
+    const lv_color_t purple = lv_color_hex(0x76508f);
+    const lv_color_t green = lv_color_hex(0x47785f);
+    const lv_color_t gold = lv_color_hex(0xb66f25);
+    const lv_color_t pink = lv_color_hex(0xc95f7e);
+    const lv_color_t paper = lv_color_hex(0xfffbf7);
+    auto rect = [&](int x, int y, int w, int h, lv_color_t color, int radius = 5,
+                    lv_color_t border = COLOR_LINE, int border_width = 1,
+                    bool shadow = false) {
+        lv_draw_rect_dsc_t d;
+        lv_draw_rect_dsc_init(&d);
+        d.bg_color = color; d.bg_opa = LV_OPA_COVER; d.radius = radius;
+        d.border_color = border; d.border_width = border_width; d.border_opa = LV_OPA_COVER;
+        if (shadow) {
+            d.shadow_color = lv_color_hex(0x9b7d68); d.shadow_width = 5;
+            d.shadow_offset_y = 2; d.shadow_opa = LV_OPA_20;
+        }
+        lv_area_t draw_area{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_rect(layer, &d, &draw_area);
+    };
+    auto triangle = [&](int x1, int y1, int x2, int y2, int x3, int y3,
+                        lv_color_t color) {
+        lv_draw_triangle_dsc_t d;
+        lv_draw_triangle_dsc_init(&d);
+        d.bg_color = color; d.bg_opa = LV_OPA_COVER;
+        d.p[0] = {static_cast<lv_value_precise_t>(ox + x1),
+                  static_cast<lv_value_precise_t>(oy + y1)};
+        d.p[1] = {static_cast<lv_value_precise_t>(ox + x2),
+                  static_cast<lv_value_precise_t>(oy + y2)};
+        d.p[2] = {static_cast<lv_value_precise_t>(ox + x3),
+                  static_cast<lv_value_precise_t>(oy + y3)};
+        lv_draw_triangle(layer, &d);
+    };
+    auto text = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                    const lv_font_t* font = qd_cn_font_16()) {
+        lv_draw_label_dsc_t d;
+        lv_draw_label_dsc_init(&d);
+        d.color = color; d.font = font; d.text = value;
+        d.align = LV_TEXT_ALIGN_CENTER; d.text_local = 1;
+        lv_area_t draw_area{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_label(layer, &d, &draw_area);
+    };
+    auto button = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                      const lv_font_t* font = qd_cn_font_16()) {
+        rect(x, y, w, h, lv_color_mix(color, paper, 84), 11, color, 2);
+        text(x, y + 2, w, h - 2, value, ink, font);
+    };
+
+    const auto state = self->puzzle_revolver_state_;
+    if (state == PuzzleRevolverState::HIT || state == PuzzleRevolverState::LUCKY) {
+        const bool hit = state == PuzzleRevolverState::HIT;
+        const lv_color_t backdrop = hit ? lv_color_hex(0x9f2439) : lv_color_hex(0xdff3e6);
+        const lv_color_t accent = hit ? lv_color_hex(0xffc5b8) : lv_color_hex(0x4f8c68);
+        rect(8, 2, 464, 252, backdrop, 22, accent, 3, true);
+        for (int i = 0; i < 6; ++i) {
+            const int ray_x = 38 + i * 78;
+            triangle(240, 128, ray_x, 8, ray_x + 35, 8,
+                     hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+            triangle(240, 128, ray_x, 248, ray_x + 35, 248,
+                     hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+        }
+        rect(166, 38, 148, 148, hit ? lv_color_hex(0x7a172b) : paper,
+             LV_RADIUS_CIRCLE, accent, 4, true);
+        text(176, 77, 128, 48, hit ? "砰！" : "咔哒！",
+             hit ? lv_color_hex(0xffe0d5) : green, qd_cn_font_20());
+        text(132, 128, 216, 36, hit ? "漫画中弹" : "幸运逃过",
+             hit ? lv_color_hex(0xffe0d5) : ink, qd_cn_font_20());
+        char record[48];
+        snprintf(record, sizeof(record), "幸运 %u / %u 局",
+                 self->puzzle_revolver_lucky_count_, self->puzzle_revolver_rounds_);
+        text(132, 166, 216, 24, record,
+             hit ? lv_color_hex(0xffddd5) : muted);
+        button(168, 198, 144, 40, "再来一局", hit ? lv_color_hex(0xffc5b8) : green);
+        return;
+    }
+
+    rect(8, 2, 308, 252, lv_color_hex(0xfff1f3), 20, pink, 2, true);
+    rect(326, 2, 146, 224, paper, 18, gold, 2, true);
+    text(20, 14, 284, 24, "六孔幸运转轮", ink, qd_cn_font_20());
+    text(20, 39, 284, 20,
+         state == PuzzleRevolverState::SELECT ? "先选择玩具弹数量" :
+         (state == PuzzleRevolverState::ARMED ? "拿稳设备，用力摇一摇" :
+         (state == PuzzleRevolverState::SPINNING ? "转轮飞快旋转中" : "转轮已经停稳")),
+         muted);
+    const int cx = 158, cy = 142;
+    rect(cx - 86, cy - 86, 172, 172, purple, LV_RADIUS_CIRCLE,
+         lv_color_hex(0x4c365b), 4, true);
+    rect(cx - 70, cy - 70, 140, 140, lv_color_hex(0xf3d9ec),
+         LV_RADIUS_CIRCLE, gold, 3);
+    constexpr float kPi = 3.14159265358979323846f;
+    for (int i = 0; i < 6; ++i) {
+        const float radians = static_cast<float>(i * 60 + self->puzzle_revolver_spin_angle_ - 90) *
+                              kPi / 180.0f;
+        const int chamber_x = cx + static_cast<int>(std::cos(radians) * 50.0f) - 22;
+        const int chamber_y = cy + static_cast<int>(std::sin(radians) * 50.0f) - 22;
+        const bool round = state == PuzzleRevolverState::SELECT &&
+                           i < self->puzzle_revolver_bullets_;
+        const bool selected = state == PuzzleRevolverState::READY &&
+                              i == self->puzzle_revolver_chamber_;
+        rect(chamber_x, chamber_y, 44, 44,
+             round ? lv_color_hex(0xf5c25f) : lv_color_hex(0x35283d),
+             LV_RADIUS_CIRCLE, selected ? pink : lv_color_hex(0xd9a84d),
+             selected ? 4 : 2, round);
+        if (round) {
+            rect(chamber_x + 13, chamber_y + 8, 18, 28,
+                 lv_color_hex(0xffdf7e), 9, gold, 2);
+        } else {
+            rect(chamber_x + 12, chamber_y + 12, 20, 20,
+                 lv_color_hex(0x4f3b58), LV_RADIUS_CIRCLE,
+                 lv_color_hex(0x4f3b58), 0);
+        }
+    }
+    rect(cx - 15, cy - 15, 30, 30, lv_color_hex(0xf6bd69),
+         LV_RADIUS_CIRCLE, gold, 2, true);
+    triangle(cx - 10, 48, cx + 10, 48, cx, 66, pink);
+    text(336, 16, 126, 22, "玩具弹数量", ink);
+    char bullet_count[8];
+    snprintf(bullet_count, sizeof(bullet_count), "%u", self->puzzle_revolver_bullets_);
+    text(382, 56, 28, 34, bullet_count, pink, &lv_font_montserrat_20);
+    if (state == PuzzleRevolverState::SELECT) {
+        button(342, 92, 42, 36, "-", purple, &lv_font_montserrat_20);
+        button(420, 92, 42, 36, "+", purple, &lv_font_montserrat_20);
+        button(332, 148, 130, 40, "装弹", gold);
+        text(336, 196, 122, 22, "概率完全随机", muted);
+    } else if (state == PuzzleRevolverState::READY) {
+        button(332, 142, 130, 56, "扣动扳机", pink, qd_cn_font_20());
+        text(336, 204, 122, 20, "祝你好运！", muted);
+    } else {
+        const int meter = std::clamp<int>(self->puzzle_revolver_intensity_, 0, 100);
+        rect(342, 104, 110, 16, lv_color_hex(0xeee1e5), 8,
+             lv_color_hex(0xd8c4ca), 1);
+        if (meter > 0) rect(344, 106, meter * 106 / 100, 12,
+                            state == PuzzleRevolverState::SPINNING ? pink : gold,
+                            6, pink, 0);
+        text(336, 132, 122, 42,
+             state == PuzzleRevolverState::ARMED ? "摇动设备\n启动转轮" :
+                                                   "正在减速\n请慢慢停稳",
+             muted);
+    }
+}
+#endif
 #endif
 
 static uint8_t fc_controller_from_page_point(int16_t x, int16_t y) {
@@ -2429,7 +2590,17 @@ void DesktopUI::HandleTouchPoints(const uint16_t* xs, const uint16_t* ys, size_t
 }
 
 void DesktopUI::HandleTap(uint16_t x, uint16_t y) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    // Rapid 2048 tapping is expected; avoid turning every press into a
+    // synchronous UART log while retaining diagnostics on every other page.
+    if (current_page_ != DesktopPage::PUZZLE_ARCADE ||
+        puzzle_arcade_view_ != PuzzleArcadeView::TILE_2048) {
+        ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
+    }
+#else
     ESP_LOGI(TAG, "Tap x=%u y=%u page=%d", x, y, static_cast<int>(current_page_));
+#endif
     auto hit = [x, y](uint16_t left, uint16_t top, uint16_t width, uint16_t height) {
         return x >= left && x < left + width && y >= top && y < top + height;
     };
@@ -9705,7 +9876,14 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     // v1.8.16 already uses the footer for Wooden Fish. Keep that feature and
     // split the row into three compact entries for the two SD recommendations.
-    lv_obj_t* wooden_fish_card = CreatePanel(shake_lab_home_group_, 144, 42, 14, 266);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    constexpr int16_t footer_card_width = 106;
+#else
+    constexpr int16_t footer_card_width = 144;
+#endif
+    lv_obj_t* wooden_fish_card = CreatePanel(
+        shake_lab_home_group_, footer_card_width, 42, 14, 266);
     lv_obj_set_style_bg_color(wooden_fish_card, lv_color_hex(0x3b241b), 0);
     lv_obj_set_style_border_color(wooden_fish_card, COLOR_GOLD, 0);
     lv_obj_set_style_border_width(wooden_fish_card, 2, 0);
@@ -9717,7 +9895,7 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_bg_opa(wooden_fish_icon, LV_OPA_COVER, 0);
     lv_obj_set_style_border_color(wooden_fish_icon, lv_color_hex(0xf2c66d), 0);
     lv_obj_set_style_border_width(wooden_fish_icon, 2, 0);
-    lv_obj_align(wooden_fish_icon, LV_ALIGN_LEFT_MID, 8, 0);
+    lv_obj_align(wooden_fish_icon, LV_ALIGN_LEFT_MID, 6, 0);
     lv_obj_t* wooden_fish_slot = lv_obj_create(wooden_fish_icon);
     lv_obj_remove_style_all(wooden_fish_slot);
     lv_obj_set_size(wooden_fish_slot, 18, 4);
@@ -9727,15 +9905,29 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_center(wooden_fish_slot);
     lv_obj_t* wooden_fish_card_title = label_en(wooden_fish_card, "功德木鱼", &style_gold);
     lv_obj_set_style_text_font(wooden_fish_card_title, qd_cn_font_16(), 0);
-    lv_obj_align(wooden_fish_card_title, LV_ALIGN_LEFT_MID, 44, 0);
+    lv_obj_align(wooden_fish_card_title, LV_ALIGN_LEFT_MID, 38, 0);
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    constexpr int16_t recommendation_card_width = 106;
+    constexpr int16_t movie_card_x = 130;
+    constexpr int16_t book_card_x = 246;
+#else
     constexpr int16_t recommendation_card_width = 144;
     constexpr int16_t movie_card_x = 168;
     constexpr int16_t book_card_x = 322;
+#endif
+#else
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    constexpr int16_t recommendation_card_width = 144;
+    constexpr int16_t movie_card_x = 14;
+    constexpr int16_t book_card_x = 168;
 #else
     constexpr int16_t recommendation_card_width = 220;
     constexpr int16_t movie_card_x = 14;
     constexpr int16_t book_card_x = 246;
+#endif
 #endif
 
     lv_obj_t* movie_card = CreatePanel(
@@ -9757,6 +9949,24 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
     lv_obj_set_style_text_font(book_title, qd_cn_font_16(), 0);
     lv_obj_set_style_text_color(book_title, COLOR_CREAM, 0);
     lv_obj_center(book_title);
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    lv_obj_t* revolver_card = CreatePanel(shake_lab_home_group_,
+#if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
+    CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+                                          106, 42, 362, 266);
+#else
+                                          144, 42, 322, 266);
+#endif
+    lv_obj_set_style_bg_color(revolver_card, lv_color_hex(0x5b3653), 0);
+    lv_obj_set_style_border_color(revolver_card, lv_color_hex(0xe39aaf), 0);
+    lv_obj_set_style_border_width(revolver_card, 2, 0);
+    lv_obj_t* revolver_title = label_en(revolver_card, "幸运左轮", &style_en);
+    lv_obj_set_style_text_font(revolver_title, qd_cn_font_16(), 0);
+    lv_obj_set_style_text_color(revolver_title, COLOR_CREAM, 0);
+    lv_obj_center(revolver_title);
+#endif
 
     shake_lab_mode_group_ = lv_obj_create(shake_lab_page_);
     lv_obj_remove_style_all(shake_lab_mode_group_);
@@ -10098,6 +10308,22 @@ void DesktopUI::CreateShakeLabPage(lv_obj_t* root) {
         lv_obj_set_style_text_font(text, qd_cn_font_16(), 0);
     }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    shake_lab_revolver_group_ = lv_obj_create(shake_lab_mode_group_);
+    lv_obj_remove_style_all(shake_lab_revolver_group_);
+    lv_obj_set_size(shake_lab_revolver_group_, LV_PCT(100), LV_PCT(100));
+    lv_obj_clear_flag(shake_lab_revolver_group_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(shake_lab_revolver_group_, LV_OBJ_FLAG_HIDDEN);
+    shake_lab_revolver_board_ = lv_obj_create(shake_lab_revolver_group_);
+    lv_obj_remove_style_all(shake_lab_revolver_board_);
+    lv_obj_set_size(shake_lab_revolver_board_, 480, 266);
+    lv_obj_align(shake_lab_revolver_board_, LV_ALIGN_TOP_LEFT, 0, 52);
+    lv_obj_clear_flag(shake_lab_revolver_board_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(shake_lab_revolver_board_, ShakeLabRevolverDrawCb,
+                        LV_EVENT_DRAW_MAIN, this);
+#endif
+
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     wooden_fish_group_ = lv_obj_create(shake_lab_mode_group_);
@@ -10242,6 +10468,25 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         }
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (hit(14, 262, 106, 50)) {
+            EnterShakeLabMode(ShakeLabMode::WOODEN_FISH);
+            return true;
+        }
+        if (hit(130, 262, 106, 50)) {
+            EnterShakeLabMode(ShakeLabMode::MOVIE);
+            return true;
+        }
+        if (hit(246, 262, 106, 50)) {
+            EnterShakeLabMode(ShakeLabMode::BOOK);
+            return true;
+        }
+        if (hit(362, 262, 106, 50)) {
+            EnterShakeLabMode(ShakeLabMode::LUCKY_REVOLVER);
+            return true;
+        }
+#else
         if (hit(14, 262, 144, 50)) {
             EnterShakeLabMode(ShakeLabMode::WOODEN_FISH);
             return true;
@@ -10254,6 +10499,22 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
             EnterShakeLabMode(ShakeLabMode::BOOK);
             return true;
         }
+#endif
+#else
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (hit(14, 262, 144, 50)) {
+            EnterShakeLabMode(ShakeLabMode::MOVIE);
+            return true;
+        }
+        if (hit(168, 262, 144, 50)) {
+            EnterShakeLabMode(ShakeLabMode::BOOK);
+            return true;
+        }
+        if (hit(322, 262, 144, 50)) {
+            EnterShakeLabMode(ShakeLabMode::LUCKY_REVOLVER);
+            return true;
+        }
 #else
         if (hit(14, 262, 220, 50)) {
             EnterShakeLabMode(ShakeLabMode::MOVIE);
@@ -10263,6 +10524,7 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
             EnterShakeLabMode(ShakeLabMode::BOOK);
             return true;
         }
+#endif
 #endif
         return false;
     }
@@ -10283,6 +10545,32 @@ bool DesktopUI::HandleShakeLabTap(uint16_t x, uint16_t y) {
         // Touch and BMI270 impacts share one merit/animation path.  A zero
         // impulse is the explicit marker for a screen tap.
         UpdateWoodenFishTap(0);
+        return true;
+    }
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (shake_lab_mode_ == ShakeLabMode::LUCKY_REVOLVER) {
+        if (puzzle_revolver_state_ == PuzzleRevolverState::SELECT) {
+            if (hit(342, 144, 42, 36) && puzzle_revolver_bullets_ > 1) {
+                --puzzle_revolver_bullets_;
+            } else if (hit(420, 144, 42, 36) && puzzle_revolver_bullets_ < 5) {
+                ++puzzle_revolver_bullets_;
+            } else if (hit(332, 200, 130, 40)) {
+                ArmPuzzleRevolver();
+                return true;
+            }
+        } else if (puzzle_revolver_state_ == PuzzleRevolverState::READY &&
+                   hit(332, 194, 130, 56)) {
+            FirePuzzleRevolver();
+            return true;
+        } else if ((puzzle_revolver_state_ == PuzzleRevolverState::LUCKY ||
+                    puzzle_revolver_state_ == PuzzleRevolverState::HIT) &&
+                   hit(168, 250, 144, 40)) {
+            ResetPuzzleRevolver();
+            return true;
+        }
+        RefreshPuzzleArcadeBoard();
         return true;
     }
 #endif
@@ -10385,6 +10673,16 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
             lv_obj_add_flag(shake_lab_recommendation_group_, LV_OBJ_FLAG_HIDDEN);
         }
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (shake_lab_revolver_group_) {
+        if (mode == ShakeLabMode::LUCKY_REVOLVER) {
+            lv_obj_clear_flag(shake_lab_revolver_group_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(shake_lab_revolver_group_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     if (wooden_fish_group_) {
@@ -10402,6 +10700,10 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
         else if (mode == ShakeLabMode::FORTUNE) title = "Fortune Stick";
         else if (mode == ShakeLabMode::MOVIE) title = "摇摇电影";
         else if (mode == ShakeLabMode::BOOK) title = "摇摇书籍";
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        else if (mode == ShakeLabMode::LUCKY_REVOLVER) title = "幸运左轮";
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
         else if (mode == ShakeLabMode::WOODEN_FISH) title = "功德木鱼";
@@ -10453,6 +10755,12 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     if (mode == ShakeLabMode::MOVIE || mode == ShakeLabMode::BOOK) {
         ResetShakeLabRecommendationView();
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (mode == ShakeLabMode::LUCKY_REVOLVER) {
+        ResetPuzzleRevolver();
+    }
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     if (mode == ShakeLabMode::WOODEN_FISH) {
@@ -10488,6 +10796,10 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
     else if (mode == ShakeLabMode::FORTUNE) mode_name = "Fortune";
     else if (mode == ShakeLabMode::MOVIE) mode_name = "Movie";
     else if (mode == ShakeLabMode::BOOK) mode_name = "Book";
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    else if (mode == ShakeLabMode::LUCKY_REVOLVER) mode_name = "Lucky Revolver";
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     else if (mode == ShakeLabMode::WOODEN_FISH) mode_name = "Wooden Fish";
@@ -10496,6 +10808,13 @@ void DesktopUI::EnterShakeLabMode(ShakeLabMode mode) {
 }
 
 void DesktopUI::LeaveShakeLabMode() {
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (shake_lab_mode_ == ShakeLabMode::LUCKY_REVOLVER) {
+        SetPuzzleMazeSampling(false);
+        puzzle_revolver_detector_.Reset();
+    }
+#endif
     shake_lab_divination_load_request_id_.fetch_add(1, std::memory_order_relaxed);
     shake_lab_recommendation_load_request_id_.fetch_add(1, std::memory_order_relaxed);
     if (shake_lab_anim_timer_) {
@@ -10567,6 +10886,11 @@ void DesktopUI::ReleaseShakeLabPage() {
     shake_lab_fortune_group_ = nullptr;
     shake_lab_divination_group_ = nullptr;
     shake_lab_recommendation_group_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    shake_lab_revolver_group_ = nullptr;
+    shake_lab_revolver_board_ = nullptr;
+#endif
     shake_lab_ball_ = nullptr;
     shake_lab_answer_label_ = nullptr;
     shake_lab_hint_label_ = nullptr;
@@ -12003,7 +12327,12 @@ const char* PuzzleGameTitle(QdPuzzleArcade::Game game) {
         case QdPuzzleArcade::Game::SOKOBAN: return "萌宠推箱";
         case QdPuzzleArcade::Game::MATCH3: return "甜点消消乐";
         case QdPuzzleArcade::Game::MOTION_MAZE: return "体感迷宫";
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        case QdPuzzleArcade::Game::NUMBER_SLIDE: return "数字华容道";
+#else
         case QdPuzzleArcade::Game::LUCKY_REVOLVER: return "幸运左轮";
+#endif
     }
     return "益智游戏馆";
 }
@@ -12051,10 +12380,31 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
 
     static constexpr const char* names[] = {
         "数独花园", "密码侦探", "萌宠推箱", "甜点消消乐",
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        "体感迷宫", "2048", "空当接龙", "数字华容道"
+#else
         "体感迷宫", "2048", "空当接龙", "幸运左轮"
+#endif
     };
-    static constexpr const char* icons[] = {"数", "密", "箱", "糖", "迷", "2K", "K", "运"};
-    static constexpr const char* tags[] = {"推理", "逻辑", "空间", "消除", "体感", "合并", "纸牌", "摇动"};
+    static constexpr const char* icons[] = {
+        "数", "密", "箱", "糖", "迷", "2K", "K",
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        "15"
+#else
+        "运"
+#endif
+    };
+    static constexpr const char* tags[] = {
+        "推理", "逻辑", "空间", "消除", "体感", "合并", "纸牌",
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        "排序"
+#else
+        "摇动"
+#endif
+    };
     static constexpr uint32_t card_colors[] = {
         0xf7dca8, 0xe7d7f2, 0xd5ead9, 0xf6d7df,
         0xd5e8f5, 0xf6dfaa, 0xe7d7f2, 0xf3c3cb
@@ -12154,6 +12504,15 @@ void DesktopUI::CreatePuzzleArcadePage(lv_obj_t* root) {
 
 void DesktopUI::ReleasePuzzleArcadePage() {
     SetPuzzleMazeSampling(false);
+    SavePuzzle2048HighScore();
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    StopPuzzle2048InputTimer();
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    ReleasePuzzle2048Renderer();
+#endif
     puzzle_arcade_cover_request_id_.fetch_add(1, std::memory_order_relaxed);
     if (puzzle_freecell_game_) {
         puzzle_freecell_game_->~Game();
@@ -12180,6 +12539,15 @@ void DesktopUI::ReleasePuzzleArcadePage() {
 
 void DesktopUI::ShowPuzzleArcadeHome() {
     SetPuzzleMazeSampling(false);
+    SavePuzzle2048HighScore();
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    StopPuzzle2048InputTimer();
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    ReleasePuzzle2048Renderer();
+#endif
     puzzle_arcade_view_ = PuzzleArcadeView::HOME;
     if (puzzle_arcade_home_group_) lv_obj_clear_flag(puzzle_arcade_home_group_, LV_OBJ_FLAG_HIDDEN);
     if (puzzle_arcade_game_group_) lv_obj_add_flag(puzzle_arcade_game_group_, LV_OBJ_FLAG_HIDDEN);
@@ -12218,8 +12586,14 @@ void DesktopUI::SelectPuzzleArcadeGame(QdPuzzleArcade::Game game) {
         const char* caption = PuzzleGameTitle(game);
         if (game == QdPuzzleArcade::Game::MOTION_MAZE) {
             caption = "倾斜设备，带小猫走出迷宫";
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        } else if (game == QdPuzzleArcade::Game::NUMBER_SLIDE) {
+            caption = "移动数字方块，还原 1 到 15";
+#else
         } else if (game == QdPuzzleArcade::Game::LUCKY_REVOLVER) {
             caption = "装好玩具弹，摇一摇转轮试试手气";
+#endif
         }
         lv_label_set_text(puzzle_arcade_cover_status_, caption);
         lv_obj_clear_flag(puzzle_arcade_cover_status_, LV_OBJ_FLAG_HIDDEN);
@@ -12299,9 +12673,16 @@ void DesktopUI::EnterPuzzleArcadeGame() {
     } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::FREECELL) {
         puzzle_arcade_view_ = PuzzleArcadeView::FREECELL;
         ResetPuzzleFreecell();
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::NUMBER_SLIDE) {
+        puzzle_arcade_view_ = PuzzleArcadeView::NUMBER_SLIDE;
+        ResetPuzzleNumberSlide();
+#else
     } else if (puzzle_arcade_selected_ == QdPuzzleArcade::Game::LUCKY_REVOLVER) {
         puzzle_arcade_view_ = PuzzleArcadeView::LUCKY_REVOLVER;
         ResetPuzzleRevolver();
+#endif
     } else {
         puzzle_arcade_view_ = PuzzleArcadeView::MOTION_MAZE;
         LoadPuzzleMaze(0);
@@ -12610,6 +12991,40 @@ void DesktopUI::UpdatePuzzleMazeMotion(int16_t accel_y, int16_t accel_z,
     RefreshPuzzleArcadeBoard();
 }
 
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+void DesktopUI::ResetPuzzleNumberSlide() {
+    QdNumberSlide::Shuffle(puzzle_number_slide_cells_, esp_random(), 160);
+    puzzle_number_slide_moves_ = 0;
+    puzzle_number_slide_won_ = false;
+    if (puzzle_arcade_title_) lv_label_set_text(puzzle_arcade_title_, "数字华容道");
+    if (puzzle_arcade_status_) {
+        lv_label_set_text(puzzle_arcade_status_, "点击空格旁的数字，按顺序还原");
+    }
+    RefreshPuzzleArcadeBoard();
+}
+
+bool DesktopUI::MovePuzzleNumberSlide(uint8_t tile_index) {
+    if (puzzle_number_slide_won_ ||
+        !QdNumberSlide::MoveTile(puzzle_number_slide_cells_, tile_index)) {
+        return false;
+    }
+    ++puzzle_number_slide_moves_;
+    puzzle_number_slide_won_ = QdNumberSlide::IsSolved(puzzle_number_slide_cells_);
+    if (puzzle_arcade_status_) {
+        char status[72];
+        if (puzzle_number_slide_won_) {
+            snprintf(status, sizeof(status), "完成！共移动 %u 步", puzzle_number_slide_moves_);
+        } else {
+            snprintf(status, sizeof(status), "已移动 %u 步", puzzle_number_slide_moves_);
+        }
+        lv_label_set_text(puzzle_arcade_status_, status);
+    }
+    RefreshPuzzleArcadeBoard();
+    return true;
+}
+#endif
+
 void DesktopUI::ResetPuzzleRevolver() {
     SetPuzzleMazeSampling(false);
     puzzle_revolver_detector_.Reset();
@@ -12618,8 +13033,15 @@ void DesktopUI::ResetPuzzleRevolver() {
     puzzle_revolver_chamber_ = 0;
     puzzle_revolver_spin_angle_ = 0;
     puzzle_revolver_intensity_ = 0;
-    lv_label_set_text(puzzle_arcade_title_, "幸运左轮");
-    lv_label_set_text(puzzle_arcade_status_, "选择 1-5 颗玩具弹，再点装弹");
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (shake_lab_mode_title_) lv_label_set_text(shake_lab_mode_title_, "幸运左轮");
+#else
+    if (puzzle_arcade_title_) lv_label_set_text(puzzle_arcade_title_, "幸运左轮");
+    if (puzzle_arcade_status_) {
+        lv_label_set_text(puzzle_arcade_status_, "选择 1-5 颗玩具弹，再点装弹");
+    }
+#endif
     RefreshPuzzleArcadeBoard();
 }
 
@@ -12640,7 +13062,10 @@ void DesktopUI::ArmPuzzleRevolver() {
     const int64_t now_ms = esp_timer_get_time() / 1000;
     puzzle_revolver_detector_.Arm(now_ms);
     SetPuzzleMazeSampling(true);
-    lv_label_set_text(puzzle_arcade_status_, "装弹完成 · 请摇一摇设备");
+#if !defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) || \
+    !CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (puzzle_arcade_status_) lv_label_set_text(puzzle_arcade_status_, "装弹完成 · 请摇一摇设备");
+#endif
     RefreshPuzzleArcadeBoard();
 }
 
@@ -12651,11 +13076,17 @@ void DesktopUI::FirePuzzleRevolver() {
     ++puzzle_revolver_rounds_;
     if (hit) {
         puzzle_revolver_state_ = PuzzleRevolverState::HIT;
-        lv_label_set_text(puzzle_arcade_status_, "漫画中弹！这局运气差一点");
+#if !defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) || \
+    !CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (puzzle_arcade_status_) lv_label_set_text(puzzle_arcade_status_, "漫画中弹！这局运气差一点");
+#endif
     } else {
         puzzle_revolver_state_ = PuzzleRevolverState::LUCKY;
         ++puzzle_revolver_lucky_count_;
-        lv_label_set_text(puzzle_arcade_status_, "咔哒！幸运逃过这一发");
+#if !defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) || \
+    !CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (puzzle_arcade_status_) lv_label_set_text(puzzle_arcade_status_, "咔哒！幸运逃过这一发");
+#endif
     }
     if (!Application::GetInstance().IsExternalAudioActive()) {
         Application::GetInstance().Schedule([hit]() {
@@ -12672,8 +13103,15 @@ void DesktopUI::UpdatePuzzleRevolverMotion(int16_t accel_x, int16_t accel_y,
                                            int16_t accel_z, int16_t gyro_x,
                                            int16_t gyro_y, int16_t gyro_z,
                                            int64_t sample_ms) {
-    if (current_page_ != DesktopPage::PUZZLE_ARCADE ||
-        puzzle_arcade_view_ != PuzzleArcadeView::LUCKY_REVOLVER ||
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    const bool active = current_page_ == DesktopPage::SHAKE_LAB &&
+                        shake_lab_mode_ == ShakeLabMode::LUCKY_REVOLVER;
+#else
+    const bool active = current_page_ == DesktopPage::PUZZLE_ARCADE &&
+                        puzzle_arcade_view_ == PuzzleArcadeView::LUCKY_REVOLVER;
+#endif
+    if (!active ||
         (puzzle_revolver_state_ != PuzzleRevolverState::ARMED &&
          puzzle_revolver_state_ != PuzzleRevolverState::SPINNING)) {
         return;
@@ -12683,7 +13121,10 @@ void DesktopUI::UpdatePuzzleRevolverMotion(int16_t accel_x, int16_t accel_y,
     puzzle_revolver_intensity_ = result.intensity;
     if (result.transition == ShakeDetector::Transition::ARMED_TO_SHAKING) {
         puzzle_revolver_state_ = PuzzleRevolverState::SPINNING;
-        lv_label_set_text(puzzle_arcade_status_, "转轮正在旋转 · 请慢慢停稳");
+#if !defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) || \
+    !CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (puzzle_arcade_status_) lv_label_set_text(puzzle_arcade_status_, "转轮正在旋转 · 请慢慢停稳");
+#endif
     }
     if (puzzle_revolver_state_ == PuzzleRevolverState::SPINNING) {
         const uint16_t step = static_cast<uint16_t>(10 + result.intensity / 3);
@@ -12696,37 +13137,106 @@ void DesktopUI::UpdatePuzzleRevolverMotion(int16_t accel_x, int16_t accel_y,
             (360 - puzzle_revolver_chamber_ * 60) % 360);
         puzzle_revolver_state_ = PuzzleRevolverState::READY;
         SetPuzzleMazeSampling(false);
-        lv_label_set_text(puzzle_arcade_status_, "转轮停稳 · 点扳机试试手气");
+#if !defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) || \
+    !CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        if (puzzle_arcade_status_) lv_label_set_text(puzzle_arcade_status_, "转轮停稳 · 点扳机试试手气");
+#endif
     }
     RefreshPuzzleArcadeBoard();
 }
 
 void DesktopUI::RefreshPuzzleArcadeBoard() {
     if (puzzle_arcade_board_) lv_obj_invalidate(puzzle_arcade_board_);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (shake_lab_revolver_board_) lv_obj_invalidate(shake_lab_revolver_board_);
+#endif
 }
 
 void DesktopUI::SpawnPuzzle2048Tile() {
-    uint8_t empty[16];
-    uint8_t count = 0;
-    for (uint8_t i = 0; i < 16; ++i) {
-        if (puzzle_2048_cells_[i] == 0) empty[count++] = i;
-    }
-    if (count == 0) return;
-    const uint8_t index = empty[esp_random() % count];
-    puzzle_2048_cells_[index] = (esp_random() % 10 == 0) ? 4 : 2;
+    QdPuzzle2048::Spawn(puzzle_2048_cells_, esp_random(), esp_random());
 }
 
 bool DesktopUI::CanMovePuzzle2048() const {
-    for (int i = 0; i < 16; ++i) {
-        if (puzzle_2048_cells_[i] == 0) return true;
-        const int x = i % 4, y = i / 4;
-        if ((x < 3 && puzzle_2048_cells_[i] == puzzle_2048_cells_[i + 1]) ||
-            (y < 3 && puzzle_2048_cells_[i] == puzzle_2048_cells_[i + 4])) return true;
-    }
-    return false;
+    return QdPuzzle2048::CanMove(puzzle_2048_cells_);
 }
 
+void DesktopUI::LoadPuzzle2048HighScore() {
+    if (puzzle_2048_high_score_loaded_) return;
+    puzzle_2048_high_score_loaded_ = true;
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open("puzzle2048", NVS_READONLY, &handle);
+    if (err == ESP_ERR_NVS_NOT_FOUND) return;
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "2048 high score open failed: %s", esp_err_to_name(err));
+        return;
+    }
+    uint32_t value = 0;
+    err = nvs_get_u32(handle, "high_score", &value);
+    nvs_close(handle);
+    if (err == ESP_OK) {
+        puzzle_2048_high_score_ = value;
+        ESP_LOGI(TAG, "2048 high score loaded=%lu",
+                 static_cast<unsigned long>(value));
+    } else if (err != ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGW(TAG, "2048 high score read failed: %s", esp_err_to_name(err));
+    }
+}
+
+void DesktopUI::SavePuzzle2048HighScore() {
+    if (!puzzle_2048_high_score_loaded_ || !puzzle_2048_high_score_dirty_) return;
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open("puzzle2048", NVS_READWRITE, &handle);
+    if (err == ESP_OK) err = nvs_set_u32(handle, "high_score", puzzle_2048_high_score_);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    if (handle != 0) nvs_close(handle);
+    if (err == ESP_OK) {
+        puzzle_2048_high_score_dirty_ = false;
+        ESP_LOGI(TAG, "2048 high score saved=%lu",
+                 static_cast<unsigned long>(puzzle_2048_high_score_));
+    } else {
+        ESP_LOGW(TAG, "2048 high score save failed: %s", esp_err_to_name(err));
+    }
+}
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+bool DesktopUI::EnsurePuzzle2048Renderer() {
+    if (puzzle_2048_renderer_) return puzzle_2048_renderer_->Active();
+    if (!puzzle_arcade_board_) return false;
+    void* storage = heap_caps_malloc(sizeof(Puzzle2048CanvasRenderer),
+                                     MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!storage) {
+        ESP_LOGW(TAG, "2048 renderer object allocation failed; using v1.8.21 fallback");
+        return false;
+    }
+    auto* renderer = new (storage) Puzzle2048CanvasRenderer{};
+    if (!renderer->Create(puzzle_arcade_board_)) {
+        renderer->~Puzzle2048CanvasRenderer();
+        heap_caps_free(renderer);
+        ESP_LOGW(TAG, "2048 canvas unavailable; using v1.8.21 fallback");
+        return false;
+    }
+    puzzle_2048_renderer_ = renderer;
+    return true;
+}
+
+void DesktopUI::ReleasePuzzle2048Renderer() {
+    if (!puzzle_2048_renderer_) return;
+    puzzle_2048_renderer_->Destroy();
+    puzzle_2048_renderer_->~Puzzle2048CanvasRenderer();
+    heap_caps_free(puzzle_2048_renderer_);
+    puzzle_2048_renderer_ = nullptr;
+}
+#endif
+
 void DesktopUI::ResetPuzzle2048() {
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    StopPuzzle2048InputTimer();
+#endif
+    SavePuzzle2048HighScore();
+    LoadPuzzle2048HighScore();
     memset(puzzle_2048_cells_, 0, sizeof(puzzle_2048_cells_));
     puzzle_2048_score_ = 0;
     puzzle_2048_best_tile_ = 0;
@@ -12736,6 +13246,16 @@ void DesktopUI::ResetPuzzle2048() {
     SpawnPuzzle2048Tile();
     lv_label_set_text(puzzle_arcade_title_, "2048");
     lv_label_set_text(puzzle_arcade_status_, "点按方向键，让糖果方块合并");
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    if (EnsurePuzzle2048Renderer()) {
+        puzzle_2048_renderer_->RenderFull(
+            puzzle_2048_cells_, puzzle_2048_score_, puzzle_2048_best_tile_,
+            puzzle_2048_high_score_, puzzle_2048_won_,
+            puzzle_2048_game_over_, qd_cn_font_16());
+        return;
+    }
+#endif
     RefreshPuzzleArcadeBoard();
 }
 
@@ -12870,46 +13390,47 @@ int DesktopUI::PuzzleFreecellCardGap(uint8_t column) const {
 
 bool DesktopUI::MovePuzzle2048(int dx, int dy) {
     if (puzzle_2048_game_over_ || (dx == 0 && dy == 0)) return false;
-    bool changed = false;
-    for (int line = 0; line < 4; ++line) {
-        uint32_t values[4]{};
-        for (int step = 0; step < 4; ++step) {
-            const int x = dx ? (dx > 0 ? 3 - step : step) : line;
-            const int y = dy ? (dy > 0 ? 3 - step : step) : line;
-            values[step] = puzzle_2048_cells_[y * 4 + x];
-        }
-        uint32_t compact[4]{};
-        int count = 0;
-        for (uint32_t value : values) if (value) compact[count++] = value;
-        uint32_t merged[4]{};
-        int out = 0;
-        for (int i = 0; i < count; ++i) {
-            if (i + 1 < count && compact[i] == compact[i + 1]) {
-                merged[out] = compact[i] * 2;
-                puzzle_2048_score_ += merged[out];
-                puzzle_2048_best_tile_ = std::max(puzzle_2048_best_tile_, merged[out]);
-                if (merged[out] >= 2048) puzzle_2048_won_ = true;
-                ++i;
-            } else {
-                merged[out] = compact[i];
-                puzzle_2048_best_tile_ = std::max(puzzle_2048_best_tile_, merged[out]);
-            }
-            ++out;
-        }
-        for (int step = 0; step < 4; ++step) {
-            const int x = dx ? (dx > 0 ? 3 - step : step) : line;
-            const int y = dy ? (dy > 0 ? 3 - step : step) : line;
-            const int index = y * 4 + x;
-            changed = changed || puzzle_2048_cells_[index] != merged[step];
-            puzzle_2048_cells_[index] = merged[step];
-        }
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    if (puzzle_2048_renderer_ &&
+        !puzzle_2048_renderer_->AcceptInput(esp_timer_get_time() / 1000)) {
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+        QueuePuzzle2048Input(dx, dy);
+#endif
+        return false;
     }
+#endif
+    uint32_t before[16];
+    memcpy(before, puzzle_2048_cells_, sizeof(before));
+    const bool changed = QdPuzzle2048::Move(
+        puzzle_2048_cells_, &puzzle_2048_score_, &puzzle_2048_best_tile_,
+        &puzzle_2048_won_, dx, dy);
     // A blocked direction used to rebuild the complete custom-drawn board as
     // well.  On a memory-tight device that needlessly creates dozens of LVGL
     // draw tasks for every tap.  Only redraw when the board really changed.
     if (!changed) return false;
     SpawnPuzzle2048Tile();
     puzzle_2048_game_over_ = !CanMovePuzzle2048();
+    if (puzzle_2048_score_ > puzzle_2048_high_score_) {
+        puzzle_2048_high_score_ = puzzle_2048_score_;
+        puzzle_2048_high_score_dirty_ = true;
+    }
+    if (puzzle_2048_game_over_) SavePuzzle2048HighScore();
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    if (puzzle_2048_renderer_ && puzzle_2048_renderer_->Active()) {
+        uint16_t changed_mask = 0;
+        for (int i = 0; i < 16; ++i) {
+            if (before[i] != puzzle_2048_cells_[i]) changed_mask |= 1U << i;
+        }
+        puzzle_2048_renderer_->RenderDelta(
+            puzzle_2048_cells_, changed_mask, puzzle_2048_score_,
+            puzzle_2048_best_tile_, puzzle_2048_high_score_, puzzle_2048_won_,
+            puzzle_2048_game_over_, qd_cn_font_16());
+        return true;
+    }
+#endif
     char status[80];
     if (puzzle_2048_game_over_) snprintf(status, sizeof(status), "没有可合并的方块了，点重新开始");
     else if (puzzle_2048_won_) snprintf(status, sizeof(status), "2048 达成！继续挑战更高分");
@@ -12920,6 +13441,58 @@ bool DesktopUI::MovePuzzle2048(int dx, int dy) {
     RefreshPuzzleArcadeBoard();
     return changed;
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+void DesktopUI::QueuePuzzle2048Input(int dx, int dy) {
+    if ((dx == 0 && dy == 0) || puzzle_2048_game_over_) return;
+    // A burst replaces this single pending direction instead of allocating
+    // callbacks or allowing stale taps to build an input/render backlog.
+    puzzle_2048_pending_dx_ = static_cast<int8_t>(dx);
+    puzzle_2048_pending_dy_ = static_cast<int8_t>(dy);
+    if (!puzzle_2048_input_timer_) {
+        puzzle_2048_input_timer_ = lv_timer_create(Puzzle2048InputTimerCb, 25, this);
+    } else {
+        // Reuse one timer for the whole 2048 page lifetime. Repeatedly
+        // allocating and deleting a timer during every touch burst fragments
+        // the small internal heap during long games.
+        lv_timer_resume(puzzle_2048_input_timer_);
+        lv_timer_ready(puzzle_2048_input_timer_);
+    }
+}
+
+void DesktopUI::StopPuzzle2048InputTimer() {
+    puzzle_2048_pending_dx_ = 0;
+    puzzle_2048_pending_dy_ = 0;
+    if (!puzzle_2048_input_timer_) return;
+    lv_timer_delete(puzzle_2048_input_timer_);
+    puzzle_2048_input_timer_ = nullptr;
+}
+
+void DesktopUI::Puzzle2048InputTimerCb(lv_timer_t* timer) {
+    auto* self = static_cast<DesktopUI*>(lv_timer_get_user_data(timer));
+    if (!self || self->current_page_ != DesktopPage::PUZZLE_ARCADE ||
+        self->puzzle_arcade_view_ != PuzzleArcadeView::TILE_2048 ||
+        self->puzzle_2048_game_over_) {
+        if (self) self->StopPuzzle2048InputTimer();
+        else lv_timer_delete(timer);
+        return;
+    }
+    const int dx = self->puzzle_2048_pending_dx_;
+    const int dy = self->puzzle_2048_pending_dy_;
+    self->puzzle_2048_pending_dx_ = 0;
+    self->puzzle_2048_pending_dy_ = 0;
+    if (dx == 0 && dy == 0) {
+        lv_timer_pause(timer);
+        return;
+    }
+    self->MovePuzzle2048(dx, dy);
+    if (self->puzzle_2048_pending_dx_ == 0 &&
+        self->puzzle_2048_pending_dy_ == 0) {
+        lv_timer_pause(timer);
+    }
+}
+#endif
 
 bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
     auto hit = [x, y](int l, int t, int w, int h) {
@@ -13075,11 +13648,16 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
         return true;
     }
     if (puzzle_arcade_view_ == PuzzleArcadeView::TILE_2048) {
-        if (board_hit(374, 42, 48, 36)) MovePuzzle2048(0, -1);
-        else if (board_hit(322, 84, 48, 36)) MovePuzzle2048(-1, 0);
-        else if (board_hit(374, 84, 48, 36)) MovePuzzle2048(0, 1);
-        else if (board_hit(426, 84, 48, 36)) MovePuzzle2048(1, 0);
+        if (board_hit(374, 62, 48, 36)) MovePuzzle2048(0, -1);
+        else if (board_hit(322, 104, 48, 36)) MovePuzzle2048(-1, 0);
+        else if (board_hit(374, 104, 48, 36)) MovePuzzle2048(0, 1);
+        else if (board_hit(426, 104, 48, 36)) MovePuzzle2048(1, 0);
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+        else if (board_hit(322, 180, 152, 36)) ResetPuzzle2048();
+#else
         else if (board_hit(322, 150, 152, 32)) ResetPuzzle2048();
+#endif
         return true;
     }
     if (puzzle_arcade_view_ == PuzzleArcadeView::FREECELL) {
@@ -13166,6 +13744,24 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
         }
         return true;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (puzzle_arcade_view_ == PuzzleArcadeView::NUMBER_SLIDE) {
+        if (board_hit(322, 176, 152, 36)) {
+            ResetPuzzleNumberSlide();
+            return true;
+        }
+        for (uint8_t index = 0; index < QdNumberSlide::kCellCount; ++index) {
+            const int row = index / 4;
+            const int col = index % 4;
+            if (board_hit(18 + col * 66, 12 + row * 58, 58, 50)) {
+                MovePuzzleNumberSlide(index);
+                return true;
+            }
+        }
+        return true;
+    }
+#else
     if (puzzle_arcade_view_ == PuzzleArcadeView::LUCKY_REVOLVER) {
         if (puzzle_revolver_state_ == PuzzleRevolverState::SELECT) {
             if (board_hit(342, 92, 42, 36) && puzzle_revolver_bullets_ > 1) {
@@ -13192,6 +13788,7 @@ bool DesktopUI::HandlePuzzleArcadeTap(uint16_t x, uint16_t y) {
         RefreshPuzzleArcadeBoard();
         return true;
     }
+#endif
     if (puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
         if (board_hit(364, 140, 96, 30)) {
             puzzle_maze_calibration_samples_ = 0;
@@ -13220,6 +13817,13 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
     auto* object = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
     lv_layer_t* layer = lv_event_get_layer(event);
     if (!self || !object || !layer) return;
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::TILE_2048 &&
+        self->puzzle_2048_renderer_ && self->puzzle_2048_renderer_->Active()) {
+        return;
+    }
+#endif
     lv_area_t object_area;
     lv_obj_get_coords(object, &object_area);
     const int ox = object_area.x1, oy = object_area.y1;
@@ -13559,7 +14163,12 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
             0x9fcce0, 0x91c48b, 0xf0ae64, 0xdc7a79, 0x9263a5, 0x5e97aa
         };
         rect(8, 2, 286, 250, lv_color_hex(0xfff1f3), 18, game_pink, 2, true);
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+        rect(304, 2, 168, 252, game_paper, 18, game_gold, 2, true);
+#else
         rect(304, 2, 168, 224, game_paper, 18, game_gold, 2, true);
+#endif
         for (int row = 0; row < 4; ++row) {
             for (int col = 0; col < 4; ++col) {
                 const uint32_t value = self->puzzle_2048_cells_[row * 4 + col];
@@ -13582,20 +14191,68 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         }
         char score[48];
         snprintf(score, sizeof(score), "得分 %lu", static_cast<unsigned long>(self->puzzle_2048_score_));
-        text(314, 16, 148, 22, score, game_ink);
-        snprintf(score, sizeof(score), "最大 %lu",
+        text(314, 9, 148, 20, score, game_ink);
+        snprintf(score, sizeof(score), "纪录 %lu · %lu",
+                 static_cast<unsigned long>(self->puzzle_2048_high_score_),
                  static_cast<unsigned long>(self->puzzle_2048_best_tile_));
-        text(314, 42, 148, 20, score, game_muted);
-        text(314, 70, 148, 18, "轻点方向合并", game_muted);
-        button(374, 42, 48, 36, "上", game_purple);
-        button(322, 84, 48, 36, "左", game_purple);
-        button(374, 84, 48, 36, "下", game_purple);
-        button(426, 84, 48, 36, "右", game_purple);
+        text(314, 32, 148, 20, score, game_muted);
+        button(374, 62, 48, 36, "上", game_purple);
+        button(322, 104, 48, 36, "左", game_purple);
+        button(374, 104, 48, 36, "下", game_purple);
+        button(426, 104, 48, 36, "右", game_purple);
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+        button(322, 180, 152, 36, "重新开始", game_gold);
+        if (self->puzzle_2048_game_over_) text(314, 226, 148, 24, "游戏结束", game_pink);
+        else if (self->puzzle_2048_won_) text(314, 226, 148, 24, "2048 达成！", game_green);
+#else
         button(322, 150, 152, 32, "重新开始", game_gold);
         if (self->puzzle_2048_game_over_) text(314, 194, 148, 24, "游戏结束", game_pink);
         else if (self->puzzle_2048_won_) text(314, 194, 148, 24, "2048 达成！", game_green);
+#endif
         return;
     }
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    if (self->puzzle_arcade_view_ == PuzzleArcadeView::NUMBER_SLIDE) {
+        rect(8, 2, 286, 250, lv_color_hex(0xf4ecfa), 18, game_purple, 2, true);
+        rect(304, 2, 168, 224, game_paper, 18, game_gold, 2, true);
+        for (uint8_t index = 0; index < QdNumberSlide::kCellCount; ++index) {
+            const int row = index / 4;
+            const int col = index % 4;
+            const int x = 18 + col * 66;
+            const int y = 12 + row * 58;
+            const uint8_t value = self->puzzle_number_slide_cells_[index];
+            if (value == QdNumberSlide::kBlank) {
+                rect(x, y, 58, 50, lv_color_hex(0xe3d8e8), 13,
+                     lv_color_hex(0xc8b6cf), 1, false);
+                continue;
+            }
+            static constexpr uint32_t tile_colors[] = {
+                0xf7dca8, 0xf4bd9c, 0xe9b5c8, 0xd7b5e9,
+                0xbccfe8, 0xa9d7cf, 0xb9daa8, 0xf0c477,
+            };
+            const lv_color_t fill = lv_color_hex(tile_colors[(value - 1) % 8]);
+            rect(x, y, 58, 50, fill, 13, game_paper, 2, false);
+            char label[4];
+            snprintf(label, sizeof(label), "%u", value);
+            text(x, y + 10, 58, 32, label, game_ink, &lv_font_montserrat_20);
+        }
+        text(314, 14, 148, 24, "数字华容道", game_ink, qd_cn_font_20());
+        char moves[32];
+        snprintf(moves, sizeof(moves), "步数 %u", self->puzzle_number_slide_moves_);
+        text(314, 48, 148, 22, moves, game_purple);
+        text(314, 82, 148, 58, "点击空格旁的数字\n依次排成 1 到 15", game_muted);
+        button(322, 176, 152, 36, "重新打乱", game_gold);
+        if (self->puzzle_number_slide_won_) {
+            rect(40, 82, 222, 90, lv_color_hex(0xfff1c9), 18,
+                 game_gold, 3, true);
+            text(50, 100, 202, 28, "排列完成！", game_green, qd_cn_font_20());
+            text(50, 136, 202, 20, "点击右侧重新挑战", game_muted);
+        }
+        return;
+    }
+#else
     if (self->puzzle_arcade_view_ == PuzzleArcadeView::LUCKY_REVOLVER) {
         const auto state = self->puzzle_revolver_state_;
         if (state == PuzzleRevolverState::HIT || state == PuzzleRevolverState::LUCKY) {
@@ -13700,6 +14357,7 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         }
         return;
     }
+#endif
     if (self->puzzle_arcade_view_ == PuzzleArcadeView::MOTION_MAZE) {
         const int width = self->puzzle_maze_.width;
         const int height = self->puzzle_maze_.height;
@@ -13833,4 +14491,158 @@ void DesktopUI::PuzzleArcadeDrawCb(lv_event_t* event) {
         button(292, 234, 136, 30, "换一关", game_pink);
     }
 }
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+void DesktopUI::ShakeLabRevolverDrawCb(lv_event_t* event) {
+    auto* self = static_cast<DesktopUI*>(lv_event_get_user_data(event));
+    auto* object = static_cast<lv_obj_t*>(lv_event_get_current_target(event));
+    lv_layer_t* layer = lv_event_get_layer(event);
+    if (!self || !object || !layer ||
+        self->shake_lab_mode_ != ShakeLabMode::LUCKY_REVOLVER) return;
+    lv_area_t area;
+    lv_obj_get_coords(object, &area);
+    const int ox = area.x1, oy = area.y1;
+    const lv_color_t ink = lv_color_hex(0x403744);
+    const lv_color_t muted = lv_color_hex(0x715f70);
+    const lv_color_t purple = lv_color_hex(0x76508f);
+    const lv_color_t green = lv_color_hex(0x47785f);
+    const lv_color_t gold = lv_color_hex(0xb66f25);
+    const lv_color_t pink = lv_color_hex(0xc95f7e);
+    const lv_color_t paper = lv_color_hex(0xfffbf7);
+    auto rect = [&](int x, int y, int w, int h, lv_color_t color, int radius = 5,
+                    lv_color_t border = COLOR_LINE, int border_width = 1,
+                    bool shadow = false) {
+        lv_draw_rect_dsc_t d;
+        lv_draw_rect_dsc_init(&d);
+        d.bg_color = color; d.bg_opa = LV_OPA_COVER; d.radius = radius;
+        d.border_color = border; d.border_width = border_width; d.border_opa = LV_OPA_COVER;
+        if (shadow) {
+            d.shadow_color = lv_color_hex(0x9b7d68); d.shadow_width = 5;
+            d.shadow_offset_y = 2; d.shadow_opa = LV_OPA_20;
+        }
+        lv_area_t draw_area{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_rect(layer, &d, &draw_area);
+    };
+    auto triangle = [&](int x1, int y1, int x2, int y2, int x3, int y3,
+                        lv_color_t color) {
+        lv_draw_triangle_dsc_t d;
+        lv_draw_triangle_dsc_init(&d);
+        d.bg_color = color; d.bg_opa = LV_OPA_COVER;
+        d.p[0] = {static_cast<lv_value_precise_t>(ox + x1),
+                  static_cast<lv_value_precise_t>(oy + y1)};
+        d.p[1] = {static_cast<lv_value_precise_t>(ox + x2),
+                  static_cast<lv_value_precise_t>(oy + y2)};
+        d.p[2] = {static_cast<lv_value_precise_t>(ox + x3),
+                  static_cast<lv_value_precise_t>(oy + y3)};
+        lv_draw_triangle(layer, &d);
+    };
+    auto text = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                    const lv_font_t* font = qd_cn_font_16()) {
+        lv_draw_label_dsc_t d;
+        lv_draw_label_dsc_init(&d);
+        d.color = color; d.font = font; d.text = value;
+        d.align = LV_TEXT_ALIGN_CENTER; d.text_local = 1;
+        lv_area_t draw_area{ox + x, oy + y, ox + x + w - 1, oy + y + h - 1};
+        lv_draw_label(layer, &d, &draw_area);
+    };
+    auto button = [&](int x, int y, int w, int h, const char* value, lv_color_t color,
+                      const lv_font_t* font = qd_cn_font_16()) {
+        rect(x, y, w, h, lv_color_mix(color, paper, 84), 11, color, 2);
+        text(x, y + 2, w, h - 2, value, ink, font);
+    };
+
+    const auto state = self->puzzle_revolver_state_;
+    if (state == PuzzleRevolverState::HIT || state == PuzzleRevolverState::LUCKY) {
+        const bool hit = state == PuzzleRevolverState::HIT;
+        const lv_color_t backdrop = hit ? lv_color_hex(0x9f2439) : lv_color_hex(0xdff3e6);
+        const lv_color_t accent = hit ? lv_color_hex(0xffc5b8) : lv_color_hex(0x4f8c68);
+        rect(8, 2, 464, 252, backdrop, 22, accent, 3, true);
+        for (int i = 0; i < 6; ++i) {
+            const int ray_x = 38 + i * 78;
+            triangle(240, 128, ray_x, 8, ray_x + 35, 8,
+                     hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+            triangle(240, 128, ray_x, 248, ray_x + 35, 248,
+                     hit ? lv_color_hex(0xc94b54) : lv_color_hex(0xf4cf72));
+        }
+        rect(166, 38, 148, 148, hit ? lv_color_hex(0x7a172b) : paper,
+             LV_RADIUS_CIRCLE, accent, 4, true);
+        text(176, 77, 128, 48, hit ? "砰！" : "咔哒！",
+             hit ? lv_color_hex(0xffe0d5) : green, qd_cn_font_20());
+        text(132, 128, 216, 36, hit ? "漫画中弹" : "幸运逃过",
+             hit ? lv_color_hex(0xffe0d5) : ink, qd_cn_font_20());
+        char record[48];
+        snprintf(record, sizeof(record), "幸运 %u / %u 局",
+                 self->puzzle_revolver_lucky_count_, self->puzzle_revolver_rounds_);
+        text(132, 166, 216, 24, record, hit ? lv_color_hex(0xffddd5) : muted);
+        button(168, 198, 144, 40, "再来一局", hit ? lv_color_hex(0xffc5b8) : green);
+        return;
+    }
+
+    rect(8, 2, 308, 252, lv_color_hex(0xfff1f3), 20, pink, 2, true);
+    rect(326, 2, 146, 224, paper, 18, gold, 2, true);
+    text(20, 14, 284, 24, "六孔幸运转轮", ink, qd_cn_font_20());
+    text(20, 39, 284, 20,
+         state == PuzzleRevolverState::SELECT ? "先选择玩具弹数量" :
+         (state == PuzzleRevolverState::ARMED ? "拿稳设备，用力摇一摇" :
+         (state == PuzzleRevolverState::SPINNING ? "转轮飞快旋转中" : "转轮已经停稳")),
+         muted);
+    const int cx = 158, cy = 142;
+    rect(cx - 86, cy - 86, 172, 172, purple, LV_RADIUS_CIRCLE,
+         lv_color_hex(0x4c365b), 4, true);
+    rect(cx - 70, cy - 70, 140, 140, lv_color_hex(0xf3d9ec),
+         LV_RADIUS_CIRCLE, gold, 3);
+    constexpr float kPi = 3.14159265358979323846f;
+    for (int i = 0; i < 6; ++i) {
+        const float radians = static_cast<float>(i * 60 + self->puzzle_revolver_spin_angle_ - 90) *
+                              kPi / 180.0f;
+        const int chamber_x = cx + static_cast<int>(std::cos(radians) * 50.0f) - 22;
+        const int chamber_y = cy + static_cast<int>(std::sin(radians) * 50.0f) - 22;
+        const bool round = state == PuzzleRevolverState::SELECT &&
+                           i < self->puzzle_revolver_bullets_;
+        const bool selected = state == PuzzleRevolverState::READY &&
+                              i == self->puzzle_revolver_chamber_;
+        rect(chamber_x, chamber_y, 44, 44,
+             round ? lv_color_hex(0xf5c25f) : lv_color_hex(0x35283d),
+             LV_RADIUS_CIRCLE, selected ? pink : lv_color_hex(0xd9a84d),
+             selected ? 4 : 2, round);
+        if (round) {
+            rect(chamber_x + 13, chamber_y + 8, 18, 28,
+                 lv_color_hex(0xffdf7e), 9, gold, 2);
+        } else {
+            rect(chamber_x + 12, chamber_y + 12, 20, 20,
+                 lv_color_hex(0x4f3b58), LV_RADIUS_CIRCLE,
+                 lv_color_hex(0x4f3b58), 0);
+        }
+    }
+    rect(cx - 15, cy - 15, 30, 30, lv_color_hex(0xf6bd69),
+         LV_RADIUS_CIRCLE, gold, 2, true);
+    triangle(cx - 10, 48, cx + 10, 48, cx, 66, pink);
+    text(336, 16, 126, 22, "玩具弹数量", ink);
+    char bullet_count[8];
+    snprintf(bullet_count, sizeof(bullet_count), "%u", self->puzzle_revolver_bullets_);
+    text(382, 56, 28, 34, bullet_count, pink, &lv_font_montserrat_20);
+    if (state == PuzzleRevolverState::SELECT) {
+        button(342, 92, 42, 36, "-", purple, &lv_font_montserrat_20);
+        button(420, 92, 42, 36, "+", purple, &lv_font_montserrat_20);
+        button(332, 148, 130, 40, "装弹", gold);
+        text(336, 196, 122, 22, "概率完全随机", muted);
+    } else if (state == PuzzleRevolverState::READY) {
+        button(332, 142, 130, 56, "扣动扳机", pink, qd_cn_font_20());
+        text(336, 204, 122, 20, "祝你好运！", muted);
+    } else {
+        const int meter = std::clamp<int>(self->puzzle_revolver_intensity_, 0, 100);
+        rect(342, 104, 110, 16, lv_color_hex(0xeee1e5), 8,
+             lv_color_hex(0xd8c4ca), 1);
+        if (meter > 0) {
+            rect(344, 106, meter * 106 / 100, 12,
+                 state == PuzzleRevolverState::SPINNING ? pink : gold, 6, pink, 0);
+        }
+        text(336, 132, 122, 42,
+             state == PuzzleRevolverState::ARMED ? "摇动设备\n启动转轮" :
+                                                   "正在减速\n请慢慢停稳",
+             muted);
+    }
+}
+#endif
 #endif

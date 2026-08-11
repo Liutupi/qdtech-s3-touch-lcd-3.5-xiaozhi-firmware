@@ -20,7 +20,12 @@ enum class Game : uint8_t {
     MOTION_MAZE,
     TILE_2048,
     FREECELL,
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    NUMBER_SLIDE,
+#else
     LUCKY_REVOLVER,
+#endif
 };
 
 enum class Status : uint8_t {

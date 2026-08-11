@@ -319,6 +319,44 @@ config QDTECH_EXPERIMENT_PUZZLE_ARCADE
         The option adds no task, does not change touch parsing or BMI270
         sampling, and stays disabled by default until physical verification.
 
+config QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    bool "Enable experimental cached 2048 renderer"
+    depends on QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    default n
+    help
+        Replaces only the 2048 game's repeated custom-draw task fan-out with
+        a lazy RGB565 canvas in PSRAM. Changed tiles are rendered into the
+        cache synchronously and LVGL presents the cache as one image. Input
+        backpressure prevents refresh bursts from accumulating. Allocation
+        failure falls back to the existing v1.8.21 renderer, and leaving the
+        page releases all added PSRAM. Disabled by default until physical
+        long-session verification is complete.
+
+config QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    bool "Enable experimental 2048 input hardening"
+    depends on QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    default n
+    help
+        Separates the restart button from the direction pad, keeps at most
+        one pending direction during rapid tapping, and batches cached-canvas
+        tile updates to bound LVGL draw and invalidation pressure. The input
+        cooldown starts after rendering completes. No task, queue, SD asset,
+        or NVS record is added. Disabled by default for one-step rollback to
+        the previously verified cached renderer.
+
+config QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    bool "Move Lucky Revolver to Shake Lab and add Number Slide"
+    depends on QDTECH_EXPERIMENT_PUZZLE_ARCADE
+    default n
+    help
+        Atomically moves the existing Lucky Revolver entry into Shake Lab and
+        replaces its Puzzle Arcade slot with a fixed-memory 4x4 number-slide
+        game. Lucky Revolver reuses the existing BMI270 sampler and detector;
+        Number Slide creates only solvable boards by applying legal moves from
+        the solved state. No task, timer, queue, NVS record, or SD asset is
+        added. Disabled by default so the v1.8.21 layout is the one-step
+        rollback path.
+
 config QDTECH_EXPERIMENT_MD_DUAL_MODE
     bool "Enable experimental Mega Drive dual-mode boot service"
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

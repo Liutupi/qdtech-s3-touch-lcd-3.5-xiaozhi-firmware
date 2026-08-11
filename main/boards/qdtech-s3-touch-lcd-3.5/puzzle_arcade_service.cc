@@ -340,7 +340,12 @@ const char* GameId(Game game) {
         case Game::MOTION_MAZE: return "motion_maze";
         case Game::TILE_2048: return "tile_2048";
         case Game::FREECELL: return "freecell";
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        case Game::NUMBER_SLIDE: return "number_slide";
+#else
         case Game::LUCKY_REVOLVER: return "lucky_revolver";
+#endif
     }
     return "sudoku";
 }

@@ -20,6 +20,7 @@
 #if defined(CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE) && \
     CONFIG_QDTECH_EXPERIMENT_PUZZLE_ARCADE
 #include "freecell_game.h"
+#include "number_slide_logic.h"
 #include "puzzle_arcade_service.h"
 #endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_MD_DUAL_MODE) && \
@@ -31,6 +32,11 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+class Puzzle2048CanvasRenderer;
+#endif
 
 enum class DesktopPage {
     MAIN,
@@ -278,7 +284,12 @@ private:
     lv_obj_t* puzzle_arcade_game_tags_[8]{};
     enum class PuzzleArcadeView : uint8_t {
         HOME, SUDOKU, CODE_LOCK, SOKOBAN, MATCH3, MOTION_MAZE, TILE_2048, FREECELL,
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        NUMBER_SLIDE
+#else
         LUCKY_REVOLVER
+#endif
     };
     PuzzleArcadeView puzzle_arcade_view_ = PuzzleArcadeView::HOME;
     QdPuzzleArcade::Game puzzle_arcade_selected_ = QdPuzzleArcade::Game::SUDOKU;
@@ -309,8 +320,27 @@ private:
     uint32_t puzzle_2048_cells_[16]{};
     uint32_t puzzle_2048_score_ = 0;
     uint32_t puzzle_2048_best_tile_ = 0;
+    uint32_t puzzle_2048_high_score_ = 0;
+    bool puzzle_2048_high_score_loaded_ = false;
+    bool puzzle_2048_high_score_dirty_ = false;
     bool puzzle_2048_won_ = false;
     bool puzzle_2048_game_over_ = false;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    uint8_t puzzle_number_slide_cells_[QdNumberSlide::kCellCount]{};
+    uint16_t puzzle_number_slide_moves_ = 0;
+    bool puzzle_number_slide_won_ = false;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    Puzzle2048CanvasRenderer* puzzle_2048_renderer_ = nullptr;
+#endif
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    lv_timer_t* puzzle_2048_input_timer_ = nullptr;
+    int8_t puzzle_2048_pending_dx_ = 0;
+    int8_t puzzle_2048_pending_dy_ = 0;
+#endif
     QdFreecell::Game* puzzle_freecell_game_ = nullptr;
     QdPuzzleArcade::MazeLevel puzzle_maze_{};
     uint16_t puzzle_maze_level_index_ = 0;
@@ -610,6 +640,10 @@ private:
         DIVINATION,
         MOVIE,
         BOOK,
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+        LUCKY_REVOLVER,
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
         WOODEN_FISH,
@@ -623,6 +657,11 @@ private:
     lv_obj_t* shake_lab_fortune_group_ = nullptr;
     lv_obj_t* shake_lab_divination_group_ = nullptr;
     lv_obj_t* shake_lab_recommendation_group_ = nullptr;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    lv_obj_t* shake_lab_revolver_group_ = nullptr;
+    lv_obj_t* shake_lab_revolver_board_ = nullptr;
+#endif
 #if defined(CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH) && \
     CONFIG_QDTECH_EXPERIMENT_WOODEN_FISH
     lv_obj_t* wooden_fish_group_ = nullptr;
@@ -875,8 +914,26 @@ private:
     bool ResolvePuzzleMatch3();
     void ResetPuzzle2048();
     bool MovePuzzle2048(int dx, int dy);
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_INPUT_HARDENING
+    void QueuePuzzle2048Input(int dx, int dy);
+    void StopPuzzle2048InputTimer();
+    static void Puzzle2048InputTimerCb(lv_timer_t* timer);
+#endif
     void SpawnPuzzle2048Tile();
     bool CanMovePuzzle2048() const;
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    void ResetPuzzleNumberSlide();
+    bool MovePuzzleNumberSlide(uint8_t tile_index);
+#endif
+    void LoadPuzzle2048HighScore();
+    void SavePuzzle2048HighScore();
+#if defined(CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER) && \
+    CONFIG_QDTECH_EXPERIMENT_2048_STABLE_RENDERER
+    bool EnsurePuzzle2048Renderer();
+    void ReleasePuzzle2048Renderer();
+#endif
     void ResetPuzzleFreecell();
     bool EnsurePuzzleFreecellGame();
     bool MovePuzzleFreecellToColumn(uint8_t destination);
@@ -894,6 +951,10 @@ private:
     void SetPuzzleMazeSampling(bool active);
     void RefreshPuzzleArcadeBoard();
     static void PuzzleArcadeDrawCb(lv_event_t* event);
+#if defined(CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE) && \
+    CONFIG_QDTECH_EXPERIMENT_SHAKE_REVOLVER_NUMBER_SLIDE
+    static void ShakeLabRevolverDrawCb(lv_event_t* event);
+#endif
 #endif
     void CreateXiaozhiPage(lv_obj_t* root);
     void CreateNetworkPage(lv_obj_t* root);
