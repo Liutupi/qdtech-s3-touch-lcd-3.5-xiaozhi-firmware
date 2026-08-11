@@ -32,7 +32,16 @@ v1.8.22 将同一步的变化方块、得分、最高纪录和状态文本放入
 - App 大小：7,061,008 字节，适配 7 MiB OTA 槽。
 - App SHA-256：`bf8f5a1ef1d2755f06e446733d124e8af7af69870c286e2a231f608648e7261d`。
 - 完整双模式镜像的 `ota_0` 和 `ota_1` 均与 App 哈希一致；`mdemu` 区域与 v1.8.21 完全一致。
-- App-only 实机刷写、启动监听和 100+ 步快速操作验证：等待 USB 板重新接入。
+- 本轮发布时电脑未检测到 USB 串口，因此未执行最终 App-only 刷写和 100+ 步实机复测；该缺口已在发布时明确保留，未伪报硬件通过。
+
+## 正式发布
+
+- GitHub Latest Release：`v1.8.22`，发布时间 2026-08-11。
+- 源码发布提交：`2d198cfcf037f3610b519428d0101d2f83d5e544`；远端 `main` 已通过非强制双父合并接回正式发布历史。
+- OTA App：`qdtech-s3-touch-lcd-3.5-v1.8.22-app.bin`，7,061,008 字节，SHA-256 `bf8f5a1ef1d2755f06e446733d124e8af7af69870c286e2a231f608648e7261d`。
+- 完整双模式镜像 SHA-256：`0772fa39d03467acf9b8fbf6f73f100c1882c995ac56b4e508ebc75debdb84e3`。
+- 固件 ZIP SHA-256：`eabec93cedec112b227d6d9844425bd8fbeae5cf6ec9fd8c00f1dd9dc1035342`。
+- Release 已核对为 Latest，App、完整镜像、固件 ZIP、MD 源码包和 `SHA256SUMS.txt` 五项附件均为 uploaded 状态。
 
 ## 回退
 
