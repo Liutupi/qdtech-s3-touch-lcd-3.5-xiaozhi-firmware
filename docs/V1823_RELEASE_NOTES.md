@@ -27,3 +27,9 @@
 - Firmware ZIP：5,734,389 字节，SHA256 `bbfd011127a6e93c44bd1eb593d900e8aff0e2e05e17d43a7e627128121d8716`
 - 7 MB OTA 槽剩余 275,440 字节；诊断强制 MAC 选项在正式构建中为关闭。
 - 完整镜像的两个 OTA 槽均与 App 附件逐字节一致，MD 模拟器分区沿用已验证镜像。
+
+## 发布状态
+
+- 公开 Release：<https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/tag/v1.8.23>
+- 状态：非草稿、非预发布，已设为 Latest。
+- GitHub Latest API 已返回 `v1.8.23`；App、Full、Firmware ZIP 和 `SHA256SUMS.txt` 均上传完成。

@@ -42,3 +42,5 @@ OTA 安装 `v1.8.22` App 镜像即可回滚代码并保留 NVS 与 SD 卡。若�
 - App：`d559cbfba87f259851dc0a11abb91aba92ee9e9bc1d539c659ca493eca378ecb`
 - Full：`b5805e03d705efab43c63aa6c6feb2432a93c32292007aacf3b916508ea97fd8`
 - Firmware ZIP：`bbfd011127a6e93c44bd1eb593d900e8aff0e2e05e17d43a7e627128121d8716`
+- GitHub Release：`https://github.com/Liutupi/qdtech-s3-touch-lcd-3.5-xiaozhi-firmware/releases/tag/v1.8.23`
+- 发布状态：公开、非预发布，GitHub Latest API 已确认指向 `v1.8.23`；四个附件均为 `uploaded`。
