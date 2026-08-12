@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/event_groups.h>
 #include <esp_log.h>
+#include <esp_mac.h>
 #include <esp_wifi.h>
 #include <nvs.h>
 #include "nvs_flash.h"
@@ -16,6 +17,40 @@
 #define WIFI_EVENT_CONNECTED BIT0
 #define MAX_RECONNECT_COUNT 5
 static constexpr size_t kMaxSavedWifiCount = 5;
+static constexpr const char* kAlternateStaMacKey = "alt_sta_mac";
+
+namespace {
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+static constexpr uint8_t kNormalStaProtocol =
+    WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+static constexpr uint8_t kLegacyStaProtocol = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G;
+
+bool ShouldRotateMeshCandidate(int reason) {
+    // IEEE authentication/association failures and ESP-IDF's local
+    // connection failures are strong signals that retrying the same mesh
+    // radio is less useful than testing another BSSID for the same SSID.
+    switch (reason) {
+    case 2:   // AUTH_EXPIRE
+    case 4:   // ASSOC_EXPIRE
+    case 5:   // ASSOC_TOOMANY
+    case 6:   // NOT_AUTHED
+    case 7:   // NOT_ASSOCED
+    case 9:   // ASSOC_NOT_AUTHED
+    case 15:  // 4WAY_HANDSHAKE_TIMEOUT
+    case 23:  // 802_1X_AUTH_FAILED
+    case 200: // BEACON_TIMEOUT
+    case 201: // NO_AP_FOUND
+    case 202: // AUTH_FAIL
+    case 203: // ASSOC_FAIL
+    case 204: // HANDSHAKE_TIMEOUT
+    case 205: // CONNECTION_FAIL
+        return true;
+    default:
+        return false;
+    }
+}
+#endif
+}  // namespace
 
 WifiStation& WifiStation::GetInstance() {
     static WifiStation instance;
@@ -40,6 +75,23 @@ WifiStation::WifiStation() {
     if (err != ESP_OK) {
         remember_bssid_ = 0;
     }
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    size_t legacy_ssid_size = 0;
+    err = nvs_get_str(nvs, "legacy_ssid", nullptr, &legacy_ssid_size);
+    if (err == ESP_OK && legacy_ssid_size > 1 && legacy_ssid_size <= 33) {
+        std::vector<char> legacy_ssid(legacy_ssid_size);
+        if (nvs_get_str(nvs, "legacy_ssid", legacy_ssid.data(),
+                        &legacy_ssid_size) == ESP_OK) {
+            legacy_wifi_ssid_ = legacy_ssid.data();
+        }
+    }
+#endif
+    uint8_t alternate_sta_mac = 0;
+    err = nvs_get_u8(nvs, kAlternateStaMacKey, &alternate_sta_mac);
+    alternate_sta_mac_enabled_ = err == ESP_OK && alternate_sta_mac == 1;
+#ifdef CONFIG_QDTECH_EXPERIMENT_ALTERNATE_STA_MAC
+    alternate_sta_mac_enabled_ = true;
+#endif
     nvs_close(nvs);
 }
 
@@ -189,6 +241,38 @@ void WifiStation::Start() {
     cfg.nvs_enable = false;
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+#ifdef CONFIG_QDTECH_EXPERIMENT_ALTERNATE_STA_MAC
+    // Make the successful diagnosis survive the next normal OTA build.  This
+    // write occurs only in the explicitly enabled diagnostic image.
+    if (alternate_sta_mac_enabled_) {
+        nvs_handle_t nvs;
+        if (nvs_open("wifi", NVS_READWRITE, &nvs) == ESP_OK) {
+            uint8_t persisted = 0;
+            if (nvs_get_u8(nvs, kAlternateStaMacKey, &persisted) != ESP_OK ||
+                persisted != 1) {
+                if (nvs_set_u8(nvs, kAlternateStaMacKey, 1) == ESP_OK) {
+                    nvs_commit(nvs);
+                }
+            }
+            nvs_close(nvs);
+        }
+    }
+#endif
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    if (alternate_sta_mac_enabled_) {
+    // Diagnostic only: use a deterministic, locally administered Station MAC
+    // after the factory identity was proven to receive no authentication
+    // response. The SoftAP identity remains factory-derived.
+    uint8_t diagnostic_mac[6] = {};
+    ESP_ERROR_CHECK(esp_read_mac(diagnostic_mac, ESP_MAC_WIFI_STA));
+    diagnostic_mac[0] = static_cast<uint8_t>((diagnostic_mac[0] | 0x02U) & 0xFEU);
+    ESP_ERROR_CHECK(esp_wifi_set_mac(WIFI_IF_STA, diagnostic_mac));
+    ESP_LOGW(TAG,
+             "Alternate Station MAC diagnostic enabled: %02x:%02x:%02x:%02x:%02x:%02x",
+             diagnostic_mac[0], diagnostic_mac[1], diagnostic_mac[2],
+             diagnostic_mac[3], diagnostic_mac[4], diagnostic_mac[5]);
+    }
+#endif
     ESP_ERROR_CHECK(esp_wifi_start());
 
     if (max_tx_power_ != 0) {
@@ -236,6 +320,7 @@ void WifiStation::HandleScanResult() {
 
     auto& ssid_manager = SsidManager::GetInstance();
     auto ssid_list = ssid_manager.GetSsidList();
+    connect_queue_.clear();
 #ifdef CONFIG_QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
     if (!temporary_ssid_.empty()) {
         auto existing = std::find_if(ssid_list.begin(), ssid_list.end(), [this](const SsidItem& item) {
@@ -263,6 +348,7 @@ void WifiStation::HandleScanResult() {
                 .ssid = it->ssid,
                 .password = it->password,
                 .channel = ap_record.primary,
+                .rssi = ap_record.rssi,
                 .authmode = ap_record.authmode
             };
             memcpy(record.bssid, ap_record.bssid, 6);
@@ -294,12 +380,34 @@ void WifiStation::StartConnect() {
     bzero(&wifi_config, sizeof(wifi_config));
     strcpy((char *)wifi_config.sta.ssid, ap_record.ssid.c_str());
     strcpy((char *)wifi_config.sta.password, ap_record.password.c_str());
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    wifi_config.sta.channel = ap_record.channel;
+    memcpy(wifi_config.sta.bssid, ap_record.bssid, 6);
+    wifi_config.sta.bssid_set = true;
+#else
     if (remember_bssid_) {
         wifi_config.sta.channel = ap_record.channel;
         memcpy(wifi_config.sta.bssid, ap_record.bssid, 6);
         wifi_config.sta.bssid_set = true;
     }
+#endif
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    const bool use_legacy_profile = ap_record.ssid == legacy_wifi_ssid_;
+    ESP_ERROR_CHECK(esp_wifi_set_protocol(
+        WIFI_IF_STA, use_legacy_profile ? kLegacyStaProtocol : kNormalStaProtocol));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20));
+    ESP_LOGI(TAG, "Station compatibility profile ssid=%s mode=%s",
+             ap_record.ssid.c_str(), use_legacy_profile ? "legacy-b/g" : "normal-b/g/n");
+#endif
+
+    ESP_LOGI(TAG,
+             "Trying AP %s bssid=%02x:%02x:%02x:%02x:%02x:%02x channel=%d rssi=%d alternatives=%u",
+             ap_record.ssid.c_str(), ap_record.bssid[0], ap_record.bssid[1],
+             ap_record.bssid[2], ap_record.bssid[3], ap_record.bssid[4],
+             ap_record.bssid[5], ap_record.channel, ap_record.rssi,
+             static_cast<unsigned>(connect_queue_.size()));
 
     reconnect_count_ = 0;
     ESP_ERROR_CHECK(esp_wifi_connect());
@@ -343,6 +451,16 @@ void WifiStation::WifiEventHandler(void* arg, esp_event_base_t event_base, int32
         ESP_LOGW(TAG, "Disconnected from %s reason=%d reconnect=%d queue=%u",
                  this_->ssid_.c_str(), event ? event->reason : -1,
                  this_->reconnect_count_, static_cast<unsigned>(this_->connect_queue_.size()));
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+        const int reason = event ? event->reason : -1;
+        if (!this_->connect_queue_.empty() && ShouldRotateMeshCandidate(reason)) {
+            ESP_LOGW(TAG,
+                     "Mesh candidate rejected reason=%d; trying next scanned BSSID immediately",
+                     reason);
+            this_->StartConnect();
+            return;
+        }
+#endif
         if (this_->reconnect_count_ < MAX_RECONNECT_COUNT) {
             esp_wifi_connect();
             this_->reconnect_count_++;

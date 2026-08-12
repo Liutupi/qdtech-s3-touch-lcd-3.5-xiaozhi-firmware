@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <atomic>
 
 #include <esp_http_server.h>
 #include <esp_event.h>
@@ -52,6 +53,8 @@ private:
     esp_event_handler_instance_t instance_got_ip_;
     esp_timer_handle_t scan_timer_ = nullptr;
     bool is_connecting_ = false;
+    std::atomic<int> last_disconnect_reason_{0};
+    bool legacy_wifi_profile_selected_ = false;
     esp_netif_t* ap_netif_ = nullptr;
     std::vector<wifi_ap_record_t> ap_records_;
 

@@ -1,5 +1,12 @@
 # PATCHES
 
+## v1.8.23 路由器与 Mesh Wi-Fi 兼容
+
+- QDTech 配网和保存网络重连会按 RSSI 排序同名 AP、锁定 BSSID，并在失败后轮换 Mesh 节点。
+- 仅对严格的 `AUTH_EXPIRE` 且零关联故障启用两级回退：旧式 b/g 协议配置，以及只修改 Station 接口的稳定本地管理 MAC。SoftAP、设备工厂地址和其他板型保持原行为。
+- 兼容标记保存在既有 NVS 命名空间，带单次重启保护；诊断强制选项默认关闭。
+- 详见 `docs/V1823_WIFI_MESH_COMPAT_HANDOFF.md`。
+
 本文件记录本仓库相对于官方 `xiaozhi-esp32` 的主要改动，方便后续合并官方上游版本时快速判断哪些改动需要保留。
 
 ## 板级新增

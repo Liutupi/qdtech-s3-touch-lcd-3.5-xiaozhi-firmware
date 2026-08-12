@@ -2,7 +2,7 @@
 
 This repository contains the working ESP32-S3 + QDTech 3.5 inch LCD firmware state.
 
-Latest release handoff: [`docs/V1822_2048_LONG_SESSION_HANDOFF.md`](docs/V1822_2048_LONG_SESSION_HANDOFF.md).
+Latest release handoff: [`docs/V1823_WIFI_MESH_COMPAT_HANDOFF.md`](docs/V1823_WIFI_MESH_COMPAT_HANDOFF.md).
 
 ## Hardware
 

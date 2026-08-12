@@ -23,4 +23,12 @@
 #define QDTECH_PROVISIONING_STA_BEACON 1
 #endif
 
+// The QDTech board is commonly deployed behind consumer mesh systems where
+// several radios advertise the same SSID.  Keep the workaround board-local:
+// pin each scanned candidate long enough to test it and rotate to the next
+// BSSID when authentication/association fails.
+#if defined(CONFIG_QDTECH_PROVISIONING_COMPAT)
+#define QDTECH_WIFI_MESH_FALLBACK 1
+#endif
+
 #endif  // QDTECH_PROVISIONING_COMPAT_H

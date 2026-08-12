@@ -1,4 +1,5 @@
 #include "wifi_configuration_ap.h"
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 #include <freertos/FreeRTOS.h>
@@ -22,7 +23,40 @@
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1
+#define WIFI_ASSOCIATED_BIT BIT2
 static constexpr size_t kMaxSavedWifiCount = 5;
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+static constexpr const char* kAlternateStaMacKey = "alt_sta_mac";
+static constexpr TickType_t kMeshCandidateTimeout = pdMS_TO_TICKS(6500);
+static constexpr uint8_t kNormalStaProtocol =
+    WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+static constexpr uint8_t kLegacyStaProtocol = WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G;
+
+static bool IsAlternateStaMacEnabled() {
+    nvs_handle_t nvs;
+    if (nvs_open("wifi", NVS_READONLY, &nvs) != ESP_OK) {
+        return false;
+    }
+    uint8_t enabled = 0;
+    const esp_err_t result = nvs_get_u8(nvs, kAlternateStaMacKey, &enabled);
+    nvs_close(nvs);
+    return result == ESP_OK && enabled == 1;
+}
+
+static esp_err_t EnableAlternateStaMac() {
+    nvs_handle_t nvs;
+    esp_err_t result = nvs_open("wifi", NVS_READWRITE, &nvs);
+    if (result != ESP_OK) {
+        return result;
+    }
+    result = nvs_set_u8(nvs, kAlternateStaMacKey, 1);
+    if (result == ESP_OK) {
+        result = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+    return result;
+}
+#endif
 #ifdef QDTECH_PROVISIONING_STA_BEACON
 static constexpr uint64_t kRawBeaconIntervalUs = 100 * 1000;
 // The normal AP interface reports successful raw-beacon TX completion on this
@@ -209,6 +243,14 @@ void WifiConfigurationAp::StartAccessPoint()
     }
 #else
     ESP_ERROR_CHECK(esp_wifi_start());
+#endif
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    // An already-started Station driver handed to APSTA mode can keep the
+    // radio on channel 0 while the compatibility beacon advertises channel 6.
+    // The phone then sees the SSID but sends authentication on the wrong RF
+    // channel. Pin the live radio before transmitting the matching beacon.
+    ESP_ERROR_CHECK(esp_wifi_set_channel(
+        wifi_config.ap.channel, WIFI_SECOND_CHAN_NONE));
 #endif
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(78));
 
@@ -535,11 +577,20 @@ void WifiConfigurationAp::StartWebServer()
             httpd_resp_sendstr_chunk(req, "[");
             std::lock_guard<std::mutex> lock(this_->mutex_);
             for (int i = 0; i < this_->ap_records_.size(); i++) {
-                ESP_LOGI(TAG, "SSID: %s, RSSI: %d, Authmode: %d",
-                    (char *)this_->ap_records_[i].ssid, this_->ap_records_[i].rssi, this_->ap_records_[i].authmode);
-                char buf[128];
-                snprintf(buf, sizeof(buf), "{\"ssid\":\"%s\",\"rssi\":%d,\"authmode\":%d}",
-                    (char *)this_->ap_records_[i].ssid, this_->ap_records_[i].rssi, this_->ap_records_[i].authmode);
+                const auto& record = this_->ap_records_[i];
+                ESP_LOGI(TAG,
+                         "SSID: %s, BSSID: %02x:%02x:%02x:%02x:%02x:%02x, RSSI: %d, Channel: %u, Authmode: %d",
+                         (char *)record.ssid, record.bssid[0], record.bssid[1],
+                         record.bssid[2], record.bssid[3], record.bssid[4],
+                         record.bssid[5], record.rssi, record.primary, record.authmode);
+                char buf[192];
+                snprintf(buf, sizeof(buf),
+                         "{\"ssid\":\"%s\",\"rssi\":%d,\"authmode\":%d,"
+                         "\"channel\":%u,\"bssid\":\"%02x:%02x:%02x:%02x:%02x:%02x\"}",
+                         (char *)record.ssid, record.rssi, record.authmode,
+                         record.primary, record.bssid[0], record.bssid[1],
+                         record.bssid[2], record.bssid[3], record.bssid[4],
+                         record.bssid[5]);
                 httpd_resp_sendstr_chunk(req, buf);
                 if (i < this_->ap_records_.size() - 1) {
                     httpd_resp_sendstr_chunk(req, ",");
@@ -874,7 +925,15 @@ bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::stri
 
     is_connecting_ = true;
     esp_wifi_scan_stop();
-    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    // The visibility fallback is deliberately transmitted through the STA
+    // management queue. Once a phone has submitted credentials it must pause,
+    // otherwise its 100 ms beacon traffic competes with upstream 802.11
+    // authentication on mesh routers. Restore it only if every candidate
+    // fails and provisioning must remain available.
+    StopRawBeaconFallback();
+#endif
+    xEventGroupClearBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
     if (sta_netif_ == nullptr) {
         sta_netif_ = esp_netif_create_default_wifi_sta();
         if (sta_netif_ == nullptr) {
@@ -885,34 +944,164 @@ bool WifiConfigurationAp::ConnectToWifi(const std::string &ssid, const std::stri
     }
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
 
-    wifi_config_t wifi_config;
-    bzero(&wifi_config, sizeof(wifi_config));
-    strcpy((char *)wifi_config.sta.ssid, ssid.c_str());
-    strcpy((char *)wifi_config.sta.password, password.c_str());
-    wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-    wifi_config.sta.failure_retry_cnt = 1;
-
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    auto ret = esp_wifi_connect();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to connect to WiFi: %d", ret);
-        is_connecting_ = false;
-        return false;
+    std::vector<wifi_ap_record_t> candidates;
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& record : ap_records_) {
+            if (strcmp(reinterpret_cast<const char*>(record.ssid), ssid.c_str()) == 0) {
+                candidates.push_back(record);
+            }
+        }
     }
-    ESP_LOGI(TAG, "Connecting to WiFi %s", ssid.c_str());
+    std::sort(candidates.begin(), candidates.end(),
+              [](const wifi_ap_record_t& lhs, const wifi_ap_record_t& rhs) {
+                  return lhs.rssi > rhs.rssi;
+              });
+    ESP_LOGI(TAG, "Provisioning found %u candidate BSSID(s) for %s",
+             static_cast<unsigned>(candidates.size()), ssid.c_str());
+#endif
 
-    // Wait for the connection to complete for 5 seconds
-    EventBits_t bits = xEventGroupWaitBits(event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, pdMS_TO_TICKS(10000));
-    is_connecting_ = false;
+    const size_t attempt_count = candidates.empty() ? 1 : candidates.size();
+    bool auth_expire_only = false;
+    legacy_wifi_profile_selected_ = false;
 
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Connected to WiFi %s", ssid.c_str());
+    auto try_candidates = [&](const char* profile_name, bool legacy_profile) {
+        bool pass_auth_expire_only = true;
+        for (size_t attempt = 0; attempt < attempt_count; ++attempt) {
+            const wifi_ap_record_t* candidate =
+                candidates.empty() ? nullptr : &candidates[attempt];
+            wifi_config_t wifi_config = {};
+            strcpy(reinterpret_cast<char*>(wifi_config.sta.ssid), ssid.c_str());
+            strcpy(reinterpret_cast<char*>(wifi_config.sta.password), password.c_str());
+            wifi_config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+            wifi_config.sta.failure_retry_cnt = 0;
+            if (candidate != nullptr) {
+                wifi_config.sta.channel = candidate->primary;
+                memcpy(wifi_config.sta.bssid, candidate->bssid, sizeof(candidate->bssid));
+                wifi_config.sta.bssid_set = true;
+                ESP_LOGI(TAG,
+                         "Provisioning %s try %u/%u bssid=%02x:%02x:%02x:%02x:%02x:%02x channel=%u rssi=%d",
+                         profile_name, static_cast<unsigned>(attempt + 1),
+                         static_cast<unsigned>(attempt_count), candidate->bssid[0],
+                         candidate->bssid[1], candidate->bssid[2], candidate->bssid[3],
+                         candidate->bssid[4], candidate->bssid[5], candidate->primary,
+                         candidate->rssi);
+            } else {
+                ESP_LOGI(TAG, "Provisioning %s try unpinned SSID %s", profile_name,
+                         ssid.c_str());
+            }
+
+            xEventGroupClearBits(event_group_,
+                                 WIFI_CONNECTED_BIT | WIFI_FAIL_BIT | WIFI_ASSOCIATED_BIT);
+            last_disconnect_reason_.store(0);
+            esp_err_t config_result = esp_wifi_set_config(WIFI_IF_STA, &wifi_config);
+            if (config_result != ESP_OK) {
+                pass_auth_expire_only = false;
+                ESP_LOGW(TAG, "Set Station candidate failed: %s",
+                         esp_err_to_name(config_result));
+                continue;
+            }
+            esp_err_t connect_result = esp_wifi_connect();
+            if (connect_result != ESP_OK) {
+                pass_auth_expire_only = false;
+                ESP_LOGW(TAG, "Start Station candidate failed: %s",
+                         esp_err_to_name(connect_result));
+                continue;
+            }
+
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+            const TickType_t timeout = kMeshCandidateTimeout;
+#else
+            const TickType_t timeout = pdMS_TO_TICKS(10000);
+#endif
+            const EventBits_t bits = xEventGroupWaitBits(
+                event_group_, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdTRUE, pdFALSE, timeout);
+            if (bits & WIFI_CONNECTED_BIT) {
+                legacy_wifi_profile_selected_ = legacy_profile;
+                ESP_LOGI(TAG, "Connected to WiFi %s with DHCP profile=%s", ssid.c_str(),
+                         profile_name);
+                return true;
+            }
+
+            const int reason = last_disconnect_reason_.load();
+            const bool associated =
+                (xEventGroupGetBits(event_group_) & WIFI_ASSOCIATED_BIT) != 0;
+            if (reason != WIFI_REASON_AUTH_EXPIRE || associated) {
+                pass_auth_expire_only = false;
+            }
+            ESP_LOGW(TAG,
+                     "Provisioning %s candidate failed reason=%d associated=%d; rotating=%d",
+                     profile_name, reason, associated, attempt + 1 < attempt_count);
+            esp_wifi_disconnect();
+            vTaskDelay(pdMS_TO_TICKS(80));
+        }
+        auth_expire_only = pass_auth_expire_only;
+        return false;
+    };
+
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, kNormalStaProtocol));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20));
+#endif
+    if (try_candidates("normal", false)) {
+        is_connecting_ = false;
         esp_wifi_disconnect();
         return true;
-    } else {
-        ESP_LOGE(TAG, "Failed to connect to WiFi %s", ssid.c_str());
-        return false;
     }
+
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    if (auth_expire_only) {
+        ESP_LOGW(TAG,
+                 "All Mesh candidates ignored authentication; retrying in 2.4G legacy b/g mode");
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, kLegacyStaProtocol));
+        ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20));
+        if (try_candidates("legacy-b/g", true)) {
+            is_connecting_ = false;
+            esp_wifi_disconnect();
+            return true;
+        }
+        ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_STA, kNormalStaProtocol));
+    }
+
+    // Some consumer Mesh systems silently ignore authentication from one
+    // Station identity while accepting the same radio and credentials under
+    // a locally administered identity.  Changing a Station MAC is only legal
+    // while WiFi is stopped, so arm the per-device fallback, retain the
+    // submitted credentials, acknowledge the form, and restart once.  Boards
+    // that authenticate normally never take this path.
+    if (auth_expire_only && !IsAlternateStaMacEnabled()) {
+        const esp_err_t result = EnableAlternateStaMac();
+        if (result == ESP_OK) {
+            ESP_LOGW(TAG,
+                     "Router ignored factory Station identity; arming alternate identity and restarting once");
+            is_connecting_ = false;
+            xTaskCreate([](void*) {
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                esp_restart();
+            }, "wifi_mac_retry", 3072, nullptr, 5, nullptr);
+            return true;
+        }
+        ESP_LOGE(TAG, "Failed to persist alternate Station identity: %s",
+                 esp_err_to_name(result));
+    }
+#endif
+
+    is_connecting_ = false;
+#ifdef QDTECH_PROVISIONING_STA_BEACON
+    constexpr uint8_t kProvisioningChannel = 6;
+    uint8_t active_channel = 0;
+    wifi_second_chan_t active_secondary = WIFI_SECOND_CHAN_NONE;
+    if (esp_wifi_get_channel(&active_channel, &active_secondary) != ESP_OK ||
+        active_channel == 0) {
+        active_channel = kProvisioningChannel;
+    }
+    ESP_LOGI(TAG, "Resume provisioning visibility on active channel %u", active_channel);
+    StartRawBeaconFallback(GetSsid(), active_channel);
+#endif
+    ESP_LOGE(TAG, "Failed to connect to WiFi %s after %u candidate(s)",
+             ssid.c_str(), static_cast<unsigned>(attempt_count));
+    return false;
 }
 
 void WifiConfigurationAp::Save(const std::string &ssid, const std::string &password)
@@ -928,6 +1117,29 @@ void WifiConfigurationAp::Save(const std::string &ssid, const std::string &passw
         ssid_manager.RemoveSsid(static_cast<int>(ssid_list.size() - 1));
         ssid_list = ssid_manager.GetSsidList();
     }
+#ifdef QDTECH_WIFI_MESH_FALLBACK
+    nvs_handle_t nvs;
+    esp_err_t err = nvs_open("wifi", NVS_READWRITE, &nvs);
+    if (err == ESP_OK) {
+        if (legacy_wifi_profile_selected_) {
+            err = nvs_set_str(nvs, "legacy_ssid", ssid.c_str());
+        } else {
+            err = nvs_erase_key(nvs, "legacy_ssid");
+            if (err == ESP_ERR_NVS_NOT_FOUND) {
+                err = ESP_OK;
+            }
+        }
+        if (err == ESP_OK) {
+            err = nvs_commit(nvs);
+        }
+        nvs_close(nvs);
+        ESP_LOGI(TAG, "Saved WiFi compatibility profile ssid=%s legacy=%d result=%s",
+                 ssid.c_str(), legacy_wifi_profile_selected_, esp_err_to_name(err));
+    } else {
+        ESP_LOGW(TAG, "Failed to open WiFi compatibility profile: %s",
+                 esp_err_to_name(err));
+    }
+#endif
 }
 
 void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
@@ -940,10 +1152,12 @@ void WifiConfigurationAp::WifiEventHandler(void* arg, esp_event_base_t event_bas
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
         ESP_LOGI(TAG, "Station " MACSTR " left, AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_id == WIFI_EVENT_STA_CONNECTED) {
-        xEventGroupSetBits(self->event_group_, WIFI_CONNECTED_BIT);
+        xEventGroupSetBits(self->event_group_, WIFI_ASSOCIATED_BIT);
     } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
         auto* event = static_cast<wifi_event_sta_disconnected_t*>(event_data);
-        ESP_LOGW(TAG, "STA disconnected during setup reason=%d", event ? event->reason : -1);
+        self->last_disconnect_reason_.store(event ? event->reason : -1);
+        ESP_LOGW(TAG, "STA disconnected during setup reason=%d",
+                 self->last_disconnect_reason_.load());
         xEventGroupSetBits(self->event_group_, WIFI_FAIL_BIT);
     } else if (event_id == WIFI_EVENT_SCAN_DONE) {
         std::lock_guard<std::mutex> lock(self->mutex_);

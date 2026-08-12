@@ -479,6 +479,17 @@ config QDTECH_EXPERIMENT_WIFI_RX_SELF_TEST
         not add scans, expose SSIDs or BSSIDs, change credentials, alter
         provisioning behavior, or modify PHY calibration data.
 
+config QDTECH_EXPERIMENT_ALTERNATE_STA_MAC
+    bool "Enable experimental alternate Station MAC diagnostic"
+    depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5
+    default n
+    help
+        Replaces only the WiFi Station interface MAC with a deterministic,
+        locally administered address before the driver starts. The SoftAP
+        identity and provisioning SSID stay factory-derived. This is a
+        temporary router-filtering diagnostic and must remain disabled in
+        production builds.
+
 config QDTECH_EXPERIMENT_WIFI_STA_TX_SELF_TEST
     bool "Enable experimental temporary-hotspot Station TX self-test"
     depends on BOARD_TYPE_QDTECH_S3_TOUCH_LCD_3_5

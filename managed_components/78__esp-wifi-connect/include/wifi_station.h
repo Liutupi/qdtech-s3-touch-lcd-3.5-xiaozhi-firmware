@@ -17,6 +17,7 @@ struct WifiApRecord {
     std::string ssid;
     std::string password;
     int channel;
+    int8_t rssi;
     wifi_auth_mode_t authmode;
     uint8_t bssid[6];
 };
@@ -61,6 +62,8 @@ private:
     std::string ssid_;
     std::string password_;
     std::string ip_address_;
+    std::string legacy_wifi_ssid_;
+    bool alternate_sta_mac_enabled_ = false;
     int8_t max_tx_power_;
     uint8_t remember_bssid_;
     int reconnect_count_ = 0;
